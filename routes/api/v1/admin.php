@@ -18,3 +18,6 @@ Route::apiResource('classes', \App\Http\Controllers\API\Admin\ClassController::c
 // Custom routes untuk assign
 Route::post('classes/{id}/assign-students', [\App\Http\Controllers\API\Admin\ClassController::class, 'assignStudents']);
 Route::post('classes/{id}/assign-teacher', [\App\Http\Controllers\API\Admin\ClassController::class, 'assignTeacher']);
+
+// Subject Management
+Route::apiResource('subjects', \App\Http\Controllers\API\Admin\SubjectController::class);
