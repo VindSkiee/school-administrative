@@ -13,11 +13,13 @@ Route::get('schedules/{schedule_id}/students', [AttendanceController::class, 'ge
 Route::post('attendances/bulk', [AttendanceController::class, 'storeBulk']);
 Route::get('attendance-requests', [TeacherReqController::class, 'index']);
 Route::patch('attendance-requests/{id}/review', [TeacherReqController::class, 'review']);
-Route::get('materials', [TeacherMaterialController::class, 'index']);
+Route::middleware('throttle:upload-api')->group(function () {
+    Route::post('materials', [TeacherMaterialController::class, 'store']);
+    Route::post('assignments', [TeacherAssignController::class, 'store']);
+});
 Route::post('materials', [TeacherMaterialController::class, 'store']);
 Route::delete('materials/{id}', [TeacherMaterialController::class, 'destroy']);
 Route::get('assignments', [TeacherAssignController::class, 'index']);
-Route::post('assignments', [TeacherAssignController::class, 'store']);
 Route::get('assignments/{id}/submissions', [TeacherAssignController::class, 'submissions']);
 Route::post('submissions/{id}/grade', [TeacherGradeController::class, 'store']);
 Route::get('schedules/{schedule_id}/grades/aggregate', [TeacherAggregate::class, 'show']);

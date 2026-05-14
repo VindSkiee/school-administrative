@@ -32,6 +32,10 @@ return Application::configure(basePath: dirname(__DIR__))
             Route::middleware(['api', 'auth:api', 'role:student'])
                 ->prefix('api/v1/student')
                 ->group(base_path('routes/api/v1/student.php'));
+
+            Route::middleware(['api', 'auth:api', 'role:principal'])
+                ->prefix('api/v1/principal')
+                ->group(base_path('routes/api/v1/principal.php'));
         }
     )
     ->withMiddleware(function (Middleware $middleware) {

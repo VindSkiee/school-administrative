@@ -3,8 +3,8 @@
 namespace App\Services;
 
 use App\Models\AcademicYear;
-use Illuminate\Support\Facades\DB;
 use Exception;
+use Illuminate\Support\Facades\DB;
 
 class AcademicYearService
 {
@@ -19,7 +19,7 @@ class AcademicYearService
 
         try {
             // 1. Nonaktifkan SEMUA tahun ajaran
-            AcademicYear::where('is_active', true)->update(['is_active' => false]);
+            AcademicYear::query()->where('is_active', true)->update(['is_active' => false]);
 
             // 2. Aktifkan HANYA tahun ajaran yang dipilih
             $academicYear->is_active = true;
