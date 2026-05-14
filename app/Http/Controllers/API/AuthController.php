@@ -5,27 +5,35 @@ namespace App\Http\Controllers\API;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Tymon\JWTAuth\Facades\JWTAuth;
+use App\Rules\RecaptchaV2;
 
 class AuthController 
 {
     public function login(Request $request)
     {
+        // 1. Validasi Input + reCAPTCHA
         $request->validate([
             'email' => 'required|email',
             'password' => 'required|string',
+            'g-recaptcha-response' => ['required', new RecaptchaV2()] // <-- Panggil Rule di sini
+        ], [
+            'g-recaptcha-response.required' => 'Tanda centang reCAPTCHA wajib diisi.'
         ]);
 
         $credentials = $request->only('email', 'password');
 
+        // 2. Coba Login via JWT
         if (! $token = Auth::guard('api')->attempt($credentials)) {
-            return response()->json(['error' =>'Email atau Password salah.'], 401);
+            return response()->json(['error' => 'Unauthorized. Email atau Password salah.'], 401);
         }
 
+        // 3. Pengecekan Akun Aktif
         if (! Auth::guard('api')->user()->is_active) {
             Auth::guard('api')->logout();
             return response()->json(['error' => 'Akun dinonaktifkan. Hubungi Administrator.'], 403);
         }
 
+        // 4. Sukses Login
         return $this->respondWithToken($token);
     }
 
