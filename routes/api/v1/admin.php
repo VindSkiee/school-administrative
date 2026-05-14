@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\Admin\UserController;
+use App\Http\Controllers\API\Admin\ReportController as AdminReportController;
 
 Route::apiResource('users', UserController::class);
 
@@ -24,3 +25,6 @@ Route::apiResource('subjects', \App\Http\Controllers\API\Admin\SubjectController
 
 // Schedule Management
 Route::apiResource('schedules', \App\Http\Controllers\API\Admin\ScheduleController::class);
+
+Route::get('reports/attendance', [AdminReportController::class, 'attendanceSummary']);
+Route::get('reports/academic', [AdminReportController::class, 'academicSummary']);
