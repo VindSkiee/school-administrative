@@ -6,8 +6,7 @@ use App\Http\Controllers\API\Teacher\AttendanceRequestController as TeacherReqCo
 use App\Http\Controllers\API\Teacher\MaterialController as TeacherMaterialController;
 use App\Http\Controllers\API\Teacher\AssignmentController as TeacherAssignController;
 use App\Http\Controllers\API\Teacher\GradeController as TeacherGradeController;
-
-// Semua route di sini sudah dibungkus prefix 'api/v1/teacher' dan middleware 'role:teacher' oleh bootstrap/app.php
+use App\Http\Controllers\API\Teacher\GradeAggregationController as TeacherAggregate;
 
 Route::get('schedules/today', [AttendanceController::class, 'getTodaySchedules']);
 Route::get('schedules/{schedule_id}/students', [AttendanceController::class, 'getStudentsForAttendance']);
@@ -21,3 +20,4 @@ Route::get('assignments', [TeacherAssignController::class, 'index']);
 Route::post('assignments', [TeacherAssignController::class, 'store']);
 Route::get('assignments/{id}/submissions', [TeacherAssignController::class, 'submissions']);
 Route::post('submissions/{id}/grade', [TeacherGradeController::class, 'store']);
+Route::get('schedules/{schedule_id}/grades/aggregate', [TeacherAggregate::class, 'show']);
