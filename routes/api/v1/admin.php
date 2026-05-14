@@ -11,3 +11,10 @@ Route::apiResource('academic-years', \App\Http\Controllers\API\Admin\AcademicYea
 
 // Custom route untuk mengaktifkan tahun ajaran (menggunakan PATCH karena hanya mengubah 1 field status)
 Route::patch('academic-years/{id}/set-active', [\App\Http\Controllers\API\Admin\AcademicYearController::class, 'setActive']);
+
+// Class Management
+Route::apiResource('classes', \App\Http\Controllers\API\Admin\ClassController::class);
+
+// Custom routes untuk assign
+Route::post('classes/{id}/assign-students', [\App\Http\Controllers\API\Admin\ClassController::class, 'assignStudents']);
+Route::post('classes/{id}/assign-teacher', [\App\Http\Controllers\API\Admin\ClassController::class, 'assignTeacher']);
