@@ -21,3 +21,6 @@ Route::post('classes/{id}/assign-teacher', [\App\Http\Controllers\API\Admin\Clas
 
 // Subject Management
 Route::apiResource('subjects', \App\Http\Controllers\API\Admin\SubjectController::class);
+
+// Schedule Management
+Route::apiResource('schedules', \App\Http\Controllers\API\Admin\ScheduleController::class);
