@@ -6,18 +6,22 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Exception;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class UserService
 {
-    /**
-     * Memproses pembuatan user beserta relasi profilnya.
-     */
     public function createUser(array $data): User
     {
+
+        if ($data['role'] === 'admin') {
+            if (!isset($data['admin_secret_key']) || $data['admin_secret_key'] !== env('ADMIN_SECRET_KEY')) {
+                throw new HttpException(403, 'Akses ditolak: Admin Secret Key tidak valid.');
+            }
+        }
+
         DB::beginTransaction();
 
         try {
-            // 1. Buat Data Induk User
             $user = User::create([
                 'name' => $data['name'],
                 'email' => $data['email'],
@@ -26,26 +30,17 @@ class UserService
                 'is_active' => true,
             ]);
 
-            // 2. Buat Data Profil Berdasarkan Role
             if ($data['role'] === 'student') {
-                $user->student()->create([
-                    'nisn' => $data['nisn'],
-                    // class_id sengaja null di awal, akan di-assign di fitur Class Management nanti
-                ]);
+                $user->student()->create(['nisn' => $data['nisn']]);
             } elseif ($data['role'] === 'teacher') {
-                $user->teacher()->create([
-                    'nip' => $data['nip'] ?? null,
-                ]);
+                $user->teacher()->create(['nip' => $data['nip'] ?? null]);
             }
 
             DB::commit();
-
-            // Kembalikan user beserta relasi profilnya
             return $user->load(['student', 'teacher']);
             
         } catch (Exception $e) {
             DB::rollBack();
-            // Lemparkan kembali error ke atas agar ditangkap oleh Exception Handler Laravel
             throw $e; 
         }
     }
