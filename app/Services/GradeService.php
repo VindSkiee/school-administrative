@@ -6,15 +6,20 @@ use App\Models\Grade;
 use App\Models\Submission;
 use App\Notifications\SubmissionGraded;
 use Symfony\Component\HttpKernel\Exception\HttpException;
+use App\Models\AcademicYear;
 
 class GradeService
 {
     public function gradeSubmission(int $teacherId, int $submissionId, array $data): Grade
     {
         // Tarik data submission sekaligus relasi induknya untuk validasi
-        $submission = Submission::with('assignment.schedule')->findOrFail($submissionId);
+        $academicYear = AcademicYear::query()->where('is_active', true)->first();
+        if ($academicYear && $academicYear->is_report_published) {
+            throw new HttpException(403, "Rapor semester ini telah diterbitkan. Anda tidak dapat lagi mengubah nilai.");
+        }
 
         // Validasi Rantai Kepemilikan (Chain of Ownership)
+        $submission = Submission::with('assignment.schedule')->findOrFail($submissionId);
         $schedule = $submission->assignment->schedule;
         if ($schedule->teacher_id !== $teacherId) {
             throw new HttpException(403, 'Akses ditolak: Anda tidak memiliki wewenang untuk menilai tugas di kelas ini.');

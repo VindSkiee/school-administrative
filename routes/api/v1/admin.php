@@ -8,6 +8,7 @@ use App\Http\Controllers\API\Admin\ScheduleController;
 use App\Http\Controllers\API\Admin\SubjectController;
 use App\Http\Controllers\API\Admin\UserController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\API\Admin\SemesterReportController as AdminSemesterReport;
 
 Route::apiResource('users', UserController::class);
 
@@ -34,6 +35,9 @@ Route::apiResource('schedules', ScheduleController::class);
 Route::middleware('throttle:heavy-api')->group(function () {
     Route::get('reports/attendance', [AdminReportController::class, 'attendanceSummary']);
     Route::get('reports/academic', [AdminReportController::class, 'academicSummary']);
+    Route::get('reports/semester/{academicYearId}/students/{studentId}/pdf', [AdminSemesterReport::class, 'downloadStudentPdf']);
 });
 
 Route::get('activity-logs', [ActivityLogController::class, 'index']);
+// Endpoint untuk mempublikasikan rapor dan mengunci semester
+Route::patch('academic-years/{id}/publish-reports', [AdminSemesterReport::class, 'publish']);
