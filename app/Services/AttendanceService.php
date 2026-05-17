@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Attendance;
 use App\Models\Schedule;
+use App\Models\Student;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -16,6 +17,25 @@ class AttendanceService
 
         if ($schedule->teacher_id !== $teacherId) {
             throw new HttpException(403, 'Akses ditolak: Anda tidak memiliki hak untuk mengisi absensi pada jadwal ini.');
+        }
+
+        $studentIds = collect($data['attendances'])
+            ->pluck('student_id')
+            ->filter()
+            ->unique();
+
+        if ($studentIds->isNotEmpty()) {
+            $validStudentIds = Student::query()
+                ->whereIn('user_id', $studentIds->all(), 'and', false)
+                ->where('class_id', $schedule->class_id)
+                ->pluck('user_id')
+                ->all();
+
+            $invalidStudentIds = $studentIds->diff($validStudentIds);
+
+            if ($invalidStudentIds->isNotEmpty()) {
+                throw new HttpException(422, 'Beberapa siswa tidak terdaftar di kelas pada jadwal ini.');
+            }
         }
 
         DB::beginTransaction();

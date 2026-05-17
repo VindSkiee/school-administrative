@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Attendance;
 use App\Models\AttendanceRequest;
 use App\Models\Schedule;
+use App\Models\Student;
 use App\Notifications\AttendanceRequestReviewed;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -14,6 +15,17 @@ class AttendanceRequestService
 {
     public function submitRequest(int $studentId, array $data, UploadedFile $file): AttendanceRequest
     {
+        $student = Student::query()->findOrFail($studentId);
+        $schedule = Schedule::query()->findOrFail($data['schedule_id']);
+
+        if (! $student->class_id) {
+            throw new HttpException(422, 'Siswa belum terdaftar pada kelas.');
+        }
+
+        if ((int) $schedule->class_id !== (int) $student->class_id) {
+            throw new HttpException(422, 'Jadwal tidak sesuai dengan kelas siswa.');
+        }
+
         // Tambahkan query() agar Intelephense mengenali Builder
         $exists = AttendanceRequest::query()
             ->where('student_id', $studentId)

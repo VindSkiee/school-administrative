@@ -2,8 +2,8 @@
 
 namespace App\Http\Requests\Teacher;
 
-use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class ReviewAttendanceRequest extends FormRequest
 {
@@ -12,7 +12,7 @@ class ReviewAttendanceRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return false;
+        return true;
     }
 
     /**
@@ -23,7 +23,7 @@ class ReviewAttendanceRequest extends FormRequest
     public function rules(): array
     {
         return [
-            //
+            'status' => ['required', Rule::in(['approved', 'rejected'])],
         ];
     }
 }
