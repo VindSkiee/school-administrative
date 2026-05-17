@@ -23,7 +23,7 @@ class CleanOrphanedFiles extends Command
 
     public function handle()
     {
-        $this->info('Memulai proses pembersihan file yatim (Orphaned Files)...');
+        $this->info('Memulai proses pembersihan file (Orphaned Files)...');
 
         $disk = Storage::disk('public');
         $totalDeleted = 0;
@@ -55,12 +55,12 @@ class CleanOrphanedFiles extends Command
             $orphanedFiles = array_diff($physicalFiles, $dbFiles);
 
             if (empty($orphanedFiles)) {
-                $this->info(" -> Tidak ada file yatim di {$folder}.");
+                $this->info(" -> Tidak ada file yang tidak memiliki relasi di {$folder}.");
 
                 continue;
             }
 
-            // 4. Hapus file yatim
+            // 4. Hapus file yang tidak memiliki relasi
             foreach ($orphanedFiles as $orphan) {
                 $disk->delete($orphan);
                 $this->line(" -> Terhapus: {$orphan}");
