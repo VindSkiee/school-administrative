@@ -1,4 +1,11 @@
 @import "tailwindcss";
 
-/* Anda bisa menambahkan custom CSS di bawah sini nanti jika perlu, 
-   tapi biarkan Vite + Tailwind yang mengurus sisanya */
+@theme {
+  /* Mendaftarkan Custom Colors */
+  --color-brand-red: #E02E2B;
+  --color-brand-white: #FFFFFF;
+  --color-brand-orange: #C66716;
+
+  /* Mengubah default font sans ke Inter */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
