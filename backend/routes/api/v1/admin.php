@@ -5,11 +5,12 @@ use App\Http\Controllers\API\Admin\ActivityLogController;
 use App\Http\Controllers\API\Admin\ClassController;
 use App\Http\Controllers\API\Admin\ReportController as AdminReportController;
 use App\Http\Controllers\API\Admin\ScheduleController;
+use App\Http\Controllers\API\Admin\SemesterReportController as AdminSemesterReport;
 use App\Http\Controllers\API\Admin\SubjectController;
 use App\Http\Controllers\API\Admin\UserController;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\API\Admin\SemesterReportController as AdminSemesterReport;
 
+Route::patch('users/{id}/reset-password', [UserController::class, 'resetPassword']);
 Route::apiResource('users', UserController::class);
 
 // Academic Years Management
@@ -33,9 +34,11 @@ Route::apiResource('subjects', SubjectController::class);
 Route::apiResource('schedules', ScheduleController::class);
 
 Route::middleware('throttle:heavy-api')->group(function () {
+    Route::get('reports/distribution', [AdminReportController::class, 'distribution']);
     Route::get('reports/attendance', [AdminReportController::class, 'attendanceSummary']);
     Route::get('reports/academic', [AdminReportController::class, 'academicSummary']);
     Route::get('reports/semester/{academicYearId}/students/{studentId}/pdf', [AdminSemesterReport::class, 'downloadStudentPdf']);
+    Route::post('/classes/migrate-semester', [ClassController::class, 'migrateSemester']);
 });
 
 Route::get('activity-logs', [ActivityLogController::class, 'index']);

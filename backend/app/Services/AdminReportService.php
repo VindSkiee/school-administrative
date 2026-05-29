@@ -8,15 +8,18 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class AdminReportService
 {
+    public function __construct(protected AdminSemesterReportService $semesterReportService) {}
+
     /**
      * Dapatkan ID Tahun Ajaran Aktif
      */
     private function getActiveAcademicYearId(): int
     {
         $activeYear = AcademicYear::query()->where('is_active', true)->first();
-        if (!$activeYear) {
-            throw new HttpException(400, "Tidak ada Tahun Ajaran yang aktif.");
+        if (! $activeYear) {
+            throw new HttpException(400, 'Tidak ada Tahun Ajaran yang aktif.');
         }
+
         return $activeYear->id;
     }
 
@@ -34,7 +37,7 @@ class AdminReportService
             ->select(
                 'classes.id as class_id',
                 'classes.name as class_name',
-                DB::raw("COUNT(attendances.id) as total_records"),
+                DB::raw('COUNT(attendances.id) as total_records'),
                 DB::raw("SUM(CASE WHEN attendances.status = 'present' THEN 1 ELSE 0 END) as total_present"),
                 DB::raw("SUM(CASE WHEN attendances.status = 'alpa' THEN 1 ELSE 0 END) as total_alpa"),
                 DB::raw("SUM(CASE WHEN attendances.status = 'sick' THEN 1 ELSE 0 END) as total_sick"),
@@ -73,5 +76,17 @@ class AdminReportService
             ->get();
 
         return $report->toArray();
+    }
+
+    /**
+     * Distribusi kesiapan rapor per siswa untuk admin.
+     *
+     * @return array{is_all_ready:bool,data:array<int, array{student_id:int,nis:string,name:string,class_name:string,is_ready:bool,missing_info:string}>}
+     */
+    public function getDistributionList(?int $academicYearId = null): array
+    {
+        $yearId = $academicYearId ?? $this->getActiveAcademicYearId();
+
+        return $this->semesterReportService->getAcademicYearReadiness($yearId);
     }
 }

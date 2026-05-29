@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Tymon\JWTAuth\Facades\JWTAuth;
 
 class AuthController
@@ -76,6 +77,7 @@ class AuthController
                 'name' => $user->name,
                 'email' => $user->email,
                 'role' => $user->role,
+                'must_change_password' => $user->must_change_password,
             ],
         ]);
     }
@@ -105,5 +107,49 @@ class AuthController
         $user = Auth::guard('api')->user();
 
         return $this->respondWithToken($newToken, $user);
+    }
+
+    public function checkRequirements(Request $request): JsonResponse
+    {
+        $request->validate([
+            'email' => 'required|email',
+        ]);
+
+        $user = User::query()->where('email', $request->email)->first();
+
+        // Hanya kembalikan TRUE jika user ada DAN dia adalah admin.
+        // Jika user tidak ada atau bukan admin, kembalikan FALSE.
+        // Ini mencegah celah Email Enumeration.
+        $requiresCaptcha = $user && $user->role === 'admin';
+
+        return response()->json([
+            'requires_captcha' => $requiresCaptcha,
+        ]);
+    }
+
+    public function forceChangePassword(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'current_password' => 'required|string',
+            'new_password' => 'required|string|min:8|confirmed',
+        ]);
+
+        /** @var User $user */
+        $user = Auth::guard('api')->user();
+
+        if (! Hash::check($validated['current_password'], $user->password)) {
+            return response()->json([
+                'message' => 'Password saat ini tidak sesuai.',
+            ], 422);
+        }
+
+        $user->password = Hash::make($validated['new_password']);
+        $user->must_change_password = false;
+        $user->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Password berhasil diubah. Silakan lanjutkan.',
+        ]);
     }
 }

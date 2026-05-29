@@ -3,8 +3,9 @@
 namespace App\Http\Controllers\API\Admin;
 
 use App\Services\AdminReportService;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class ReportController
 {
@@ -19,9 +20,9 @@ class ReportController
 
             return response()->json([
                 'success' => true,
-                'data' => $data
+                'data' => $data,
             ]);
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+        } catch (HttpException $e) {
             return response()->json(['error' => $e->getMessage()], $e->getStatusCode());
         }
     }
@@ -34,9 +35,30 @@ class ReportController
 
             return response()->json([
                 'success' => true,
-                'data' => $data
+                'data' => $data,
             ]);
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+        } catch (HttpException $e) {
+            return response()->json(['error' => $e->getMessage()], $e->getStatusCode());
+        }
+    }
+
+    public function distribution(Request $request): JsonResponse
+    {
+        try {
+            $academicYearId = $request->query('academic_year_id');
+
+            if (! $academicYearId) {
+                return response()->json(['error' => 'academic_year_id wajib diisi.'], 422);
+            }
+
+            $data = $this->reportService->getDistributionList((int) $academicYearId);
+
+            return response()->json([
+                'success' => true,
+                'is_all_ready' => $data['is_all_ready'],
+                'data' => $data['data'],
+            ]);
+        } catch (HttpException $e) {
             return response()->json(['error' => $e->getMessage()], $e->getStatusCode());
         }
     }

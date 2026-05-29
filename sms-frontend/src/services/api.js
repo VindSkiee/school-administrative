@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-    baseURL: 'http://localhost:8000/api', // Sesuaikan dengan URL Laravel Anda
+    baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
     headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json'
@@ -20,12 +20,57 @@ api.interceptors.request.use(config => {
 // Response Interceptor: Tangkap error 401 global (Sesi Habis)
 api.interceptors.response.use(
     response => response,
-    error => {
-        if (error.response && error.response.status === 401) {
+    async error => {
+        const redirectTo = (path) => {
+            if (window.location.pathname !== path) {
+                window.location.href = path;
+            }
+        };
+
+        if (!error.response) {
+            redirectTo('/server-down');
+            return Promise.reject(error);
+        }
+
+        const status = error.response.status;
+        const errorCode = error.response.data?.error;
+
+        if (status === 403 && errorCode === 'PASSWORD_CHANGE_REQUIRED') {
+            try {
+                const routerModule = await import('../router');
+                const router = routerModule.default;
+                const currentPath = router.currentRoute.value.path;
+
+                if (currentPath !== '/force-change-password') {
+                    await router.push('/force-change-password');
+                }
+            } catch {
+                redirectTo('/force-change-password');
+            }
+
+            return Promise.reject(error);
+        }
+
+        // Tangkap error 401 (Unauthorized / Sesi Habis / Kredensial Salah)
+        if (status === 401) {
             localStorage.removeItem('access_token');
             localStorage.removeItem('user_data');
-            window.location.href = '/login'; // Paksa ke halaman login
+            
+            // CEGAH HARD RELOAD JIKA USER SEDANG BERADA DI HALAMAN LOGIN
+            // Hard reload HANYA terjadi jika sesi expired saat user berada di dalam Dashboard
+            if (window.location.pathname !== '/login') {
+                window.location.href = '/login'; 
+            }
         }
+
+        if (status === 403) {
+            redirectTo('/unauthorized');
+        }
+
+        if ([502, 503, 504].includes(status)) {
+            redirectTo('/server-down');
+        }
+
         return Promise.reject(error);
     }
 );

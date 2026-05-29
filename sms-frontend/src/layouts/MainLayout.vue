@@ -2,7 +2,6 @@
   <div class="flex h-screen bg-gray-50 font-sans overflow-hidden">
     
     <!-- SIDEBAR (60% Vibe - Brand Red) -->
-    <!-- Di mobile disembunyikan menggunakan state isMobileMenuOpen, di desktop fixed -->
     <aside 
       :class="[
         'w-64 bg-brand-red text-brand-white flex flex-col transition-all duration-300 z-30',
@@ -11,7 +10,7 @@
     >
       <!-- Brand Logo -->
       <div class="h-16 flex items-center justify-center border-b border-red-800/50 shadow-sm relative overflow-hidden">
-        <div class="absolute inset-0 bg-brand-orange opacity-10"></div> <!-- 10% Aksen -->
+        <div class="absolute inset-0 bg-brand-orange opacity-10"></div>
         <h1 class="text-xl font-bold tracking-wider relative z-10">EduPlatform</h1>
       </div>
 
@@ -26,7 +25,6 @@
           exact-active-class="bg-brand-orange text-white shadow-md"
           :class="[$route.path.includes(item.path) ? 'bg-brand-orange text-white' : 'text-red-100 hover:bg-brand-red hover:brightness-110']"
         >
-          <!-- Icon placeholder -->
           <svg class="w-5 h-5 mr-3 opacity-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="item.icon"></path>
           </svg>
@@ -73,7 +71,8 @@
 
         <!-- Action Buttons -->
         <div class="flex items-center space-x-4">
-          <button @click="handleLogout" class="text-sm font-medium text-gray-500 hover:text-brand-red transition-colors flex items-center">
+          <!-- UBAH: Event click sekarang memanggil promptLogout, bukan handleLogout langsung -->
+          <button @click="promptLogout" class="text-sm font-medium text-gray-500 hover:text-brand-red transition-colors flex items-center">
             <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
             </svg>
@@ -84,15 +83,27 @@
 
       <!-- Router View (Dynamic Content) -->
       <main class="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-50">
-        <!-- Fade Transition untuk transisi halaman yang mulus -->
-        <router-view v-slot="{ Component }">
+        <router-view v-slot="{ Component, route }">
           <transition name="fade" mode="out-in">
-            <component :is="Component" />
+            <div :key="route.fullPath">
+              <component :is="Component" />
+            </div>
           </transition>
         </router-view>
       </main>
 
     </div>
+
+    <!-- TAMBAHAN: Komponen Global Confirm Modal untuk Logout -->
+    <ConfirmModal 
+      :isOpen="isLogoutModalOpen"
+      title="Keluar Aplikasi?"
+      message="Sesi Anda akan diakhiri. Anda harus login kembali untuk mengakses sistem."
+      confirmText="Ya, Keluar"
+      @confirm="executeLogout"
+      @cancel="isLogoutModalOpen = false"
+    />
+
   </div>
 </template>
 
@@ -100,25 +111,47 @@
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
+import ConfirmModal from '../components/ConfirmModal.vue'; // IMPORT MODAL
 
 const router = useRouter();
 const authStore = useAuthStore();
 const isMobileMenuOpen = ref(false);
 
+// State untuk Modal Logout
+const isLogoutModalOpen = ref(false);
+
 const userInitial = computed(() => {
   return authStore.user?.name ? authStore.user.name.charAt(0).toUpperCase() : 'U';
 });
 
-const handleLogout = () => {
-  authStore.logout();
-  router.push('/login');
+// FUNGSI BARU: Membuka Modal
+const promptLogout = () => {
+  isLogoutModalOpen.value = true;
+};
+
+// FUNGSI BARU: Mengeksekusi Logout
+const executeLogout = async () => {
+  // 1. Tampilkan status loading di tombol konfirmasi modal (opsional, tapi bagus untuk UX)
+  isLogoutModalOpen.value = false; 
+
+  // 2. Tunggu proses penghapusan sesi selesai
+  await authStore.logout();              
+
+  // 3. HARD FLUSH: Gunakan window.location.href alih-alih router.push.
+  // Ini akan menghancurkan memori Vue sepenuhnya dan mencegah halaman blank/error.
+  window.location.href = '/login';           
 };
 
 // DYNAMIC NAVIGATION CONFIGURATION
 const adminNav = [
   { name: 'Dashboard', path: '/admin/dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
   { name: 'Manajemen Pengguna', path: '/admin/users', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' },
+  { name: 'Tahun Ajaran', path: '/admin/academic-years', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
+  { name: 'Laporan Akademik', path: '/admin/reports', icon: 'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
   { name: 'Data Kelas', path: '/admin/classes', icon: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10' },
+  { name: 'Manajemen Mapel', path: '/admin/subjects', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253' },
+  { name: 'Manajemen Jadwal', path: '/admin/schedules', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
+  { name: 'Log Aktivitas', path: '/admin/activity-logs', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2-1.343-2-3-2z' },
 ];
 
 const teacherNav = [
@@ -151,7 +184,6 @@ const currentNavigation = computed(() => {
 </script>
 
 <style>
-/* Animasi transisi antar halaman agar tidak kaku */
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.2s ease;

@@ -2,11 +2,12 @@
 
 namespace App\Http\Controllers\API\Admin;
 
-use App\Models\Schedule;
 use App\Http\Requests\Admin\StoreScheduleRequest;
+use App\Models\Schedule;
 use App\Services\ScheduleService;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class ScheduleController
 {
@@ -24,7 +25,9 @@ class ScheduleController
             $query->where('teacher_id', $request->teacher_id);
         }
 
-        $schedules = $query->orderBy('day_of_week')->orderBy('start_time')->paginate(20);
+        $perPage = (int) $request->query('per_page', 100);
+        $perPage = max(1, min($perPage, 100));
+        $schedules = $query->orderBy('day_of_week')->orderBy('start_time')->paginate($perPage);
 
         return response()->json($schedules);
     }
@@ -33,13 +36,13 @@ class ScheduleController
     {
         try {
             $schedule = $this->scheduleService->createSchedule($request->validated());
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Jadwal berhasil dibuat.',
-                'data' => $schedule->load(['schoolClass', 'subject', 'teacher.user'])
+                'data' => $schedule->load(['schoolClass', 'subject', 'teacher.user']),
             ], 201);
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+        } catch (HttpException $e) {
             return response()->json(['error' => $e->getMessage()], $e->getStatusCode());
         }
     }
@@ -47,6 +50,7 @@ class ScheduleController
     public function show(string $id): JsonResponse
     {
         $schedule = Schedule::with(['schoolClass', 'subject', 'teacher.user', 'academicYear'])->findOrFail($id);
+
         return response()->json($schedule);
     }
 
@@ -56,13 +60,13 @@ class ScheduleController
 
         try {
             $updatedSchedule = $this->scheduleService->updateSchedule($schedule, $request->validated());
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Jadwal berhasil diperbarui.',
-                'data' => $updatedSchedule
+                'data' => $updatedSchedule,
             ]);
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+        } catch (HttpException $e) {
             return response()->json(['error' => $e->getMessage()], $e->getStatusCode());
         }
     }
@@ -74,7 +78,7 @@ class ScheduleController
         // Proteksi: Jadwal tidak bisa dihapus jika sudah ada absensi atau tugas terkait
         if ($schedule->attendances()->exists() || $schedule->assignments()->exists()) {
             return response()->json([
-                'error' => 'Tidak dapat menghapus jadwal ini karena sudah memiliki data absensi atau tugas berjalan.'
+                'error' => 'Tidak dapat menghapus jadwal ini karena sudah memiliki data absensi atau tugas berjalan.',
             ], 403);
         }
 

@@ -2,19 +2,30 @@
 
 namespace App\Http\Controllers\API\Admin;
 
-use App\Models\AcademicYear;
 use App\Http\Requests\Admin\StoreAcademicYearRequest;
+use App\Models\AcademicYear;
 use App\Services\AcademicYearService;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class AcademicYearController
 {
     public function __construct(protected AcademicYearService $academicYearService) {}
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $academicYears = AcademicYear::orderBy('id', 'desc')->get();
+        $query = AcademicYear::orderBy('id', 'desc');
+
+        if ($request->query('per_page') === 'all') {
+            return response()->json([
+                'data' => $query->get(),
+            ]);
+        }
+
+        $perPage = (int) $request->query('per_page', 100);
+        $perPage = max(1, min($perPage, 100));
+        $academicYears = $query->paginate($perPage);
+
         return response()->json($academicYears);
     }
 
@@ -25,7 +36,7 @@ class AcademicYearController
         return response()->json([
             'success' => true,
             'message' => 'Tahun ajaran berhasil dibuat.',
-            'data' => $academicYear
+            'data' => $academicYear,
         ], 201);
     }
 
@@ -37,20 +48,21 @@ class AcademicYearController
         return response()->json([
             'success' => true,
             'message' => 'Tahun ajaran berhasil diperbarui.',
-            'data' => $academicYear
+            'data' => $academicYear,
         ]);
     }
 
     public function setActive(string $id): JsonResponse
     {
         $academicYear = AcademicYear::findOrFail($id);
-        
+
         try {
             $updatedAcademicYear = $this->academicYearService->setActive($academicYear);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Tahun ajaran berhasil diaktifkan.',
-                'data' => $updatedAcademicYear
+                'data' => $updatedAcademicYear,
             ]);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Gagal mengaktifkan tahun ajaran.'], 500);
@@ -67,14 +79,14 @@ class AcademicYearController
 
         // Cek apakah ada kelas yang terhubung
         if ($academicYear->classes()->exists()) {
-             return response()->json(['error' => 'Tidak dapat menghapus tahun ajaran karena masih memiliki kelas yang terdaftar.'], 403);
+            return response()->json(['error' => 'Tidak dapat menghapus tahun ajaran karena masih memiliki kelas yang terdaftar.'], 403);
         }
 
         $academicYear->delete();
 
         return response()->json([
             'success' => true,
-            'message' => 'Tahun ajaran berhasil dihapus.'
+            'message' => 'Tahun ajaran berhasil dihapus.',
         ]);
     }
 }

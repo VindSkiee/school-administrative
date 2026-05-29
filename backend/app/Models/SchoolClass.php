@@ -4,27 +4,52 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class SchoolClass extends Model
 {
     use SoftDeletes;
 
     protected $table = 'classes'; // Arahkan eksplisit ke tabel classes
-    protected $fillable = ['name', 'academic_year_id'];
 
-    public function academicYear(): BelongsTo
+    protected $fillable = [
+        'name',
+        'academic_year_id',
+        'homeroom_teacher_id',
+    ];
+
+    /**
+     * Relasi ke Tahun Ajaran (Wajib)
+     */
+    public function academicYear()
     {
-        return $this->belongsTo(AcademicYear::class);
+        return $this->belongsTo(AcademicYear::class, 'academic_year_id');
     }
 
-    public function students(): HasMany
+    /**
+     * Relasi ke Wali Kelas (Teacher)
+     * Karena foreign key-nya 'homeroom_teacher_id' merujuk ke tabel teachers (user_id)
+     */
+    public function homeroomTeacher()
     {
-        return $this->hasMany(Student::class, 'class_id');
+        // Parameter 2: Foreign Key di tabel classes
+        // Parameter 3: Primary Key/Owner Key di tabel teachers
+        return $this->belongsTo(Teacher::class, 'homeroom_teacher_id', 'user_id');
     }
 
-    public function schedules(): HasMany
+    /**
+     * Relasi ke Siswa (1 Kelas memiliki banyak Siswa)
+     */
+    public function students()
+    {
+        return $this->belongsToMany(Student::class, 'class_student', 'class_id', 'student_id')
+            ->withPivot('academic_year_id')
+            ->withTimestamps();
+    }
+
+    /**
+     * Relasi ke Jadwal Pelajaran (Untuk Phase 3)
+     */
+    public function schedules()
     {
         return $this->hasMany(Schedule::class, 'class_id');
     }

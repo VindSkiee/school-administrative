@@ -9,13 +9,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Teacher extends Model
 {
     protected $primaryKey = 'user_id';
+
     public $incrementing = false;
 
     protected $fillable = ['user_id', 'nip'];
 
     public function user(): BelongsTo
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class, 'user_id', 'id');
     }
 
     public function schedules(): HasMany

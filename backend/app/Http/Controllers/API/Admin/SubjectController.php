@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers\API\Admin;
 
-use App\Models\Subject;
 use App\Http\Requests\Admin\StoreSubjectRequest;
-use Illuminate\Http\Request;
+use App\Models\Subject;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class SubjectController
 {
@@ -14,12 +14,14 @@ class SubjectController
         // Pagination ringan dengan pencarian nama
         $query = Subject::query();
 
-        if ($request->has('search')) {
-            $query->where('name', 'like', '%' . $request->search . '%')
-                  ->orWhere('code', 'like', '%' . $request->search . '%');
+        if ($request->filled('search')) {
+            $query->where('name', 'like', '%'.$request->search.'%')
+                ->orWhere('code', 'like', '%'.$request->search.'%');
         }
 
-        $subjects = $query->orderBy('name', 'asc')->paginate(15);
+        $perPage = (int) $request->query('per_page', 100);
+        $perPage = max(1, min($perPage, 100));
+        $subjects = $query->orderBy('name', 'asc')->paginate($perPage);
 
         return response()->json($subjects);
     }
@@ -31,13 +33,14 @@ class SubjectController
         return response()->json([
             'success' => true,
             'message' => 'Mata pelajaran berhasil ditambahkan.',
-            'data' => $subject
+            'data' => $subject,
         ], 201);
     }
 
     public function show(string $id): JsonResponse
     {
         $subject = Subject::findOrFail($id);
+
         return response()->json($subject);
     }
 
@@ -49,7 +52,7 @@ class SubjectController
         return response()->json([
             'success' => true,
             'message' => 'Mata pelajaran berhasil diperbarui.',
-            'data' => $subject
+            'data' => $subject,
         ]);
     }
 
@@ -60,7 +63,7 @@ class SubjectController
         // 🛡️ Mencegah penghapusan jika mapel sudah masuk jadwal
         if ($subject->schedules()->exists()) {
             return response()->json([
-                'error' => 'Tidak dapat menghapus mata pelajaran ini karena sudah terikat dengan jadwal kelas aktif.'
+                'error' => 'Tidak dapat menghapus mata pelajaran ini karena sudah terikat dengan jadwal kelas aktif.',
             ], 403);
         }
 
@@ -68,7 +71,7 @@ class SubjectController
 
         return response()->json([
             'success' => true,
-            'message' => 'Mata pelajaran berhasil dihapus.'
+            'message' => 'Mata pelajaran berhasil dihapus.',
         ]);
     }
 }

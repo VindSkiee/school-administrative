@@ -18,24 +18,44 @@ class ClassService
         DB::beginTransaction();
 
         try {
-            // Validasi Lifecycle: Pastikan HANYA siswa berstatus 'active' yang bisa dimasukkan
-            // Intelephense Fix: Tambahkan parameter default ('and', false) pada whereIn dan ('*') pada count
+            // 1. Validasi Lifecycle: Pastikan HANYA siswa berstatus 'active' yang bisa dimasukkan
             $invalidStudents = Student::query()
-                ->whereIn('user_id', $studentIds, 'and', false)
+                ->whereIn('user_id', $studentIds)
                 ->where('status', '!=', 'active')
-                ->count('*');
+                ->count();
 
             if ($invalidStudents > 0) {
                 throw new HttpException(422, 'Terdapat siswa dengan status non-aktif (Alumni/Keluar) dalam daftar. Proses dibatalkan.');
             }
 
-            // Lakukan update massal (Bulk Update) agar performa database tetap ringan
-            // Intelephense Fix: Tambahkan parameter default pada whereIn
-            Student::query()
-                ->whereIn('user_id', $studentIds, 'and', false)
-                ->update([
-                    'class_id' => $schoolClass->id,
-                ]);
+            // 2. LOGIKA BARU: Siapkan data Pivot (Menyertakan academic_year_id)
+            $academicYearId = $schoolClass->academic_year_id;
+            $conflictingStudentIds = DB::table('class_student')
+                ->whereIn('student_id', $studentIds)
+                ->where('academic_year_id', $academicYearId)
+                ->where('class_id', '!=', $schoolClass->id)
+                ->distinct()
+                ->pluck('student_id')
+                ->all();
+
+            if (! empty($conflictingStudentIds)) {
+                throw new HttpException(422, 'Siswa sudah terdaftar di kelas lain pada tahun ajaran yang sama. Proses dibatalkan.');
+            }
+
+            $syncData = [];
+
+            foreach ($studentIds as $id) {
+                // Key adalah student_id, value adalah kolom tambahan di tabel class_student
+                $syncData[$id] = [
+                    'academic_year_id' => $academicYearId,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+            }
+
+            // 3. Eksekusi Relasi Pivot
+            // sync akan menyesuaikan anggota kelas sesuai pilihan terbaru
+            $schoolClass->students()->sync($syncData);
 
             DB::commit();
         } catch (Exception $e) {

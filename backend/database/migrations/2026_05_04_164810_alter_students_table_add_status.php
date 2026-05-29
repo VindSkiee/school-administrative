@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::table('students', function (Blueprint $table) {
             $table->enum('status', ['active', 'graduated', 'transferred', 'dropped_out'])
                 ->default('active')
-                ->after('nisn');
+                ->after('gender');
         });
     }
 

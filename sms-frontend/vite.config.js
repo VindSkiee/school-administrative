@@ -8,4 +8,16 @@ export default defineConfig({
     vue(),
     tailwindcss(),
   ],
+  server: {
+    watch: {
+      usePolling: true,
+      interval: 300,
+    },
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+    },
+  },
 })

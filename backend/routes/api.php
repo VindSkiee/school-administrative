@@ -1,5 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\API\AuthController;
 
+Route::get('health', function () {
+    return response()->json(['status' => 'ok']);
+});

@@ -18,9 +18,10 @@ class ReportPdfService
         $pdf->setPaper('a4', 'portrait');
 
         // Format nama file: Rapor_Ganjil_2025_Budi.pdf
+        $semesterLabel = $reportData['semester_label'] ?? $reportData['semester'];
         $fileName = sprintf(
-            'Rapor_%s_%s_%s.pdf', 
-            $reportData['semester'], 
+            'Rapor_%s_%s_%s.pdf',
+            $semesterLabel,
             str_replace('/', '-', $reportData['academic_year']),
             preg_replace('/[^A-Za-z0-9\-]/', '_', $studentName)
         );

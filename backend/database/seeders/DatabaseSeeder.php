@@ -2,22 +2,27 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
-    use WithoutModelEvents;
-
     /**
      * Seed the application's database.
      */
     public function run(): void
     {
         $this->call([
-        AdminSeeder::class,
-        // Seeder lain seperti SubjectSeeder atau AcademicYearSeeder bisa ditambahkan di sini nanti
-    ]);
+            // 1. Master Data Pengguna & Mapel (Tidak butuh relasi lain)
+            AdminSeeder::class,
+            SubjectSeeder::class,
+
+            // 2. Master Kelas (Akan membuat Tahun Ajaran & Daftar Kelas)
+            ClassSeeder::class,
+
+            // 3. Siswa (Berjalan paling akhir karena butuh Tahun Ajaran & Kelas yang sudah jadi)
+            // StudentCsvSeeder::class,
+            StudentSeeder::class,
+            TeacherSeeder::class,
+        ]);
     }
 }

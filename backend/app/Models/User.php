@@ -2,12 +2,12 @@
 
 namespace App\Models;
 
-use Tymon\JWTAuth\Contracts\JWTSubject;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Relations\HasOne;
+use Tymon\JWTAuth\Contracts\JWTSubject;
 
 class User extends Authenticatable implements JWTSubject
 {
@@ -19,6 +19,7 @@ class User extends Authenticatable implements JWTSubject
         'password',
         'role',
         'is_active',
+        'must_change_password',
     ];
 
     protected $hidden = [
@@ -30,6 +31,7 @@ class User extends Authenticatable implements JWTSubject
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
         'is_active' => 'boolean',
+        'must_change_password' => 'boolean',
     ];
 
     // --- JWT Methods ---
@@ -63,5 +65,15 @@ class User extends Authenticatable implements JWTSubject
     public function teacher(): HasOne
     {
         return $this->hasOne(Teacher::class);
+    }
+
+    public function admin(): HasOne
+    {
+        return $this->hasOne(Admin::class);
+    }
+
+    public function principal(): HasOne
+    {
+        return $this->hasOne(Principal::class);
     }
 }
