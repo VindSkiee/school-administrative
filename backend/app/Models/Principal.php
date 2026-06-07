@@ -4,9 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\RecordsActivity;
 
 class Principal extends Model
 {
+    use RecordsActivity;
     use HasFactory;
 
     protected $primaryKey = 'user_id'; // Kunci PK ke user_id

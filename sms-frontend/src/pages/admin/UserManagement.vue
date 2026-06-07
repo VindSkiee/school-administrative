@@ -415,8 +415,9 @@ const paginationMeta = reactive({
 });
 const isLoading = ref(true);
 const isSaving = ref(false);
-const searchQuery = ref("");
-const roleFilter = ref("");
+const searchQuery = ref('');
+let searchTimeout = null;
+const roleFilter = ref('');
 
 const confirmModal = reactive({
   isOpen: false,
@@ -483,8 +484,16 @@ const fetchUsers = async (page = 1) => {
   }
 };
 
-watch([searchQuery, roleFilter], () => {
-  fetchUsers(1);
+// Logika Debounce: Mencegah spam request ke server saat mengetik
+watch(searchQuery, () => {
+  if (searchTimeout) {
+    clearTimeout(searchTimeout); // Batalkan timer sebelumnya jika user masih mengetik
+  }
+  
+  searchTimeout = setTimeout(() => {
+    // Jalankan pencarian dan kembalikan ke halaman 1
+    fetchUsers(1); 
+  }, 500); // Tunggu 500ms (setengah detik)
 });
 
 const saveUser = async () => {

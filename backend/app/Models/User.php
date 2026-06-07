@@ -8,9 +8,13 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Tymon\JWTAuth\Contracts\JWTSubject;
+use App\Traits\RecordsActivity;
+
 
 class User extends Authenticatable implements JWTSubject
 {
+    use RecordsActivity;
+
     use HasFactory, Notifiable, SoftDeletes;
 
     protected $fillable = [

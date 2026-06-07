@@ -4,9 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Traits\RecordsActivity;
 
 class SchoolClass extends Model
 {
+    use RecordsActivity;
     use SoftDeletes;
 
     protected $table = 'classes'; // Arahkan eksplisit ke tabel classes

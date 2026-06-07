@@ -8,7 +8,15 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 class ActivityLog extends Model
 {
-    protected $fillable = ['user_id', 'action', 'loggable_type', 'loggable_id', 'old_values', 'new_values', 'ip_address'];
+    protected $fillable = [
+        'user_id', 
+        'action', 
+        'loggable_type', 
+        'loggable_id', 
+        'old_values', 
+        'new_values', 
+        'ip_address'
+    ];
 
     protected $casts = [
         'old_values' => 'array',

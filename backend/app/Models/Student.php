@@ -5,10 +5,13 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use App\Traits\RecordsActivity;
 
 class Student extends Model
 {
     protected $primaryKey = 'user_id';
+
+    use RecordsActivity;
 
     public $incrementing = false;
 

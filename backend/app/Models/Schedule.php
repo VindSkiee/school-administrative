@@ -5,9 +5,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Traits\RecordsActivity;
 
 class Schedule extends Model
 {
+    use RecordsActivity;
+
     protected $fillable = [
         'class_id', 'subject_id', 'teacher_id', 'academic_year_id', 
         'day_of_week', 'start_time', 'end_time'

@@ -44,3 +44,4 @@ Route::middleware('throttle:heavy-api')->group(function () {
 Route::get('activity-logs', [ActivityLogController::class, 'index']);
 // Endpoint untuk mempublikasikan rapor dan mengunci semester
 Route::patch('academic-years/{id}/publish-reports', [AdminSemesterReport::class, 'publish']);
+Route::get('dashboard/stats', [\App\Http\Controllers\API\Admin\DashboardController::class, 'index']);
