@@ -22,7 +22,7 @@ class StoreBulkAttendanceRequest extends FormRequest
             'date' => ['required', 'date', 'date_format:Y-m-d'],
             'attendances' => ['required', 'array', 'min:1'], // Array data kehadiran siswa
             'attendances.*.student_id' => ['required', 'exists:students,user_id'],
-            'attendances.*.status' => ['required', Rule::in(['present', 'alpa', 'sick', 'permission', 'late'])],
+            'attendances.*.status' => ['required', Rule::in(['present', 'absent', 'sick', 'permission', 'late'])],
         ];
     }
 
@@ -52,8 +52,11 @@ class StoreBulkAttendanceRequest extends FormRequest
                 }
 
                 $validStudentIds = Student::query()
-                    ->whereIn('user_id', $studentIds->all(), 'and', false)
-                    ->where('class_id', $schedule->class_id)
+                    ->whereIn('user_id', $studentIds->all())
+                    // PERBAIKAN: Gunakan whereHas alih-alih where('class_id', ...)
+                    ->whereHas('classes', function ($query) use ($schedule) {
+                        $query->where('classes.id', $schedule->class_id);
+                    })
                     ->pluck('user_id')
                     ->all();
 

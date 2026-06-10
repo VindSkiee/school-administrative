@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Symfony\Component\HttpKernel\Exception\HttpException;
+use Illuminate\Support\Facades\Storage;
 
 class UserController
 {
@@ -30,8 +31,8 @@ class UserController
         if ($request->filled('search')) {
             $search = $request->query('search');
             $query->where(function ($subQuery) use ($search) {
-                $subQuery->where('name', 'like', '%'.$search.'%')
-                    ->orWhere('email', 'like', '%'.$search.'%');
+                $subQuery->where('name', 'like', '%' . $search . '%')
+                    ->orWhere('email', 'like', '%' . $search . '%');
             });
         }
 
@@ -69,7 +70,7 @@ class UserController
         } catch (HttpException $e) {
             return response()->json(['error' => $e->getMessage()], $e->getStatusCode());
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Gagal membuat user: '.$e->getMessage()], 500);
+            return response()->json(['error' => 'Gagal membuat user: ' . $e->getMessage()], 500);
         }
     }
 
@@ -178,7 +179,7 @@ class UserController
 
         $validated = $request->validate([
             'name' => 'sometimes|string|max:255',
-            'email' => 'sometimes|email|unique:users,email,'.$id,
+            'email' => 'sometimes|email|unique:users,email,' . $id,
             'password' => 'sometimes|string|min:8',
             'is_active' => 'sometimes|boolean',
         ]);
@@ -220,7 +221,7 @@ class UserController
                     'nisn' => $profileData['nisn'] ?? null,
                     'nis' => $profileData['nis'] ?? null,
                     'gender' => $profileData['gender'] ?? null,
-                ], static fn ($value) => $value !== null);
+                ], static fn($value) => $value !== null);
 
                 if (! empty($studentData)) {
                     $user->student()->updateOrCreate(['user_id' => $user->id], $studentData);
@@ -262,5 +263,37 @@ class UserController
             'success' => true,
             'message' => 'User berhasil dinonaktifkan.',
         ]);
+    }
+
+    public function uploadAvatar(Request $request, string $id)
+    {
+        $request->validate([
+            'avatar' => 'required|image|mimes:jpeg,png,jpg,webp|max:2048',
+        ]);
+
+        $user = User::findOrFail($id);
+
+        if ($request->hasFile('avatar')) {
+            // 1. Hapus foto lama JIKA ADA (agar storage tidak penuh)
+            if ($user->avatar && Storage::disk('public')->exists($user->avatar)) {
+                Storage::disk('public')->delete($user->avatar);
+            }
+
+            // 2. Simpan foto baru ke folder 'avatars' di storage/app/public
+            // Gunakan hashName agar nama file selalu unik (mencegah browser cache)
+            $path = $request->file('avatar')->store('avatars', 'public');
+
+            // 3. SANGAT PENTING: Update database dan SAVE!
+            $user->avatar = $path;
+            $user->save(); // <-- BANYAK ORANG LUPA BARIS INI PADA UPLOAD KEDUA
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Avatar berhasil diperbarui',
+                'avatar_url' => $user->avatar_url // URL ini di-generate oleh Model Anda
+            ]);
+        }
+
+        return response()->json(['message' => 'Tidak ada file yang diupload'], 400);
     }
 }

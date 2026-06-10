@@ -12,16 +12,20 @@ class MaterialController
 {
     public function __construct(protected MaterialService $materialService) {}
 
-    public function index(Request $request): JsonResponse
+    // Ubah parameter index untuk menerima schedule_id dari URL
+    public function index(Request $request, string $scheduleId): JsonResponse
     {
         $teacherId = auth('api')->user()->id;
+        $date = $request->query('date');
 
-        $materials = Material::with('schedule.schoolClass', 'schedule.subject')
+        $materials = \App\Models\Material::with('schedule.schoolClass', 'schedule.subject')
+            ->where('schedule_id', $scheduleId)
+            ->where('date', $date)
             ->whereHas('schedule', function ($query) use ($teacherId) {
                 $query->where('teacher_id', $teacherId);
             })
             ->orderBy('created_at', 'desc')
-            ->paginate(15);
+            ->get(); // Gunakan get() karena ini per pertemuan, datanya tidak akan butuh paginate
 
         return response()->json($materials);
     }
@@ -34,7 +38,7 @@ class MaterialController
             $material = $this->materialService->uploadMaterial(
                 $teacherId, 
                 $request->validated(), 
-                $request->file('file')
+                $request->file('files') // <-- Ambil array files
             );
 
             return response()->json([
@@ -42,8 +46,8 @@ class MaterialController
                 'message' => 'Materi berhasil diunggah.',
                 'data' => $material
             ], 201);
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
-            return response()->json(['error' => $e->getMessage()], $e->getStatusCode());
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 

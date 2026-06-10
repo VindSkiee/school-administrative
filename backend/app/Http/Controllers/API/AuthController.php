@@ -65,6 +65,34 @@ class AuthController
         return $this->respondWithToken($token, $user);
     }
 
+    // 1. TAMBAHKAN FUNGSI HELPER INI
+    private function formatUserData(User $user): array
+    {
+        $user->loadMissing(['student', 'teacher', 'admin', 'principal']);
+
+        return [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'role' => $user->role,
+            'avatar_url' => $user->avatar_url, // URL akan selalu di-generate
+            'must_change_password' => $user->must_change_password,
+            'is_active' => $user->is_active,
+            
+            // Flat Data
+            'nip' => $user->teacher?->nip ?? $user->admin?->nip ?? $user->principal?->nip,
+            'nis' => $user->student?->nis,
+            'nisn' => $user->student?->nisn,
+
+            // Nested Data
+            'student' => $user->student,
+            'teacher' => $user->teacher,
+            'admin' => $user->admin,
+            'principal' => $user->principal,
+        ];
+    }
+
+    // 2. PERBARUI FUNGSI INI
     protected function respondWithToken(string $token, User $user): JsonResponse
     {
         return response()->json([
@@ -72,25 +100,24 @@ class AuthController
             'access_token' => $token,
             'token_type' => 'bearer',
             'expires_in' => JWTAuth::factory()->getTTL() * 60,
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'role' => $user->role,
-                'must_change_password' => $user->must_change_password,
-            ],
+            // Panggil fungsi helper di sini
+            'user' => $this->formatUserData($user), 
         ]);
     }
 
+    // 3. PERBARUI FUNGSI INI
     public function me()
     {
         $user = Auth::guard('api')->user();
 
-        if ($user instanceof Model) {
-            $user->load(['student', 'teacher']);
-        }
-
-        return response()->json($user);
+        // Panggil fungsi helper di sini, lalu kirim dengan Headers Anti-Cache
+        return response()->json(
+            $this->formatUserData($user)
+        )->withHeaders([
+            'Cache-Control' => 'no-cache, no-store, must-revalidate',
+            'Pragma' => 'no-cache',
+            'Expires' => '0',
+        ]);
     }
 
     public function logout()

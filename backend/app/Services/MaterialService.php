@@ -10,22 +10,24 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class MaterialService
 {
-    public function uploadMaterial(int $teacherId, array $data, UploadedFile $file): Material
+    public function uploadMaterial(int $teacherId, array $data, array $files): \App\Models\Material
     {
-        // Gunakan query()->findOrFail() agar IDE mengerti ini adalah Eloquent Builder
-        // Ini juga lebih aman karena akan melempar 404 jika ID tidak ada, bukan error 500
-        $schedule = Schedule::query()->findOrFail($data['schedule_id']);
+        $schedule = \App\Models\Schedule::query()->findOrFail($data['schedule_id']);
 
         if ($schedule->teacher_id !== $teacherId) {
-            throw new HttpException(403, "Akses ditolak: Anda tidak mengajar di jadwal ini.");
+            throw new \Symfony\Component\HttpKernel\Exception\HttpException(403, "Akses ditolak: Anda tidak mengajar di jadwal ini.");
         }
 
-        // Simpan file dengan nama unik
-        $path = $file->store('materials', 'public');
+        $paths = [];
+        foreach ($files as $file) {
+            // Simpan setiap file dan masukkan path-nya ke array
+            $paths[] = $file->store('materials', 'public');
+        }
         
-        $data['file_path'] = $path;
+        // Simpan array path ke dalam kolom JSON 'attachments'
+        $data['attachments'] = $paths;
         
-        return Material::query()->create($data);
+        return \App\Models\Material::query()->create($data);
     }
 
     public function deleteMaterial(int $teacherId, Material $material): void

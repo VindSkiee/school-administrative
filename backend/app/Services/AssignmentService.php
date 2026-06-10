@@ -13,19 +13,42 @@ use Carbon\Carbon;
 class AssignmentService
 {
     // --- AREA GURU ---
-    public function createAssignment(int $teacherId, array $data, ?UploadedFile $file): Assignment
+    public function createAssignment(int $teacherId, array $data, ?array $files): \App\Models\Assignment
     {
-        $schedule = Schedule::query()->findOrFail($data['schedule_id']);
+        $schedule = \App\Models\Schedule::query()->findOrFail($data['schedule_id']);
 
         if ($schedule->teacher_id !== $teacherId) {
-            throw new HttpException(403, "Akses ditolak: Anda tidak mengajar di jadwal ini.");
+            throw new \Symfony\Component\HttpKernel\Exception\HttpException(403, "Akses ditolak: Anda tidak mengajar di jadwal ini.");
         }
 
-        if ($file) {
-            $data['file_path'] = $file->store('assignments', 'public');
+        $paths = [];
+        if ($files) {
+            foreach ($files as $file) {
+                $paths[] = $file->store('assignments', 'public');
+            }
+        }
+        $data['attachments'] = $paths;
+
+        return \App\Models\Assignment::query()->create($data);
+    }
+
+    public function deleteAssignment(int $teacherId, \App\Models\Assignment $assignment): void
+    {
+        $schedule = \App\Models\Schedule::query()->findOrFail($assignment->schedule_id);
+        
+        if ($schedule->teacher_id !== $teacherId) {
+            throw new \Symfony\Component\HttpKernel\Exception\HttpException(403, "Akses ditolak.");
         }
 
-        return Assignment::query()->create($data);
+        // Hapus file fisik jika ada
+        if (is_array($assignment->attachments)) {
+            foreach ($assignment->attachments as $path) {
+                if (\Illuminate\Support\Facades\Storage::disk('public')->exists($path)) {
+                    \Illuminate\Support\Facades\Storage::disk('public')->delete($path);
+                }
+            }
+        }
+        $assignment->delete();
     }
 
     // --- AREA SISWA ---

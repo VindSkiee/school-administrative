@@ -26,8 +26,11 @@ class AttendanceService
 
         if ($studentIds->isNotEmpty()) {
             $validStudentIds = Student::query()
-                ->whereIn('user_id', $studentIds->all(), 'and', false)
-                ->where('class_id', $schedule->class_id)
+                ->whereIn('user_id', $studentIds->all()) // Disederhanakan
+                // PERBAIKAN: Gunakan whereHas alih-alih where('class_id', ...)
+                ->whereHas('classes', function ($query) use ($schedule) {
+                    $query->where('classes.id', $schedule->class_id);
+                })
                 ->pluck('user_id')
                 ->all();
 

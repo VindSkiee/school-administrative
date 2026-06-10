@@ -37,6 +37,18 @@ const routes = [
       return `/${authStore.userRole}/dashboard`;
     },
   },
+  {
+    path: "/account",
+    component: MainLayout,
+    meta: { requiresAuth: true }, // <-- Tanpa meta.role
+    children: [
+      {
+        path: "profile",
+        name: "MyProfile",
+        component: () => import("../pages/UserProfile.vue"),
+      },
+    ],
+  },
   // --- ADMIN ROUTES ---
   {
     path: "/admin",
@@ -56,7 +68,7 @@ const routes = [
       {
         path: "users/:id",
         name: "Detail Pengguna",
-        component: () => import("../pages/admin/UserProfile.vue"),
+        component: () => import("../pages/UserProfile.vue"),
       },
       {
         path: "classes",
@@ -106,6 +118,38 @@ const routes = [
         name: "TeacherDashboard",
         component: () => import("../pages/teacher/Dashboard.vue"),
       },
+      // Di dalam children rute /teacher
+      {
+        path: "classes/:id",
+        name: "TeacherClassDetail",
+        // Mengarah ke folder teacher, bukan admin
+        component: () => import("../pages/teacher/ClassDetail.vue"), 
+      },
+      {
+        path: "students/:id",
+        name: "TeacherStudentProfile",
+        component: () => import("../pages/teacher/StudentProfile.vue"), // Arahkan ke file baru
+      },
+      {
+        path: "schedules/today",
+        name: "TeacherAttendance",
+        component: () => import("../pages/teacher/AttendanceSchedule.vue"),
+      },
+      {
+        path: "classes/:schedule_id/detail",
+        name: "TeacherScheduleDetail",
+        component: () => import("../pages/teacher/ScheduleDetail.vue"),
+      },
+      {
+        path: "/teacher/assignments",
+        name: "TeacherAssignments",
+        component: () => import("../pages/teacher/AssignmentList.vue"),
+      },
+      {
+        path: "/teacher/assignments/:id",
+        name: "TeacherAssignmentDetail",
+        component: () => import("../pages/teacher/TeacherAssignmentDetail.vue"),
+      }
     ],
   },
   // --- STUDENT ROUTES ---

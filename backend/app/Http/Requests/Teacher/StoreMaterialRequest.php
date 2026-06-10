@@ -12,10 +12,14 @@ class StoreMaterialRequest extends FormRequest
     {
         return [
             'schedule_id' => ['required', 'exists:schedules,id'],
+            'date' => ['required', 'date', 'date_format:Y-m-d'],
             'title' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
-            // Maks 10MB, format dokumen, presentasi, atau video
-            'file' => ['required', 'file', 'mimes:pdf,doc,docx,ppt,pptx,xls,xlsx,mp4,zip', 'max:10240'], 
+            
+            // Validasi untuk array files (Maksimal 10 file)
+            'files' => ['required', 'array', 'max:10'],
+            // Validasi per-file: Maks 10MB, format khusus
+            'files.*' => ['file', 'mimes:pdf,doc,docx,ppt,pptx,xls,xlsx,mp4,zip,png,jpg,jpeg', 'max:10240'], 
         ];
     }
 }

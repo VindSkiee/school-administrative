@@ -214,8 +214,8 @@ const toastStore = useToastStore();
 
 const tableColumns = [
   { key: "time", label: "Waktu" },
-  { key: "actor", label: "Aktor", align: "left" },
-  { key: "action_resource", label: "Aksi & Resource", align: "left" },
+  { key: "actor", label: "Aktor", align: "center" },
+  { key: "action_resource", label: "Aksi & Resource", align: "center" },
   { key: "ip_address", label: "IP Address", align: "center" },
   { key: "detail", label: "Detail", align: "center" },
 ];

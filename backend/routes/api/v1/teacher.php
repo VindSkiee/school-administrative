@@ -7,6 +7,8 @@ use App\Http\Controllers\API\Teacher\MaterialController as TeacherMaterialContro
 use App\Http\Controllers\API\Teacher\AssignmentController as TeacherAssignController;
 use App\Http\Controllers\API\Teacher\GradeController as TeacherGradeController;
 use App\Http\Controllers\API\Teacher\GradeAggregationController as TeacherAggregate;
+use App\Http\Controllers\API\Teacher\TeacherDashboardController;
+use App\Http\Controllers\API\Teacher\TeacherHomeroomController;
 
 Route::get('schedules/today', [AttendanceController::class, 'getTodaySchedules']);
 Route::get('schedules/{schedule_id}/students', [AttendanceController::class, 'getStudentsForAttendance']);
@@ -17,9 +19,15 @@ Route::middleware('throttle:upload-api')->group(function () {
     Route::post('materials', [TeacherMaterialController::class, 'store']);
     Route::post('assignments', [TeacherAssignController::class, 'store']);
 });
-Route::post('materials', [TeacherMaterialController::class, 'store']);
+Route::get('schedules/{schedule_id}/materials', [TeacherMaterialController::class, 'index']);
 Route::delete('materials/{id}', [TeacherMaterialController::class, 'destroy']);
-Route::get('assignments', [TeacherAssignController::class, 'index']);
+Route::delete('assignments/{id}', [TeacherAssignController::class, 'destroy']);
+Route::get('schedules/{schedule_id}/assignments', [TeacherAssignController::class, 'index']);
+Route::get('assignments', [TeacherAssignController::class, 'globalIndex']);
 Route::get('assignments/{id}/submissions', [TeacherAssignController::class, 'submissions']);
 Route::post('submissions/{id}/grade', [TeacherGradeController::class, 'store']);
 Route::get('schedules/{schedule_id}/grades/aggregate', [TeacherAggregate::class, 'show']);
+Route::get('dashboard/stats', [TeacherDashboardController::class, 'index']);
+// Rute khusus detail kelas perwalian
+Route::get('homeroom-class', [TeacherHomeroomController::class, 'show']);
+Route::get('schedules/{schedule_id}', [AttendanceController::class, 'show']);

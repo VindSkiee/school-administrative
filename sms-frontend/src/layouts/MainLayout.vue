@@ -7,23 +7,62 @@
         isMobileMenuOpen ? 'fixed inset-y-0 left-0' : 'hidden md:flex',
       ]"
     >
-      <!-- Brand Logo -->
       <div
-        class="h-16 flex items-center justify-center border-b border-red-800/50 shadow-sm relative overflow-hidden"
+  class="flex items-center justify-center px-2 py-2 h-16 border-b border-red-800/50 shadow-sm relative overflow-hidden shrink-0"
+>
+  <div
+    class="bg-white h-full border border-white/30 rounded-xl flex items-center justify-center px-2.5 gap-2.5 relative overflow-hidden shadow-inner"
+  >
+    <div
+      class="text-black border-r-2 flex flex-col items-center px-2 py-1 min-w-[2.75rem] shrink-0"
+    >
+      <span
+        class="text-[9px] uppercase font-bold tracking-wider leading-none mb-0.5"
       >
-        <div class="absolute inset-0 bg-brand-orange opacity-10"></div>
-        <h1 class="text-xl font-bold tracking-wider relative z-10">
-          EduPlatform
-        </h1>
+        {{ currentMonth }}
+      </span>
+      <span class="text-base font-black leading-none">
+        {{ currentDateNum }}
+      </span>
+    </div>
+
+    <div class="flex flex-col items-center">
+      <h2 class="text-xs font-bold text-gray-800 tracking-wide">
+        {{ currentDayName }}
+      </h2>
+
+      <div class="flex items-center gap-1 mt-0.5">
+        <svg
+          class="w-3 h-3 text-gray-500 shrink-0"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+          />
+        </svg>
+
+        <span
+          class="text-[11px] text-gray-500 font-mono font-bold tracking-widest"
+        >
+          {{ currentTime }}
+        </span>
       </div>
+    </div>
+  </div>
+</div>
 
       <!-- Navigation Menu -->
-      <nav class="flex-1 overflow-y-auto py-6 px-3 space-y-1">
+      <nav class="flex-1 overflow-y-auto py-6 px-3">
         <button
           v-for="item in currentNavigation"
           :key="item.name"
           @click="navigate(item.path)"
-          class="w-full flex items-center px-4 py-3 rounded-lg text-sm font-medium transition-colors text-left outline-none"
+          class="w-full flex items-center px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 text-left outline-none"
           :class="[
             isActive(item.path)
               ? 'bg-brand-orange text-white shadow-md'
@@ -31,6 +70,7 @@
           ]"
         >
           <svg
+            :class="clickedMenu === item.path ? 'icon-bounce' : ''"
             class="w-5 h-5 mr-3 opacity-90 shrink-0"
             fill="none"
             stroke="currentColor"
@@ -41,9 +81,29 @@
               stroke-linejoin="round"
               stroke-width="2"
               :d="item.icon"
-            ></path>
+            />
           </svg>
-          <span class="truncate">{{ item.name }}</span>
+
+          <span class="truncate flex-1">
+            {{ item.name }}
+          </span>
+
+          <transition name="slide-arrow">
+            <svg
+              v-if="isActive(item.path)"
+              class="w-4 h-4 ml-2 shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2.5"
+                d="M9 5l7 7-7 7"
+              />
+            </svg>
+          </transition>
         </button>
       </nav>
 
@@ -55,21 +115,35 @@
       >
         <div class="flex items-center justify-between">
           <div class="flex items-center overflow-hidden pr-2">
+            <img
+              v-if="authStore.user?.avatar_url"
+              :src="authStore.user.avatar_url"
+              alt="Avatar"
+              class="w-10 h-10 rounded-full object-cover shrink-0 group-hover:scale-105 transition-transform duration-300 shadow-sm border border-red-800/30"
+            />
             <div
+              v-else
               class="w-10 h-10 rounded-full bg-brand-orange flex items-center justify-center text-white font-bold shrink-0 group-hover:scale-105 transition-transform duration-300 shadow-sm"
             >
               {{ userInitial }}
             </div>
 
             <div class="ml-3 overflow-hidden">
-              <p class="text-sm font-semibold truncate text-brand-white group-hover:text-white transition-colors">
+              <p
+                class="text-sm font-semibold truncate text-brand-white group-hover:text-white transition-colors"
+              >
                 {{ authStore.user?.name }}
               </p>
 
               <div class="flex items-center text-xs text-red-200 truncate">
                 <span class="capitalize">{{ authStore.user?.role }}</span>
-                <span class="mx-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-300">•</span>
-                <span class="opacity-0 group-hover:opacity-100 transition-opacity duration-300 font-semibold text-brand-orange">
+                <span
+                  class="mx-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                  >•</span
+                >
+                <span
+                  class="opacity-0 group-hover:opacity-100 transition-opacity duration-300 font-semibold text-brand-orange"
+                >
                   Lihat Profil
                 </span>
               </div>
@@ -182,7 +256,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useAuthStore } from "../stores/auth";
 import ConfirmModal from "../components/ConfirmModal.vue"; // IMPORT MODAL
@@ -195,23 +269,66 @@ const isMobileMenuOpen = ref(false);
 // State untuk Modal Logout
 const isLogoutModalOpen = ref(false);
 
+// ==========================================
+// LOGIKA MODERN REAL-TIME CALENDAR
+// ==========================================
+const timeNow = ref(new Date());
+let clockTimer = null;
+
+// Mengambil nama hari (contoh: "Senin", "Selasa")
+const currentDayName = computed(() => {
+  return new Intl.DateTimeFormat("id-ID", { weekday: "long" }).format(
+    timeNow.value,
+  );
+});
+
+// Mengambil 3 huruf bulan (contoh: "JAN", "FEB")
+const currentMonth = computed(() => {
+  return new Intl.DateTimeFormat("id-ID", { month: "short" })
+    .format(timeNow.value)
+    .substring(0, 3);
+});
+
+// Mengambil angka tanggal (contoh: "15")
+const currentDateNum = computed(() => {
+  return timeNow.value.getDate();
+});
+
+// Mengambil jam:menit:detik (contoh: "14:30:45")
+const currentTime = computed(() => {
+  return new Intl.DateTimeFormat("id-ID", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  })
+    .format(timeNow.value)
+    .replace(/\./g, ":"); // Pastikan formatnya titik dua
+});
+
+onMounted(() => {
+  // Jalankan detak jam setiap 1000 milidetik (1 detik)
+  clockTimer = setInterval(() => {
+    timeNow.value = new Date();
+  }, 1000);
+});
+
+onUnmounted(() => {
+  // Bersihkan timer saat pengguna pindah halaman agar memori tidak bocor
+  if (clockTimer) clearInterval(clockTimer);
+});
+// ==========================================
+
 const userInitial = computed(() => {
   return authStore.user?.name
     ? authStore.user.name.charAt(0).toUpperCase()
     : "U";
 });
 
-const navigate = (path) => {
-  router.push(path);
-  isMobileMenuOpen.value = false; // UX Bonus: Tutup sidebar otomatis di HP
-};
-
 // FUNGSI BARU 3: Navigasi ke Profil
 const goToProfile = () => {
-  if (authStore.user?.id) {
-    router.push({ name: 'Detail Pengguna', params: { id: authStore.user.id } });
-    isMobileMenuOpen.value = false; // Tutup sidebar otomatis di HP
-  }
+  // Karena rutenya kita beri nama 'MyProfile', kita tinggal panggil namanya
+  router.push({ name: "MyProfile" });
 };
 
 const isActive = (path) => {
@@ -288,7 +405,7 @@ const teacherNav = [
   },
   {
     name: "Jadwal & Absensi",
-    path: "/teacher/attendance",
+    path: "/teacher/schedules/today",
     icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
   },
   {
@@ -348,6 +465,19 @@ const currentNavigation = computed(() => {
       return [];
   }
 });
+
+const clickedMenu = ref(null);
+
+const navigate = (path) => {
+  clickedMenu.value = path;
+
+  setTimeout(() => {
+    clickedMenu.value = null;
+  }, 300);
+
+  router.push(path);
+  isMobileMenuOpen.value = false;
+};
 </script>
 
 <style>
@@ -358,5 +488,34 @@ const currentNavigation = computed(() => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+.icon-bounce {
+  animation: iconBounce 0.35s ease;
+}
+
+@keyframes iconBounce {
+  0% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.3);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+.slide-arrow-enter-active,
+.slide-arrow-leave-active {
+  transition: all 0.2s ease;
+}
+
+.slide-arrow-enter-from,
+.slide-arrow-leave-to {
+  opacity: 0;
+  transform: translateX(-8px);
 }
 </style>

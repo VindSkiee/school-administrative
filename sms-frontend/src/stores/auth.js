@@ -61,5 +61,11 @@ export const useAuthStore = defineStore("auth", {
 
       localStorage.setItem("user_data", JSON.stringify(this.user));
     },
+    updateUserAvatar(newAvatarUrl) {
+      if (this.user) {
+        this.user.avatar_url = newAvatarUrl;
+        localStorage.setItem("user_data", JSON.stringify(this.user));
+      }
+    },
   },
 });

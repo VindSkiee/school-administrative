@@ -12,53 +12,77 @@ class AssignmentController
 {
     public function __construct(protected AssignmentService $assignmentService) {}
 
-    public function index(): JsonResponse
+    // Ganti index untuk menerima schedule_id
+    public function index(string $scheduleId): \Illuminate\Http\JsonResponse
     {
         $teacherId = auth('api')->user()->id;
 
-        $assignments = Assignment::with(['schedule.schoolClass', 'schedule.subject'])
-            ->withCount('submissions') // Hitung berapa siswa yang sudah kumpul
+        $assignments = \App\Models\Assignment::withCount('submissions')
+            ->where('schedule_id', $scheduleId)
             ->whereHas('schedule', function ($query) use ($teacherId) {
                 $query->where('teacher_id', $teacherId);
             })
-            ->orderBy('due_date', 'desc')
-            ->paginate(15);
+            ->orderBy('created_at', 'desc')
+            ->get(); // Ambil semua untuk kelas ini agar cross-week grading mudah
 
         return response()->json($assignments);
     }
 
-    public function store(StoreAssignmentRequest $request): JsonResponse
+    // BARU: Ambil semua tugas dari semua kelas untuk halaman Dashboard Global
+    public function globalIndex(): \Illuminate\Http\JsonResponse
     {
         $teacherId = auth('api')->user()->id;
 
+        // Kita wajib melakukan eager load (with) pada schedule, schoolClass, dan subject 
+        // agar di Frontend kita bisa menampilkan nama kelas dan nama mapelnya.
+        $assignments = \App\Models\Assignment::with(['schedule.schoolClass', 'schedule.subject'])
+            ->withCount('submissions')
+            ->whereHas('schedule', function ($query) use ($teacherId) {
+                $query->where('teacher_id', $teacherId);
+            })
+            ->orderBy('due_date', 'desc') // Urutkan dari deadline terdekat/terbaru
+            ->get(); 
+
+        return response()->json($assignments);
+    }
+
+    public function store(\App\Http\Requests\Teacher\StoreAssignmentRequest $request): \Illuminate\Http\JsonResponse
+    {
+        $teacherId = auth('api')->user()->id;
         try {
             $assignment = $this->assignmentService->createAssignment(
                 $teacherId, 
                 $request->validated(), 
-                $request->file('file')
+                $request->file('files')
             );
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Tugas berhasil dibuat.',
-                'data' => $assignment
-            ], 201);
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
-            return response()->json(['error' => $e->getMessage()], $e->getStatusCode());
+            return response()->json(['success' => true, 'data' => $assignment], 201);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
-    public function submissions(string $id): JsonResponse
+    public function destroy(string $id): \Illuminate\Http\JsonResponse
     {
         $teacherId = auth('api')->user()->id;
-        $assignment = Assignment::with(['submissions.student.user'])->findOrFail($id);
+        $assignment = \App\Models\Assignment::findOrFail($id);
+        try {
+            $this->assignmentService->deleteAssignment($teacherId, $assignment);
+            return response()->json(['success' => true, 'message' => 'Tugas dihapus.']);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
 
-        // Otorisasi: Pastikan ini tugas miliknya
-        $schedule = $assignment->schedule;
-        if ($schedule->teacher_id !== $teacherId) {
+    public function submissions(string $id): \Illuminate\Http\JsonResponse
+    {
+        $teacherId = auth('api')->user()->id;
+        
+        // Tarik submissions BERSERTA nilainya (grade)
+        $assignment = \App\Models\Assignment::with(['submissions.student.user', 'submissions.grade'])->findOrFail($id);
+
+        if ($assignment->schedule->teacher_id !== $teacherId) {
             return response()->json(['error' => 'Akses ditolak.'], 403);
         }
-
         return response()->json($assignment);
     }
 }

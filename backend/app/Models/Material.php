@@ -2,12 +2,29 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Material extends Model
 {
-    protected $fillable = ['schedule_id', 'title', 'description', 'file_path'];
+    use HasFactory;
 
-    public function schedule(): BelongsTo { return $this->belongsTo(Schedule::class); }
+    // 1. Pastikan date dan attachments masuk ke fillable
+    protected $fillable = [
+        'schedule_id',
+        'date',
+        'title',
+        'description',
+        'attachments',
+    ];
+
+    // 2. Beri tahu Laravel bahwa attachments adalah JSON (Array)
+    protected $casts = [
+        'attachments' => 'array',
+    ];
+
+    public function schedule()
+    {
+        return $this->belongsTo(Schedule::class);
+    }
 }
