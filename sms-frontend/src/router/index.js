@@ -123,7 +123,7 @@ const routes = [
         path: "classes/:id",
         name: "TeacherClassDetail",
         // Mengarah ke folder teacher, bukan admin
-        component: () => import("../pages/teacher/ClassDetail.vue"), 
+        component: () => import("../pages/teacher/ClassDetail.vue"),
       },
       {
         path: "students/:id",
@@ -149,7 +149,7 @@ const routes = [
         path: "/teacher/assignments/:id",
         name: "TeacherAssignmentDetail",
         component: () => import("../pages/teacher/TeacherAssignmentDetail.vue"),
-      }
+      },
     ],
   },
   // --- STUDENT ROUTES ---
@@ -162,6 +162,45 @@ const routes = [
         path: "dashboard",
         name: "StudentDashboard",
         component: () => import("../pages/student/Dashboard.vue"),
+      },
+      {
+        path: "schedules",
+        name: "StudentSchedules",
+        component: () => import("../pages/student/StudentSchedule.vue"),
+      },
+      {
+        path: "schedules/:id/detail",
+        name: "StudentScheduleDetail",
+        component: () => import("../pages/student/StudentScheduleDetail.vue"),
+      },
+      {
+        path: "materials",
+        name: "StudentMaterials",
+        component: () =>
+          import("../pages/student/panel/StudentMaterialPanel.vue"),
+      },
+      {
+        path: "assignments",
+        name: "StudentAssignments",
+        component: () =>
+          import("../pages/student/panel/StudentAssignmentPanel.vue"),
+      },
+      {
+        path: "assignmentsList",
+        name: "StudentAssignmentsList",
+        component: () => import("../pages/student/StudentAssignments.vue"),
+      },
+      {
+        path: "class-detail",
+        name: "StudentClassDetail",
+        component: () => import("../pages/student/StudentClassDetail.vue"),
+        meta: { title: "Ruang Kelas Aktif" },
+      },
+      {
+        path: "report",
+        name: "StudentReport",
+        component: () => import("../pages/student/StudentReport.vue"),
+        meta: { title: "Nilai & Rapor Semester" },
       },
     ],
   },
@@ -233,9 +272,13 @@ router.beforeEach((to, from, next) => {
     return next(`/${userRole}/dashboard`);
   }
 
-  // Proteksi Role-Based (RBAC) di Frontend
-  if (to.meta.role && to.meta.role !== userRole) {
-    return next("/unauthorized");
+  if (to.meta.role && authStore.user) {
+    const userRole = authStore.user.role.toLowerCase();
+    const requiredRole = to.meta.role.toLowerCase();
+
+    if (userRole !== requiredRole) {
+      return next("/unauthorized"); // Di sinilah Anda ditendang tadi!
+    }
   }
 
   next();

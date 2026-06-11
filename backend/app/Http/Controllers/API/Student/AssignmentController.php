@@ -6,41 +6,84 @@ use App\Models\Assignment;
 use App\Http\Requests\Student\StoreSubmissionRequest;
 use App\Services\AssignmentService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;    
 
 class AssignmentController
 {
     public function __construct(protected AssignmentService $assignmentService) {}
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $student = auth('api')->user()->student;
+        $user = auth('api')->user();
+        /** @var \App\Models\User $user */
+        $student = $user->student()->with('classes')->first();
+        $activeClass = $student->classes->first();
 
-        if (!$student || $student->status !== 'active' || !$student->class_id) {
-            return response()->json(['error' => 'Anda tidak memiliki kelas aktif.'], 403);
+        if (!$activeClass) {
+            return response()->json(['error' => 'Anda tidak terdaftar di kelas aktif manapun.'], 403);
         }
 
-        // Ambil tugas beserta data submission milik siswa ini (jika sudah kumpul)
-        $assignments = Assignment::with(['schedule.subject', 'schedule.teacher.user'])
-            ->with(['submissions' => function ($query) use ($student) {
-                $query->where('student_id', $student->user_id);
-            }])
-            ->whereHas('schedule', function ($query) use ($student) {
-                $query->where('class_id', $student->class_id);
-            })
-            ->orderBy('due_date', 'asc')
-            ->paginate(15);
+        // 1. Ambil tugas berdasarkan kelas aktif siswa
+        $query = Assignment::with([
+            'schedule.subject', 
+            'schedule.teacher.user',
+            // Hanya ambil submission milik siswa ini saja, beserta nilainya (grade)
+            'submissions' => function($q) use ($student) {
+                $q->where('student_id', $student->user_id)->with('grade');
+            }
+        ])
+        ->whereHas('schedule', function ($q) use ($activeClass) {
+            $q->where('class_id', $activeClass->id);
+        });
 
-        return response()->json($assignments);
+        // 2. Filter spesifik untuk Jadwal (Mata Pelajaran) di Ruang Kelas ini
+        if ($request->filled('schedule_id')) {
+            $query->where('schedule_id', $request->schedule_id);
+        }
+
+        // 3. Filter Search (Judul/Deskripsi)
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function($q) use ($search) {
+                $q->where('title', 'like', "%{$search}%")
+                  ->orWhere('description', 'like', "%{$search}%");
+            });
+        }
+
+        // 4. Filter Tanggal Upload
+        if ($request->filled('date')) {
+            $query->whereDate('created_at', $request->date);
+        }
+
+        // Urutkan dari yang terbaru diunggah
+        $assignments = $query->orderBy('created_at', 'desc')->get();
+
+        // Format ulang (mapping) data submission agar frontend lebih mudah membacanya
+        $formattedAssignments = $assignments->map(function ($assignment) {
+            $assignment->submission = $assignment->submissions->first() ?? null;
+            unset($assignment->submissions); // Buang array submissions agar bersih
+            return $assignment;
+        });
+
+        return response()->json(['data' => $formattedAssignments]);
     }
 
     public function submit(StoreSubmissionRequest $request, string $id): JsonResponse
     {
-        $student = auth('api')->user()->student;
+        $user = auth('api')->user();
+        /** @var \App\Models\User $user */
+        $student = $user->student()->with('classes')->first();
+        $activeClass = $student->classes->first();
+
+        if (!$activeClass) {
+            return response()->json(['error' => 'Anda tidak terdaftar di kelas manapun.'], 403);
+        }
 
         try {
+            // Service harus menerima parameter yang ada
             $submission = $this->assignmentService->submitAssignment(
                 $student->user_id,
-                $student->class_id,
+                $activeClass->id, // PERBAIKAN: Gunakan ID dari kelas aktif
                 $id,
                 $request->file('file')
             );

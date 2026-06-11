@@ -64,7 +64,14 @@ api.interceptors.response.use(
         }
 
         if (status === 403) {
-            redirectTo('/unauthorized');
+            // Mencegah hard-redirect untuk endpoint API siswa.
+            // Biarkan halaman Vue (seperti StudentDashboard) menangani UI-nya sendiri.
+            const url = error.config.url || '';
+            const isStudentRequest = url.includes('/student/');
+
+            if (!isStudentRequest) {
+                redirectTo('/unauthorized');
+            }
         }
 
         if ([502, 503, 504].includes(status)) {

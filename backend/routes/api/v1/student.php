@@ -6,6 +6,7 @@ use App\Http\Controllers\API\Student\AssignmentController as StudentAssignContro
 use App\Http\Controllers\API\Student\GradeController as StudentGradeController;
 use App\Http\Controllers\API\Student\GradeAggregationController as StudentAggregate;
 use App\Http\Controllers\API\Student\SemesterReportController as StudentSemesterReport;
+use App\Http\Controllers\API\Student\StudentScheduleController;
 
 Route::get('attendance-requests', [AttendanceRequestController::class, 'index']);
 Route::get('materials', [StudentMaterialController::class, 'index']);
@@ -20,3 +21,7 @@ Route::get('grades/aggregate', [StudentAggregate::class, 'index']);
 // Endpoint khusus yang dilindungi Gatekeeper untuk mengambil rekap nilai akhir
 Route::get('reports/semester', [StudentSemesterReport::class, 'show']);
 Route::get('reports/semester/pdf', [StudentSemesterReport::class, 'downloadPdf']);
+Route::get('dashboard', [\App\Http\Controllers\Api\Student\StudentDashboardController::class, 'index']);
+Route::get('schedules', [StudentScheduleController::class, 'index']);
+Route::get('schedules/{id}', [StudentScheduleController::class, 'show']);
+Route::get('class-detail', [\App\Http\Controllers\Api\Student\ClassDetailController::class, 'index']);
