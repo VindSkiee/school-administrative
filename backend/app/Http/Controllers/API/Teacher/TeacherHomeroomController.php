@@ -8,12 +8,12 @@ use Illuminate\Http\Request;
 
 class TeacherHomeroomController
 {
-    public function show(Request $request): JsonResponse
+    public function show(\Illuminate\Http\Request $request): \Illuminate\Http\JsonResponse
     {
         $teacherId = auth('api')->user()->id;
 
         // Cari data guru beserta kelas perwalian dan relasi siswanya
-        $teacher = Teacher::with([
+        $teacher = \App\Models\Teacher::with([
             'homeroomClass.students' => function ($query) {
                 $query->where('status', 'active'); // Hanya siswa aktif
             },
@@ -50,7 +50,10 @@ class TeacherHomeroomController
                 : 0;
 
             return [
-                'id' => $student->id,
+                // 🌟 PERBAIKAN DI SINI: Ekstrak ID langsung dari relasi user atau foreign key
+                'id' => $student->user_id ?? $student->user->id,
+                'user_id' => $student->user_id ?? $student->user->id,
+                
                 'nis' => $student->nis ?? '-',
                 'name' => $student->user->name ?? 'Tanpa Nama',
                 'gender' => $student->gender ?? 'L',
@@ -60,7 +63,6 @@ class TeacherHomeroomController
                 'permission' => $permission,
                 'alpa' => $alpa,
                 'attendance_rate' => $attendanceRate,
-                // Nilai mapel statis dikosongkan/disamakan sementara karena subjek dinamis
                 'math_score' => $averageScore, 
                 'bio_score' => $averageScore,  
                 'average_score' => $averageScore,

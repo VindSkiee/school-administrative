@@ -31,3 +31,4 @@ Route::get('dashboard/stats', [TeacherDashboardController::class, 'index']);
 // Rute khusus detail kelas perwalian
 Route::get('homeroom-class', [TeacherHomeroomController::class, 'show']);
 Route::get('schedules/{schedule_id}', [AttendanceController::class, 'show']);
+Route::get('students/{id}', [\App\Http\Controllers\Api\Teacher\TeacherStudentController::class, 'showProfile']);
