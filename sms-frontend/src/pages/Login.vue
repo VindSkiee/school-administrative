@@ -1,50 +1,43 @@
 <template>
-  <div class="min-h-screen flex flex-col md:flex-row font-sans">
-    <!-- SISI KIRI: Branding Area (Dominan 60% Red) -->
-    <!-- Tersembunyi di layar kecil (mobile), muncul di ukuran md ke atas -->
+  <div class="min-h-screen flex flex-col md:flex-row font-sans bg-gray-100">
     <div
-      class="hidden md:flex md:w-[60%] bg-brand-red relative overflow-hidden items-center justify-center p-12"
+      class="hidden md:flex md:w-[60%] bg-gray-50 relative overflow-hidden items-center justify-center p-12"
     >
-      <!-- Ornamen Dekoratif (10% Accent Orange) -->
-      <div
-        class="absolute top-0 left-0 w-64 h-64 bg-brand-orange rounded-br-full opacity-90"
-      ></div>
-      <div
-        class="absolute bottom-[-10%] right-[-5%] w-96 h-96 bg-brand-orange rounded-full opacity-20 blur-3xl"
-      ></div>
-
-      <!-- Teks Branding (White) -->
-      <div class="relative z-10 text-brand-white text-center">
-        <h1 class="text-5xl font-bold tracking-tight mb-4">EduPlatform</h1>
-        <p class="text-lg font-medium text-white/80 max-w-md mx-auto">
+      <div class="relative z-10 text-center flex flex-col items-center">
+        <img 
+          src="/logo_fatan.png" 
+          alt="Logo EduPlatform" 
+          class="h-20 md:h-80 w-auto mb-8 object-contain drop-shadow-sm transition-transform hover:scale-105 duration-300"
+        />
+        
+        <p class="text-lg font-medium text-gray-600 max-w-md mx-auto">
           Sistem Manajemen Akademik & Pembelajaran Terpadu untuk pengalaman
           edukasi yang lebih baik.
         </p>
       </div>
     </div>
 
-    <!-- SISI KANAN: Form Area (30% White Space) -->
     <div
-      class="w-full md:w-[40%] bg-brand-white flex items-center justify-center p-8 sm:p-12 shadow-2xl z-20"
+      class="w-full md:w-[40%] bg-white flex items-center justify-center p-8 sm:p-12 shadow-2xl z-20 min-h-screen md:min-h-0"
     >
       <div class="w-full max-w-md">
-        <!-- Mobile Header (Hanya muncul jika branding kiri hilang) -->
-        <div class="md:hidden text-center mb-8">
-          <h1 class="text-3xl font-bold text-brand-red mb-2">EduPlatform</h1>
-          <p class="text-sm text-gray-500">Silakan login untuk melanjutkan</p>
+        
+        <div class="md:hidden flex justify-center items-center mb-10 pb-6 border-b border-gray-100">
+          <img 
+            src="/logo_fatan.png" 
+            alt="Logo EduPlatform" 
+            class="h-40 w-auto object-contain drop-shadow-sm"
+          />
         </div>
 
         <div class="hidden md:block mb-10">
           <h2 class="text-3xl font-bold text-gray-800">Selamat Datang</h2>
-          <p class="text-gray-500 mt-2">
+          <p class="text-gray-500 mt-2 text-sm">
             Masukkan kredensial Anda untuk mengakses sistem.
           </p>
         </div>
 
-        <!-- FORM LOGIN -->
-        <!-- FORM LOGIN -->
         <form @submit.prevent="handleLogin" class="space-y-5">
-          <!-- Email -->
           <div>
             <label class="block text-sm font-semibold text-gray-700 mb-1"
               >Alamat Email</label
@@ -55,18 +48,16 @@
               type="email"
               placeholder="Masukkan email Anda"
               required
-              class="w-full px-4 py-3 rounded-3xl border border-gray-300 focus:ring-1 focus:ring-brand-red focus:border-brand-red transition-colors outline-none text-sm"
+              class="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:ring-2 focus:ring-brand-red/20 focus:border-brand-red transition-all outline-none text-sm bg-gray-50 focus:bg-white"
             />
-            <!-- Indikator Loading saat mengecek email -->
             <p
               v-if="isCheckingEmail"
-              class="text-xs text-gray-400 mt-1 animate-pulse"
+              class="text-xs text-brand-orange mt-1.5 animate-pulse font-medium"
             >
               Memeriksa keamanan akun...
             </p>
           </div>
 
-          <!-- Password -->
           <div>
             <label class="block text-sm font-semibold text-gray-700 mb-1"
               >Kata Sandi</label
@@ -76,15 +67,13 @@
               type="password"
               placeholder="Masukkan kata sandi Anda"
               required
-              class="w-full px-4 py-3 rounded-3xl border border-gray-300 focus:ring-1 focus:ring-brand-red focus:border-brand-red transition-colors outline-none text-sm"
+              class="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:ring-2 focus:ring-brand-red/20 focus:border-brand-red transition-all outline-none text-sm bg-gray-50 focus:bg-white"
             />
-            <p class="text-xs text-gray-400 mt-1"
-              >Kata Sandi Minimal 8 karakter</p
+            <p class="text-xs text-gray-400 mt-1.5"
+              >Minimal 8 karakter</p
             >
           </div>
           
-
-          <!-- RECAPTCHA WIDGET (Conditional) -->
           <transition
             enter-active-class="transition ease-out duration-300"
             enter-from-class="opacity-0 translate-y-4"
@@ -92,14 +81,13 @@
           >
             <div
               v-if="needsRecaptcha"
-              class="flex flex-col items-center mt-4 p-4 bg-brand-orange/10 rounded-lg border border-brand-orange/30"
+              class="flex flex-col items-center mt-4 p-4 bg-orange-50 rounded-2xl border border-orange-100"
             >
               <p
-                class="text-xs font-semibold text-brand-orange mb-3 text-center"
+                class="text-xs font-bold text-brand-orange mb-3 text-center uppercase tracking-wider"
               >
-                Keamanan Tambahan Diperlukan (Sesi Admin)
+                Keamanan Tambahan Admin
               </p>
-              <!-- Ganti SITEKEY dengan Site Key Google reCAPTCHA Anda -->
               <VueRecaptcha
                 sitekey="6LdRD9ksAAAAAOtF6b1Ux7EaguzcwhttnfKG2mza"
                 @verify="onCaptchaVerified"
@@ -109,15 +97,14 @@
             </div>
           </transition>
 
-          <!-- Tombol Submit -->
           <button
             type="submit"
             :disabled="isLoading || isCheckingEmail"
-            class="w-full py-3 px-4 flex justify-center rounded-3xl shadow-md text-2sm tracking-wider font-bold text-brand-white bg-brand-red hover:bg-brand-orange focus:outline-none focus:ring-2 focus:ring-brand-orange/50 transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed mt-6"
+            class="w-full py-3.5 px-4 flex justify-center items-center gap-2 rounded-2xl shadow-md shadow-brand-red/20 text-sm tracking-wide font-bold text-white bg-brand-red hover:bg-brand-orange focus:outline-none focus:ring-2 focus:ring-brand-orange/50 transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed mt-8"
           >
             <svg
               v-if="isLoading"
-              class="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+              class="animate-spin h-5 w-5 text-white"
               xmlns="http://www.w3.org/2000/svg"
               fill="none"
               viewBox="0 0 24 24"
@@ -136,10 +123,11 @@
                 d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
               ></path>
             </svg>
-            {{ isLoading ? "Memverifikasi..." : "Login" }}
+            {{ isLoading ? "Mengautentikasi..." : "Masuk ke Sistem" }}
           </button>
-          <p class="text-center text-xs text-gray-500 mt-4">
-            Note: Jika Anda mengalami masalah saat login, pastikan email dan kata sandi benar. Jika lupa kata sandi, silakan hubungi administrator.
+          
+          <p class="text-center text-xs text-gray-400 mt-6 leading-relaxed">
+            Jika Anda mengalami masalah saat login atau lupa kata sandi, silakan hubungi administrator IT sekolah.
           </p>
         </form>
       </div>

@@ -97,12 +97,6 @@
             <span class="text-xs font-semibold text-gray-700">{{ item.attendance_rate }}%</span>
           </div>
         </template>
-
-        <template #cell(average_score)="{ item }">
-          <span :class="getScoreColor(item.average_score)" class="px-2.5 py-1 rounded-md text-xs font-bold border">
-            {{ item.average_score }}
-          </span>
-        </template>
       </BaseTable>
     </div>
 
@@ -157,16 +151,9 @@ const selectedStudent = ref(null);
 const filterDate = ref(''); // Filter Tanggal Baru
 const selectedSubject = ref('all');
 
-const subjectOptions = [
-  { value: 'all', label: 'Semua Mata Pelajaran' },
-  { value: 'math', label: 'Matematika' },
-  { value: 'bio', label: 'Biologi' },
-];
-
 const tabs = [
   { id: 'students', label: 'Daftar Siswa' },
   { id: 'attendance', label: 'Rekap Kehadiran' },
-  { id: 'grades', label: 'Rekap Nilai' }
 ];
 
 // Konfigurasi Kolom BaseTable (Dinamis sesuai Tab)
@@ -179,7 +166,7 @@ const currentColumns = computed(() => {
       { key: 'status', label: 'Status', align: 'center' },
       // Kolom 'actions' dihapus karena nama sudah bisa diklik
     ];
-  } else if (activeTab.value === 'attendance') {
+  } else {
     return [
       { key: 'name', label: 'Nama Lengkap' },
       { key: 'present', label: 'Hadir' },
@@ -188,15 +175,7 @@ const currentColumns = computed(() => {
       { key: 'alpa', label: 'Alpa' },
       { key: 'attendance_rate', label: 'Persentase' },
     ];
-  } else {
-    // TAB NILAI
-    // Jika Anda ingin menampilkan mapel spesifik (misal math_score), 
-    // pastikan Backend mengirimkan data tsb. Saat ini kita pakai rata-rata global.
-    return [
-      { key: 'name', label: 'Nama Lengkap' },
-      { key: 'average_score', label: 'Rata-rata Keseluruhan' },
-    ];
-  }
+  } 
 });
 
 // State Data (Nanti diganti response API)
