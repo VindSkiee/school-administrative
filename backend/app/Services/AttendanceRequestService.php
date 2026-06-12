@@ -15,18 +15,21 @@ class AttendanceRequestService
 {
     public function submitRequest(int $studentId, array $data, UploadedFile $file): AttendanceRequest
     {
-        $student = Student::query()->findOrFail($studentId);
+        // PERBAIKAN: Ambil siswa beserta relasi kelasnya
+        $student = Student::with('classes')->findOrFail($studentId);
+        $activeClass = $student->classes->first(); // Ambil kelas aktif
+        
         $schedule = Schedule::query()->findOrFail($data['schedule_id']);
 
-        if (! $student->class_id) {
-            throw new HttpException(422, 'Siswa belum terdaftar pada kelas.');
+        // PERBAIKAN: Cek dari $activeClass, bukan $student->class_id
+        if (!$activeClass) {
+            throw new HttpException(422, 'Siswa belum terdaftar pada kelas aktif.');
         }
 
-        if ((int) $schedule->class_id !== (int) $student->class_id) {
+        if ((int) $schedule->class_id !== (int) $activeClass->id) {
             throw new HttpException(422, 'Jadwal tidak sesuai dengan kelas siswa.');
         }
 
-        // Tambahkan query() agar Intelephense mengenali Builder
         $exists = AttendanceRequest::query()
             ->where('student_id', $studentId)
             ->where('schedule_id', $data['schedule_id'])
@@ -37,13 +40,11 @@ class AttendanceRequestService
             throw new HttpException(422, 'Anda sudah mengajukan izin/sakit untuk jadwal ini.');
         }
 
-        // Simpan file
         $path = $file->store('attendance_proofs', 'public');
         $data['proof_file_path'] = $path;
         $data['student_id'] = $studentId;
         $data['status'] = 'pending';
 
-        // Tambahkan query()
         return AttendanceRequest::query()->create($data);
     }
 

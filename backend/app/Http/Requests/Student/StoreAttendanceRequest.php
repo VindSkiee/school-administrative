@@ -28,14 +28,14 @@ class StoreAttendanceRequest extends FormRequest
     public function after(): array
     {
         return [
-            function (Validator $validator): void {
+            function (\Illuminate\Validation\Validator $validator): void {
                 $scheduleId = $this->input('schedule_id');
 
                 if (! $scheduleId) {
                     return;
                 }
 
-                $schedule = Schedule::query()->find($scheduleId);
+                $schedule = \App\Models\Schedule::query()->find($scheduleId);
                 if (! $schedule) {
                     return;
                 }
@@ -45,14 +45,18 @@ class StoreAttendanceRequest extends FormRequest
                     return;
                 }
 
-                $student = Student::query()->find($user->id);
-                if (! $student || ! $student->class_id) {
-                    $validator->errors()->add('schedule_id', 'Siswa belum terdaftar pada kelas.');
+                // PERBAIKAN: Ambil student beserta relasi kelasnya
+                $student = \App\Models\Student::with('classes')->find($user->id);
+                $activeClass = $student ? $student->classes->first() : null;
 
+                // PERBAIKAN: Gunakan $activeClass
+                if (! $activeClass) {
+                    $validator->errors()->add('schedule_id', 'Siswa belum terdaftar pada kelas aktif.');
                     return;
                 }
 
-                if ((int) $schedule->class_id !== (int) $student->class_id) {
+                // PERBAIKAN: Bandingkan dengan id kelas aktif
+                if ((int) $schedule->class_id !== (int) $activeClass->id) {
                     $validator->errors()->add('schedule_id', 'Jadwal tidak sesuai dengan kelas siswa.');
                 }
             },

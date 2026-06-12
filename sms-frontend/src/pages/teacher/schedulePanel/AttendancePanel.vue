@@ -35,40 +35,41 @@
           >
             <div>
               <p class="font-bold text-gray-800 text-lg">
-                {{ req.student?.user?.name }}
+                {{ req.student?.user?.name || 'Siswa' }}
               </p>
               <div class="flex items-center gap-2 mt-1 text-sm text-gray-600">
-                <span
-                  >Mengajukan status:
-                  <span class="font-bold uppercase text-orange-600">{{
-                    req.status
-                  }}</span></span
-                >
+                <span>Mengajukan status:
+                  <span class="font-bold uppercase text-orange-600">
+                    {{ req.type === 'sick' ? 'Sakit' : 'Izin' }}
+                  </span>
+                </span>
                 <span>•</span>
-                <a
-                  v-if="req.attachment_url"
-                  :href="req.attachment_url"
-                  target="_blank"
-                  class="text-blue-600 hover:text-blue-800 font-semibold hover:underline flex items-center gap-1"
+                
+                <button
+                  v-if="req.proof_file_path"
+                  @click="previewAttachment(req.proof_file_path)"
+                  type="button"
+                  class="text-blue-600 hover:text-blue-800 font-semibold hover:underline flex items-center gap-1 focus:outline-none"
                 >
                   Lihat Bukti 📎
-                </a>
-                <span v-else class="text-gray-400 italic"
-                  >Tidak ada lampiran</span
-                >
+                </button>
+                <span v-else class="text-gray-400 italic">
+                  Tidak ada lampiran
+                </span>
               </div>
-              <p v-if="req.reason" class="text-xs text-gray-500 mt-1 italic">
+              <p v-if="req.reason" class="text-xs text-gray-500 mt-1 italic border-l-2 border-gray-200 pl-2">
                 "{{ req.reason }}"
               </p>
             </div>
 
             <div class="flex gap-2 w-full md:w-auto mt-2 md:mt-0">
               <button
-                @click="handleReviewRequest(req.id, req.student_id, req.status)"
+                @click="handleReviewRequest(req.id, req.student_id, 'approved', req.type)"
                 class="flex-1 md:flex-none px-4 py-2 bg-green-500 hover:bg-green-600 text-white text-sm font-bold rounded-lg transition-colors shadow-sm"
               >
                 Setujui
               </button>
+              
               <button
                 @click="handleReviewRequest(req.id, req.student_id, 'rejected')"
                 class="flex-1 md:flex-none px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-sm font-bold rounded-lg transition-colors"
@@ -380,19 +381,35 @@ const submitAttendance = async () => {
   }
 };
 
-const handleReviewRequest = async (requestId, studentId, status) => {
+// Tambahkan parameter ke-4 (reqType) untuk menyimpan status 'sick'/'permission' secara lokal
+const handleReviewRequest = async (requestId, studentId, actionStatus, reqType = null) => {
   try {
-    await attendanceService.reviewRequest(requestId, status);
-    toastStore.success(`Pengajuan berhasil ${status === "rejected" ? "ditolak" : "disetujui"}.`);
+    // actionStatus berisi 'approved' atau 'rejected' (Dikirim ke Backend)
+    await attendanceService.reviewRequest(requestId, actionStatus); 
+    
+    toastStore.success(`Pengajuan berhasil ${actionStatus === "rejected" ? "ditolak" : "disetujui"}.`);
 
+    // Hapus card pengajuan dari daftar
     pendingRequests.value = pendingRequests.value.filter((r) => r.id !== requestId);
 
-    if (status !== "rejected") {
-      attendanceForm.value[studentId] = status;
+    // Jika disetujui, update UI absen guru dengan reqType ('sick' atau 'permission')
+    if (actionStatus === "approved" && reqType) {
+      attendanceForm.value[studentId] = reqType;
     }
   } catch (error) {
     toastStore.error("Gagal memproses pengajuan izin siswa.");
   }
+};
+
+// Fungsi untuk membuka lampiran surat Izin/Sakit dari siswa
+const previewAttachment = (filePath) => {
+  if (!filePath) {
+    toastStore.error("Siswa tidak menyertakan file lampiran.");
+    return;
+  }
+  // Sesuaikan dengan URL backend Laravel Anda
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+  window.open(`${baseUrl}/storage/${filePath}`, '_blank');
 };
 
 // Jika user ganti tanggal lewat dropdown/kalender di halaman Detail, kita harus memuat data lagi

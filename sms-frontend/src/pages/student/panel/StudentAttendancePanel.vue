@@ -213,7 +213,6 @@ const fetchRequests = async () => {
 };
 
 const submitRequest = async () => {
-  // Pengamanan ekstra di sisi fungsi submit jika diakali via Inspect Element
   if (isTimeLocked.value) {
     toastStore.error("Waktu pengajuan izin untuk sesi ini telah ditutup.");
     return;
@@ -230,8 +229,11 @@ const submitRequest = async () => {
     const formData = new FormData();
     formData.append('schedule_id', props.scheduleId);
     formData.append('date', props.selectedDate);
-    formData.append('type', form.type);
-    formData.append('reason', form.reason);
+    
+    // PERBAIKAN DI SINI: Tambahkan .value
+    formData.append('type', form.value.type); 
+    formData.append('reason', form.value.reason); 
+    
     formData.append('proof_file', file.value);
 
     await studentScheduleService.submitAttendanceRequest(formData);
@@ -245,6 +247,7 @@ const submitRequest = async () => {
     isSubmitting.value = false;
   }
 };
+
 
 onMounted(() => {
   fetchRequests();
