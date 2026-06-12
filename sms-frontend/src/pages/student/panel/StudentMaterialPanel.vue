@@ -1,13 +1,13 @@
 <template>
   <div class="space-y-6">
     <div
-      class="bg-red-50 border border-red-200 rounded-2xl p-3 sm:p-6 shadow-sm flex items-center gap-4"
+      class="bg-red-50 border border-red-200 rounded-2xl p-4 sm:p-6 shadow-sm flex items-center gap-4"
     >
       <div
         class="w-6 h-6 sm:w-12 sm:h-12 bg-white rounded-full flex items-center justify-center text-brand-red shrink-0 shadow-sm"
       >
         <svg
-          class="w-3 h-3 sm:w-6 sm:h-6"
+          class="w-6 sm:h-6"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -22,7 +22,7 @@
       </div>
       <div>
         <div class="flex items-center gap-2">
-          <h3 class="text-xs sm:text-lg font-bold text-red-900">
+          <h3 class="text-2xs sm:text-lg font-bold text-red-900">
             Pustaka Materi Semester
           </h3>
           <BasePopoverInfo>

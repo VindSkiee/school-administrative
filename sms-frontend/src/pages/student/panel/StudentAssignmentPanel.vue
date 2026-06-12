@@ -1,13 +1,13 @@
 <template>
   <div class="space-y-6">
     <div
-      class="bg-orange-50 border border-orange-200 rounded-2xl p-6 shadow-sm flex items-center gap-4"
+      class="bg-orange-50 border border-orange-200 rounded-2xl p-4 shadow-sm flex items-center gap-4"
     >
       <div
         class="w-6 h-6 sm:w-12 sm:h-12 bg-white rounded-full flex items-center justify-center text-brand-orange shrink-0 shadow-sm"
       >
         <svg
-          class="w-3 h-3 sm:w-6 sm:h-6"
+          class="w-6 h-6"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -22,7 +22,7 @@
       </div>
       <div>
         <div class="flex items-center gap-2">
-          <h3 class="text-xs sm:text-lg font-bold text-orange-900">
+          <h3 class="text-2xs sm:text-lg font-bold text-orange-900">
             Daftar Tugas
           </h3>
           <BasePopoverInfo>

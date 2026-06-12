@@ -68,28 +68,55 @@ class AuthController
     // 1. TAMBAHKAN FUNGSI HELPER INI
     private function formatUserData(User $user): array
     {
-        $user->loadMissing(['student', 'teacher', 'admin', 'principal']);
+        // 1. Eager load relasi bersarang (nested) yang dibutuhkan oleh Vue Frontend
+        $user->loadMissing([
+            'student.classes.academicYear', // Memuat riwayat kelas siswa beserta data tahun ajarannya
+            'teacher.schedules',            // Memuat jadwal mengajar untuk profil guru
+            'admin', 
+            'principal'
+        ]);
 
-        return [
+        $userData = [
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
             'role' => $user->role,
-            'avatar_url' => $user->avatar_url, // URL akan selalu di-generate
+            'avatar_url' => $user->avatar_url,
             'must_change_password' => $user->must_change_password,
             'is_active' => $user->is_active,
             
-            // Flat Data
+            // Flat Data Identitas
             'nip' => $user->teacher?->nip ?? $user->admin?->nip ?? $user->principal?->nip,
             'nis' => $user->student?->nis,
             'nisn' => $user->student?->nisn,
 
-            // Nested Data
+            // Nested Data Profil
             'student' => $user->student,
             'teacher' => $user->teacher,
             'admin' => $user->admin,
             'principal' => $user->principal,
         ];
+
+        // 2. Format 'grade_history' khusus untuk Role Siswa
+        // Menggabungkan data tahun ajaran dari kelas-kelas yang pernah diikuti
+        if ($user->role === 'student' && $user->student) {
+            $gradeHistory = $user->student->classes->map(function ($schoolClass) {
+                return [
+                    'class_name' => $schoolClass->name,
+                    'academic_year_id' => $schoolClass->academicYear?->id,
+                    'academic_year_name' => $schoolClass->academicYear?->name,
+                    'semester' => $schoolClass->academicYear?->semester,
+                ];
+            })
+            ->filter(fn($item) => $item['academic_year_id'] !== null) // Buang yang kosong
+            ->unique('academic_year_id') // Hindari duplikat jika 1 tahun ajaran ada beberapa data
+            ->values()
+            ->toArray();
+
+            $userData['grade_history'] = $gradeHistory;
+        }
+
+        return $userData;
     }
 
     // 2. PERBARUI FUNGSI INI

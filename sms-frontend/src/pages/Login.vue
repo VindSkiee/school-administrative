@@ -26,7 +26,7 @@
           <img 
             src="/logo_fatan.png" 
             alt="Logo EduPlatform" 
-            class="h-40 w-auto object-contain drop-shadow-sm"
+            class="h-52 w-auto object-contain drop-shadow-sm"
           />
         </div>
 
