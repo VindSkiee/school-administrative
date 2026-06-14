@@ -11,6 +11,7 @@ class Assignment extends Model
     // 1. Tambahkan 'date' dan 'attachments', hapus 'file_path'
     protected $fillable = [
         'schedule_id',
+        'type',
         'date',
         'title',
         'description',

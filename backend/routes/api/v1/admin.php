@@ -3,10 +3,12 @@
 use App\Http\Controllers\API\Admin\AcademicYearController;
 use App\Http\Controllers\API\Admin\ActivityLogController;
 use App\Http\Controllers\API\Admin\ClassController;
+use App\Http\Controllers\API\Admin\GradingSettingController;
 use App\Http\Controllers\API\Admin\ReportController as AdminReportController;
 use App\Http\Controllers\API\Admin\ScheduleController;
 use App\Http\Controllers\API\Admin\SemesterReportController as AdminSemesterReport;
 use App\Http\Controllers\API\Admin\SubjectController;
+use App\Http\Controllers\API\Admin\SubjectDetailController;
 use App\Http\Controllers\API\Admin\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -20,6 +22,10 @@ Route::apiResource('academic-years', AcademicYearController::class)
 // Custom route untuk mengaktifkan tahun ajaran (menggunakan PATCH karena hanya mengubah 1 field status)
 Route::patch('academic-years/{id}/set-active', [AcademicYearController::class, 'setActive']);
 
+// Grading Settings Management
+Route::post('grading-settings', [GradingSettingController::class, 'updateOrCreate']);
+Route::get('grading-settings/{academicYearId}', [GradingSettingController::class, 'show']);
+
 // Class Management
 Route::apiResource('classes', ClassController::class);
 
@@ -29,6 +35,8 @@ Route::post('classes/{id}/assign-teacher', [ClassController::class, 'assignTeach
 
 // Subject Management
 Route::apiResource('subjects', SubjectController::class);
+Route::get('subjects/{subjectId}/detail', [SubjectDetailController::class, 'show']);
+Route::put('subjects/{subjectId}/competency', [SubjectDetailController::class, 'saveCompetency']);
 
 // Schedule Management
 Route::apiResource('schedules', ScheduleController::class);

@@ -10,8 +10,21 @@
         </p>
       </div>
 
-      <div class="flex flex-col sm:flex-row w-full sm:w-auto gap-3">
-        <div class="w-full sm:w-64">
+      <div class="flex flex-col items-end sm:flex-row w-full sm:w-auto gap-3">
+        <div class="w-full sm:w-56">
+          <label class="block text-xs font-semibold tracking-wide text-gray-600 mb-1.5">
+            Pilih Tahun Ajaran
+          </label>
+          <BaseSelect
+            v-model="selectedAcademicYearId"
+            :options="academicYearOptions"
+            placeholder="Pilih Tahun Ajaran"
+          />
+        </div>
+        <div class="w-full sm:w-56">
+          <label class="block text-xs font-semibold tracking-wide text-gray-600 mb-1.5">
+            Pilih Kelas
+          </label>
           <BaseSelect
             v-model="selectedClassFilter"
             :options="classOptions"
@@ -22,7 +35,7 @@
 
         <button
           @click="openModal()"
-          class="bg-brand-red hover:bg-brand-orange text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-md transition-colors flex items-center justify-center whitespace-nowrap"
+          class="bg-brand-red h-10 w-full sm:w-auto hover:bg-brand-orange text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-md transition-colors flex items-center justify-center whitespace-nowrap"
         >
           <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
@@ -194,11 +207,20 @@ const isLoading = ref(true);
 const isSaving = ref(false);
 
 const selectedClassFilter = ref(''); // Filter untuk List Table
+const selectedAcademicYearId = ref(''); // Tahun Ajaran terpilih (default: aktif)
 
 // Data Master untuk Dropdown
 const classes = ref([]);
 const subjects = ref([]);
 const teachers = ref([]);
+const academicYears = ref([]);
+
+const academicYearOptions = computed(() =>
+  academicYears.value.map((ay) => ({
+    value: ay.id,
+    label: `${ay.name} — ${ay.semester === 'odd' ? 'Ganjil' : 'Genap'}${ay.is_active ? ' (Aktif)' : ''}`,
+  })),
+);
 
 const classOptions = computed(() =>
   classes.value.map((cls) => ({ value: cls.id, label: `Kelas ${cls.name}` })),
@@ -247,10 +269,11 @@ const formatTime = (time) => {
 const fetchMasterData = async () => {
   try {
     // Kita panggil endpoint master secara paralel agar lebih cepat
-    const [resClass, resSubject, resTeacher] = await Promise.all([
+    const [resClass, resSubject, resTeacher, resYears] = await Promise.all([
       api.get('/v1/admin/classes?per_page=100'), // Asumsi kita melonggarkan per_page untuk dropdown
       api.get('/v1/admin/subjects?per_page=100'),
-      api.get('/v1/admin/users?role=teacher&per_page=all')
+      api.get('/v1/admin/users?role=teacher&per_page=all'),
+      api.get('/v1/admin/academic-years'),
     ]);
     
     classes.value = resClass.data.data || resClass.data;
@@ -260,8 +283,16 @@ const fetchMasterData = async () => {
       id: teacher.id,
       name: teacher.name,
     }));
+
+    const yearsData = resYears.data.data || resYears.data;
+    academicYears.value = yearsData;
+    // Default ke tahun ajaran aktif
+    const activeYear = yearsData.find((y) => y.is_active);
+    if (activeYear) {
+      selectedAcademicYearId.value = activeYear.id;
+    }
   } catch (error) {
-    toastStore.error('Gagal memuat data pendukung (Kelas/Mapel/Guru).');
+    toastStore.error('Gagal memuat data pendukung (Kelas/Mapel/Guru/Tahun Ajaran).');
   }
 };
 
@@ -271,6 +302,9 @@ const fetchSchedules = async (page = 1) => {
     const params = { page: page, per_page: paginationMeta.per_page };
     if (selectedClassFilter.value) {
       params.class_id = selectedClassFilter.value;
+    }
+    if (selectedAcademicYearId.value) {
+      params.academic_year_id = selectedAcademicYearId.value;
     }
 
     const response = await scheduleService.getAll(params);
@@ -325,7 +359,8 @@ const saveSchedule = async () => {
       await scheduleService.update(selectedId.value, form);
       toastStore.success('Jadwal diperbarui.');
     } else {
-      await scheduleService.create(form);
+      const payload = { ...form, academic_year_id: selectedAcademicYearId.value };
+      await scheduleService.create(payload);
       toastStore.success('Jadwal baru ditambahkan.');
     }
     isModalOpen.value = false;
@@ -364,6 +399,10 @@ onMounted(() => {
 });
 
 watch(selectedClassFilter, () => {
+  fetchSchedules(1);
+});
+
+watch(selectedAcademicYearId, () => {
   fetchSchedules(1);
 });
 </script>

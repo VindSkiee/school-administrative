@@ -106,7 +106,7 @@ class AdminSemesterReportService
     private function findStudentClassForAcademicYear(AcademicYear $academicYear, Student $student): ?SchoolClass
     {
         return $student->classes()
-            ->where('academic_year_id', $academicYear->id)
+            ->where('classes.academic_year_id', $academicYear->id)
             ->with([
                 'academicYear',
                 'homeroomTeacher.user',
@@ -176,6 +176,14 @@ class AdminSemesterReportService
     }
 
     /**
+     * Public wrapper for building report data (used by StudentReportController).
+     */
+    public function buildReportDataPublic(AcademicYear $academicYear, Student $student, SchoolClass $schoolClass): array
+    {
+        return $this->buildReportData($academicYear, $student, $schoolClass);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function buildReportData(AcademicYear $academicYear, Student $student, SchoolClass $schoolClass): array
@@ -183,8 +191,8 @@ class AdminSemesterReportService
         $principal = Principal::query()->with('user')->first();
 
         return [
-            'school_name' => config('app.school_name', ucwords(str_replace(['-', '_'], ' ', (string) config('app.name', 'Nama Sekolah')))),
-            'school_address' => config('app.school_address', 'Alamat sekolah belum diatur'),
+            'school_name' => config('app.school_name', 'SMP NEGERI 5 PURWAKARTA'),
+            'school_address' => config('app.school_address', 'Jl. Kolonel Singawinata No. 97 Purwakarta'),
             'academic_year' => $academicYear->name,
             'semester' => $academicYear->semester,
             'semester_label' => $academicYear->semester === 'odd' ? 'Ganjil' : 'Genap',
@@ -198,7 +206,7 @@ class AdminSemesterReportService
             'principal_nip' => $principal?->nip ?? '-',
             'generated_at' => now()->format('d-m-Y'),
             'homeroom_note' => '-',
-            'results' => $this->buildSubjectResults($schoolClass, $student),
+            'results' => $this->buildSubjectResults($schoolClass, $student, $academicYear),
             'attendance' => $this->buildAttendanceSummary($schoolClass, $student),
         ];
     }
@@ -206,10 +214,15 @@ class AdminSemesterReportService
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function buildSubjectResults(SchoolClass $schoolClass, Student $student): array
+    private function buildSubjectResults(SchoolClass $schoolClass, Student $student, AcademicYear $academicYear): array
     {
+        // Preload all competency settings for this academic year
+        $competencySettings = \App\Models\SubjectCompetencySetting::where('academic_year_id', $academicYear->id)
+            ->get()
+            ->keyBy('subject_id');
+
         return $schoolClass->schedules
-            ->map(function ($schedule) use ($student): array {
+            ->map(function ($schedule) use ($student, $competencySettings): array {
                 $scores = collect();
 
                 foreach ($schedule->assignments as $assignment) {
@@ -221,15 +234,23 @@ class AdminSemesterReportService
                 }
 
                 $finalScore = $scores->isNotEmpty() ? round($scores->avg(), 2) : null;
-                [$predicate, $description] = $this->resolvePredicate($finalScore);
+
+                // Resolve competency text from DB settings or fallback
+                $subjectId = $schedule->subject?->id;
+                $setting = $subjectId ? ($competencySettings[$subjectId] ?? null) : null;
+
+                if ($setting) {
+                    $capaian = $setting->resolveForScore($finalScore);
+                } else {
+                    $capaian = $this->generateCapaianKompetensi($finalScore, $schedule->subject?->name ?? 'pembelajaran');
+                }
 
                 return [
                     'subject_code' => $schedule->subject?->code ?? '-',
                     'subject_name' => $schedule->subject?->name ?? '-',
                     'teacher_name' => $schedule->teacher?->user?->name ?? '-',
                     'final_grade' => $finalScore,
-                    'predicate' => $predicate,
-                    'description' => $description,
+                    'capaian_kompetensi' => $capaian,
                 ];
             })
             ->values()
@@ -267,6 +288,26 @@ class AdminSemesterReportService
             $finalScore >= 70 => ['C', 'Cukup, perlu meningkatkan konsistensi pemahaman materi.'],
             default => ['D', 'Perlu bimbingan intensif untuk mencapai ketuntasan belajar.'],
         };
+    }
+
+    /**
+     * Generate dynamic "Capaian Kompetensi" text for Kurikulum Merdeka report cards.
+     */
+    private function generateCapaianKompetensi(?float $finalScore, string $subjectName): string
+    {
+        if ($finalScore === null) {
+            return 'Belum ada data penilaian.';
+        }
+
+        if ($finalScore >= 85) {
+            return "Mencapai Kompetensi dengan sangat baik dalam memahami materi pembelajaran {$subjectName}.";
+        }
+
+        if ($finalScore >= 75) {
+            return "Mencapai kompetensi dengan baik dalam memahami materi pembelajaran {$subjectName}.";
+        }
+
+        return "Perlu peningkatan dalam hal memahami materi pembelajaran {$subjectName}.";
     }
 
     private function throwIncompleteReportException(array $missingData): never

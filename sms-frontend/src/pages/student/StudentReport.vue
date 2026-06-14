@@ -212,7 +212,18 @@ const downloadRapor = async () => {
     window.URL.revokeObjectURL(url);
     toastStore.success("Rapor resmi berhasil diunduh.");
   } catch (error) {
-    toastStore.error("Gapor gagal mengunduh dokumen PDF.");
+    // Handle blob error: extract message from the error response
+    if (error.response && error.response.data instanceof Blob) {
+      try {
+        const text = await error.response.data.text();
+        const json = JSON.parse(text);
+        toastStore.error(json.error || json.message || 'Gagal mengunduh rapor.');
+      } catch {
+        toastStore.error('Gagal mengunduh dokumen PDF rapor.');
+      }
+    } else {
+      toastStore.error(error.response?.data?.error || 'Gagal mengunduh dokumen PDF rapor.');
+    }
   } finally {
     isDownloading.value = false;
   }

@@ -44,6 +44,30 @@
           </div>
 
           <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-2">Jenis Penugasan <span class="text-red-500">*</span></label>
+            <div class="flex flex-wrap gap-3">
+              <label class="flex-1 min-w-[120px] cursor-pointer">
+                <input type="radio" v-model="form.type" value="task" class="peer sr-only" required>
+                <div class="p-3 border-2 border-gray-200 rounded-xl text-center text-sm font-bold text-gray-500 peer-checked:border-blue-500 peer-checked:text-blue-600 peer-checked:bg-blue-50 transition-all">
+                  📘 Tugas Harian
+                </div>
+              </label>
+              <label class="flex-1 min-w-[120px] cursor-pointer">
+                <input type="radio" v-model="form.type" value="uts" class="peer sr-only" required>
+                <div class="p-3 border-2 border-gray-200 rounded-xl text-center text-sm font-bold text-gray-500 peer-checked:border-brand-orange peer-checked:text-brand-orange peer-checked:bg-orange-50 transition-all">
+                  📙 UTS
+                </div>
+              </label>
+              <label class="flex-1 min-w-[120px] cursor-pointer">
+                <input type="radio" v-model="form.type" value="uas" class="peer sr-only" required>
+                <div class="p-3 border-2 border-gray-200 rounded-xl text-center text-sm font-bold text-gray-500 peer-checked:border-brand-red peer-checked:text-brand-red peer-checked:bg-red-50 transition-all">
+                  🚨 UAS
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div>
             <label class="block text-sm font-semibold text-gray-700 mb-1">Instruksi / Deskripsi <span class="text-red-500">*</span></label>
             <textarea v-model="form.description" required rows="3" placeholder="Kerjakan soal di halaman..." class="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-red/20 outline-none text-sm"></textarea>
           </div>
@@ -110,7 +134,8 @@
           <div v-for="item in currentAssignments" :key="item.id" class="bg-white border border-gray-200 p-4 sm:p-5 rounded-2xl shadow-sm hover:shadow-md transition-shadow flex flex-col sm:flex-row justify-between gap-4">
             <div class="w-full">
               <div class="flex items-center gap-2 mb-1">
-                <span class="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded">Tenggat: {{ new Date(item.due_date).toLocaleString() }}</span>
+                <span class="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded">Tenggat: {{ formatDateTime(item.due_date) }}</span>
+                <span class="px-2 py-0.5 text-xs font-bold rounded" :class="getTypeBadge(item.type).classes">{{ getTypeBadge(item.type).label }}</span>
               </div>
               <h4 class="text-lg font-bold text-gray-800">{{ item.title }}</h4>
               <p class="text-sm text-gray-600 mt-1 mb-3">{{ item.description }}</p>
@@ -139,7 +164,8 @@
           <div v-for="item in pastAssignments" :key="item.id" class="bg-white border border-gray-200 p-4 sm:p-5 rounded-2xl shadow-sm hover:shadow-md transition-shadow flex flex-col sm:flex-row justify-between gap-4">
             <div class="w-full">
               <div class="flex items-center gap-2 mb-1">
-                <span class="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded">Tenggat: {{ new Date(item.due_date).toLocaleString() }}</span>
+                <span class="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded">Tenggat: {{ formatDateTime(item.due_date) }}</span>
+                <span class="px-2 py-0.5 text-xs font-bold rounded" :class="getTypeBadge(item.type).classes">{{ getTypeBadge(item.type).label }}</span>
                 <span class="text-xs text-gray-500 font-medium">Tgl Dibuat: {{ item.date }}</span>
               </div>
               <h4 class="text-lg font-bold text-gray-800">{{ item.title }}</h4>
@@ -186,11 +212,20 @@ const showForm = ref(false);
 const assignments = ref([]);
 const isLoading = ref(false);
 const isSubmitting = ref(false);
-const form = ref({ title: '', description: '', due_date: '' });
+const form = ref({ title: '', description: '', due_date: '', type: 'task' });
 const selectedFiles = ref([]);
 
 // STATE DRAG & DROP (Ini yang sebelumnya memicu error)
 const isDragging = ref(false);
+
+// Badge helper for assignment type
+const getTypeBadge = (type) => {
+  switch (type) {
+    case 'uts': return { label: '📙 UTS', classes: 'bg-brand-orange/10 text-brand-orange' };
+    case 'uas': return { label: '🚨 UAS', classes: 'bg-brand-red/10 text-brand-red' };
+    default: return { label: '📘 Tugas Harian', classes: 'bg-blue-50 text-blue-700' };
+  }
+};
 
 // Memisahkan data berdasarkan tanggal terpilih
 const currentAssignments = computed(() => assignments.value.filter(a => a.date === props.selectedDate));
@@ -199,6 +234,14 @@ const pastAssignments = computed(() => assignments.value.filter(a => a.date !== 
 const getStorageUrl = (path) => {
   const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
   return `${baseUrl}/storage/${path}`;
+};
+
+const formatDateTime = (dateString) => {
+  if (!dateString) return '-';
+  return new Intl.DateTimeFormat('id-ID', {
+    day: 'numeric', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  }).format(new Date(dateString));
 };
 
 // ----------------- FUNGSI UPLOAD & DRAG DROP -----------------
@@ -258,6 +301,7 @@ const submitAssignment = async () => {
     const formData = new FormData();
     formData.append("schedule_id", props.scheduleId);
     formData.append("date", props.selectedDate);
+    formData.append("type", form.value.type);
     formData.append("title", form.value.title);
     formData.append("description", form.value.description);
 
@@ -269,7 +313,7 @@ const submitAssignment = async () => {
     await assignmentService.createAssignment(formData);
     toastStore.success("Tugas berhasil disebarkan!");
 
-    form.value = { title: "", description: "", due_date: "" };
+    form.value = { title: "", description: "", due_date: "", type: "task" };
     selectedFiles.value = [];
     fetchAssignments();
   } catch (error) {

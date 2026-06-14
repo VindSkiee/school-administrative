@@ -53,6 +53,17 @@
 
     <div class="flex overflow-x-auto hide-scrollbar gap-2 pb-2">
       <button 
+        v-for="tf in typeFilters" :key="tf.id"
+        @click="filterType = tf.id"
+        class="px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border"
+        :class="filterType === tf.id ? 'bg-brand-red border-brand-red text-white shadow-sm' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'"
+      >
+        {{ tf.label }}
+      </button>
+    </div>
+
+    <div class="flex overflow-x-auto hide-scrollbar gap-2 pb-2">
+      <button 
         v-for="tab in tabs" :key="tab.id"
         @click="activeTab = tab.id"
         class="px-5 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all shadow-sm border"
@@ -91,6 +102,9 @@
               <div class="flex items-center gap-2 mb-1.5">
                 <span class="px-2.5 py-1 bg-red-50 text-brand-red text-[10px] font-bold rounded-lg uppercase tracking-wider">
                   {{ task.schedule?.subject?.name || 'Mata Pelajaran' }}
+                </span>
+                <span class="px-2 py-0.5 text-[10px] font-bold rounded-lg" :class="getTypeBadge(task.type).classes">
+                  {{ getTypeBadge(task.type).label }}
                 </span>
                 <span class="text-xs font-semibold text-gray-500">Diunggah: {{ formatDate(task.created_at) }}</span>
               </div>
@@ -205,6 +219,7 @@ const isLoading = ref(true);
 const searchQuery = ref('');
 const filterDate = ref('');
 const filterSubject = ref('');
+const filterType = ref('all');
 const subjectOptions = ref([]); // Diekstrak dinamis dari data
 let searchTimeout = null;
 
@@ -216,6 +231,22 @@ const tabs = [
   { id: 'submitted', label: 'Menunggu Nilai', activeClass: 'bg-blue-600 border-blue-600 text-white' },
   { id: 'graded', label: 'Sudah Dinilai', activeClass: 'bg-green-600 border-green-600 text-white' },
 ];
+
+// Type filter options
+const typeFilters = [
+  { id: 'all', label: 'Semua' },
+  { id: 'task', label: '📘 Tugas Harian' },
+  { id: 'uts', label: '📙 UTS' },
+  { id: 'uas', label: '🚨 UAS' },
+];
+
+const getTypeBadge = (type) => {
+  switch (type) {
+    case 'uts': return { label: '📙 UTS', classes: 'bg-brand-orange/10 text-brand-orange' };
+    case 'uas': return { label: '🚨 UAS', classes: 'bg-brand-red/10 text-brand-red' };
+    default: return { label: '📘 Tugas Harian', classes: 'bg-blue-50 text-blue-700' };
+  }
+};
 
 // MODAL STATE
 const showModal = ref(false);
@@ -265,7 +296,7 @@ const fetchAssignments = async () => {
 
 const onSearchInput = () => { clearTimeout(searchTimeout); searchTimeout = setTimeout(fetchAssignments, 500); };
 const clearDate = () => { filterDate.value = ''; fetchAssignments(); };
-const resetFilters = () => { searchQuery.value = ''; filterDate.value = ''; filterSubject.value = ''; fetchAssignments(); };
+const resetFilters = () => { searchQuery.value = ''; filterDate.value = ''; filterSubject.value = ''; filterType.value = 'all'; fetchAssignments(); };
 const applyLocalFilter = () => { /* Select sudah terhubung ke computed filteredAssignments */ };
 
 // KOMPUTASI UNTUK TABS & SELECT MAPEL
@@ -278,7 +309,10 @@ const filteredAssignments = computed(() => {
     // Filter by Subject (Local Filter)
     const passSubject = filterSubject.value === '' || task.schedule?.subject?.id === filterSubject.value;
 
-    return passTab && passSubject;
+    // Filter by Type
+    const passType = filterType.value === 'all' || task.type === filterType.value;
+
+    return passTab && passSubject && passType;
   });
 });
 

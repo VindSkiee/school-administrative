@@ -28,6 +28,9 @@
               </span>
             </div>
             <h2 class="text-2xl font-bold text-gray-800">{{ assignment.title }}</h2>
+            <span class="inline-flex items-center mt-2 px-3 py-1 text-xs font-bold rounded-lg" :class="assignmentTypeBadge.classes">
+              {{ assignmentTypeBadge.label }}
+            </span>
           </div>
           <div class="flex gap-4 bg-gray-50 p-3 rounded-xl border border-gray-100 w-full md:w-auto">
             <div class="text-center px-4 border-r border-gray-200">
@@ -196,6 +199,15 @@ const isClosed = computed(() => {
 const gradedCount = computed(() => {
   if (!assignment.value?.submissions) return 0;
   return assignment.value.submissions.filter(s => s.grade !== null).length;
+});
+
+const assignmentTypeBadge = computed(() => {
+  const type = assignment.value?.type;
+  switch (type) {
+    case 'uts': return { label: '📙 UTS', classes: 'bg-brand-orange/10 text-brand-orange' };
+    case 'uas': return { label: '🚨 UAS', classes: 'bg-brand-red/10 text-brand-red' };
+    default: return { label: '📘 Tugas Harian', classes: 'bg-blue-50 text-blue-700' };
+  }
 });
 
 const isLate = (submitDate) => {

@@ -2,15 +2,21 @@
 
 namespace App\Http\Controllers\API\Student;
 
+use App\Models\AcademicYear;
 use App\Services\StudentReportService;
+use App\Services\ReportValidationService;
 use Illuminate\Http\JsonResponse;
 use App\Services\ReportPdfService;
+use App\Services\AdminSemesterReportService;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class SemesterReportController
 {
     public function __construct(
         protected StudentReportService $reportService,
-        protected ReportPdfService $pdfService
+        protected ReportPdfService $pdfService,
+        protected ReportValidationService $validationService,
+        protected AdminSemesterReportService $adminReportService,
     ) {}
 
     public function show(): JsonResponse
@@ -28,7 +34,7 @@ class SemesterReportController
                 'success' => true,
                 'data' => $report
             ], 200);
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+        } catch (HttpException $e) {
             return response()->json(['error' => $e->getMessage()], $e->getStatusCode());
         }
     }
@@ -38,18 +44,39 @@ class SemesterReportController
         $user = auth('api')->user();
         $student = $user->student;
 
-        if (!$student || $student->status !== 'active' || !$student->class_id) {
+        if (!$student || $student->status !== 'active') {
             return response()->json(['error' => 'Anda tidak memiliki kelas aktif.'], 403);
         }
 
         try {
-            // Tarik data menggunakan service yang sama (ini sudah melewati validasi is_report_published)
-            $reportData = $this->reportService->getSemesterReport($student->user_id, $student->class_id);
+            // 1. Get active academic year
+            $activeYear = AcademicYear::where('is_active', true)->first();
+            if (! $activeYear) {
+                return response()->json(['error' => 'Tidak ada tahun ajaran aktif.'], 400);
+            }
 
-            // Generate dan return file PDF
+            // 2. Get student's class for this academic year
+            $class = $student->classes()
+                ->where('academic_year_id', $activeYear->id)
+                ->first();
+
+            if (! $class) {
+                return response()->json(['error' => 'Anda belum terdaftar di kelas pada tahun ajaran aktif.'], 403);
+            }
+
+            // 3. Run 3 strict validations
+            $this->validationService->checkEligibility($student, $activeYear, $class);
+
+            // 4. Build report data using the admin service (reuses existing logic)
+            $reportData = $this->adminReportService->buildReportDataPublic($activeYear, $student, $class);
+
+            // 5. Generate PDF
             return $this->pdfService->generateSemesterReportPdf($reportData, $user->name);
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+
+        } catch (HttpException $e) {
             return response()->json(['error' => $e->getMessage()], $e->getStatusCode());
+        } catch (\Throwable $e) {
+            return response()->json(['error' => 'Gagal mengunduh rapor: ' . $e->getMessage()], 500);
         }
     }
 }

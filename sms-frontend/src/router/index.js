@@ -91,6 +91,11 @@ const routes = [
         component: () => import("../pages/admin/SubjectManagement.vue"),
       },
       {
+        path: "subjects/:id",
+        name: "AdminSubjectDetail",
+        component: () => import("../pages/admin/SubjectDetail.vue"),
+      },
+      {
         path: "schedules",
         name: "Manajemen Jadwal",
         component: () => import("../pages/admin/ScheduleManagement.vue"),
@@ -149,6 +154,11 @@ const routes = [
         path: "/teacher/assignments/:id",
         name: "TeacherAssignmentDetail",
         component: () => import("../pages/teacher/TeacherAssignmentDetail.vue"),
+      },
+      {
+        path: "gradebook",
+        name: "TeacherGradebook",
+        component: () => import("../pages/teacher/TeacherGradebook.vue"),
       },
     ],
   },
@@ -213,7 +223,17 @@ const routes = [
       {
         path: "dashboard",
         name: "PrincipalDashboard",
-        component: () => import("../pages/principal/Dashboard.vue"),
+        component: () => import("../pages/principal/PrincipalDashboard.vue"),
+      },
+      {
+        path: "staff",
+        name: "PrincipalStaffDirectory",
+        component: () => import("../pages/principal/PrincipalStaffDirectory.vue"),
+      },
+      {
+        path: "settings/grading",
+        name: "PrincipalGradingSettings",
+        component: () => import("../pages/principal/PrincipalGradingSettings.vue"),
       },
     ],
   },

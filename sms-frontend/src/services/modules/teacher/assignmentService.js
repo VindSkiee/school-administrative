@@ -18,17 +18,20 @@ export const assignmentService = {
   submitGrade(submissionId, payload) {
     return api.post(`/v1/teacher/submissions/${submissionId}/grade`, payload);
   },
-  // Tambahkan fungsi ini
   getAllAssignments() {
     return api.get('/v1/teacher/assignments');
   },
-  // Mengambil detail tugas beserta semua jawaban siswa
   getAssignmentDetail(id) {
     return api.get(`/v1/teacher/assignments/${id}/submissions`);
   },
 
-  // Mengirim nilai (score & feedback)
-  submitGrade(submissionId, payload) {
-    return api.post(`/v1/teacher/submissions/${submissionId}/grade`, payload);
+  // === Gradebook endpoints ===
+  getGradebook(scheduleId, academicYearId) {
+    return api.get('/v1/teacher/gradebook', {
+      params: { schedule_id: scheduleId, academic_year_id: academicYearId }
+    });
+  },
+  inlineSaveGrade(payload) {
+    return api.post('/v1/teacher/gradebook/inline-save', payload);
   }
 };

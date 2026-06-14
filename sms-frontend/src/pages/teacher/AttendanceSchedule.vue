@@ -177,6 +177,7 @@ const dayOptions = [
   { value: "wednesday", label: "Rabu" },
   { value: "thursday", label: "Kamis" },
   { value: "friday", label: "Jumat" },
+  { value: "saturday", label: "Sabtu" },
 ];
 
 const dayNamesEng = [

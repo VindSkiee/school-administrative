@@ -24,6 +24,9 @@ class ScheduleController
         if ($request->has('teacher_id')) {
             $query->where('teacher_id', $request->teacher_id);
         }
+        if ($request->has('academic_year_id')) {
+            $query->where('academic_year_id', $request->academic_year_id);
+        }
 
         $perPage = (int) $request->query('per_page', 100);
         $perPage = max(1, min($perPage, 100));

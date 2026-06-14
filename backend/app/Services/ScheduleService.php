@@ -10,12 +10,14 @@ class ScheduleService
 {
     public function createSchedule(array $data): Schedule
     {
-        // 1. Dapatkan Tahun Ajaran Aktif
-        $activeYear = AcademicYear::query()->where('is_active', true)->first();
-        if (! $activeYear) {
-            throw new HttpException(400, 'Tidak ada Tahun Ajaran yang aktif. Silakan set Tahun Ajaran terlebih dahulu.');
+        // 1. Gunakan academic_year_id dari request (sudah divalidasi di FormRequest)
+        if (empty($data['academic_year_id'])) {
+            $activeYear = AcademicYear::query()->where('is_active', true)->first();
+            if (! $activeYear) {
+                throw new HttpException(400, 'Tidak ada Tahun Ajaran yang aktif. Silakan set Tahun Ajaran terlebih dahulu.');
+            }
+            $data['academic_year_id'] = $activeYear->id;
         }
-        $data['academic_year_id'] = $activeYear->id;
 
         // 2. Cek Bentrok Jadwal (Clash Detection)
         $this->validateClash($data);

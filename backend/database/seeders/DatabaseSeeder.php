@@ -18,11 +18,7 @@ class DatabaseSeeder extends Seeder
 
             // 2. Master Kelas (Akan membuat Tahun Ajaran & Daftar Kelas)
             ClassSeeder::class,
-
-            // 3. Siswa (Berjalan paling akhir karena butuh Tahun Ajaran & Kelas yang sudah jadi)
-            // StudentCsvSeeder::class,
-            StudentSeeder::class,
-            TeacherSeeder::class,
+            ReportCardScenarioSeeder::class,
         ]);
     }
 }

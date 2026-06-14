@@ -69,9 +69,9 @@
     <!-- FILTER KELAS (7-9) -->
     <div class="flex flex-col sm:flex-row items-start sm:items-end gap-3">
       <div class="w-full sm:w-72">
-        <label class="block text-sm font-semibold text-gray-700 mb-1.5">
-          Filter Kelas
-        </label>
+        <label class="block text-xs font-semibold tracking-wide text-gray-600 mb-1.5">
+            Pilih Kelas
+          </label>
         <BaseSelect
           v-model="classGradeFilter"
           :options="classGradeOptions"
@@ -80,9 +80,9 @@
       </div>
 
       <div class="w-full sm:w-80">
-        <label class="block text-sm font-semibold text-gray-700 mb-1.5">
-          Filter Tahun Ajaran
-        </label>
+        <label class="block text-xs font-semibold tracking-wide text-gray-600 mb-1.5">
+          Pilih Tahun Ajaran
+          </label>
         <BaseSelect
           v-model="academicYearFilter"
           :options="academicYearOptions"
@@ -973,6 +973,12 @@ const fetchInitialData = async () => {
       label: `${y.name} ${y.semester === "odd" ? "(Ganjil)" : "(Genap)"} ${y.is_active ? " - Aktif" : ""}`,
       value: y.id,
     }));
+
+    // Default filter ke tahun ajaran aktif
+    const activeYear = yearsData.find((y) => y.is_active);
+    if (activeYear && !academicYearFilter.value) {
+      academicYearFilter.value = activeYear.id;
+    }
 
     // 3. Ambil Data Guru (Langsung difilter dari Backend & tarik semua data)
     const resTeachers = await userService.getAll({
