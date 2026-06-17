@@ -6,6 +6,7 @@ use App\Models\AcademicYear;
 use App\Models\Principal;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use Illuminate\Support\Facades\Cache;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class AdminSemesterReportService
@@ -44,31 +45,39 @@ class AdminSemesterReportService
      *
      * @return array{is_all_ready:bool,data:array<int, array{student_id:int,nis:string,name:string,class_name:string,is_ready:bool,missing_info:string}>}
      */
+    // PERF FIX: added cache (TTL 5 min) and trimmed eager loads to only needed relations
     public function getAcademicYearReadiness(int $academicYearId): array
     {
-        $classes = SchoolClass::query()
-            ->where('academic_year_id', $academicYearId)
-            ->with([
-                'students.user',
-                'schedules.subject',
-                'schedules.attendances',
-                'schedules.assignments.submissions.grade',
-            ])
-            ->orderBy('name')
-            ->get();
+        return Cache::remember("report_distribution_{$academicYearId}", 300, function () use ($academicYearId) {
+            // PERF FIX: replaced SELECT * with explicit column selection on each relation
+            $classes = SchoolClass::query()
+                ->where('academic_year_id', $academicYearId)
+                ->with([
+                    'students:user_id,nis,nisn,status',
+                    'students.user:id,name',
+                    'schedules:id,class_id,subject_id',
+                    'schedules.subject:id,name,code',
+                    'schedules.attendances:id,schedule_id,student_id,status',
+                    'schedules.assignments:id,schedule_id,type',
+                    'schedules.assignments.submissions:id,assignment_id,student_id',
+                    'schedules.assignments.submissions.grade:id,submission_id,score',
+                ])
+                ->orderBy('name')
+                ->get();
 
-        $data = [];
+            $data = [];
 
-        foreach ($classes as $schoolClass) {
-            foreach ($schoolClass->students as $student) {
-                $data[] = $this->buildStudentReadinessPayload($schoolClass, $student);
+            foreach ($classes as $schoolClass) {
+                foreach ($schoolClass->students as $student) {
+                    $data[] = $this->buildStudentReadinessPayload($schoolClass, $student);
+                }
             }
-        }
 
-        return [
-            'is_all_ready' => collect($data)->every(fn (array $studentReadiness): bool => $studentReadiness['is_ready']),
-            'data' => $data,
-        ];
+            return [
+                'is_all_ready' => collect($data)->every(fn (array $studentReadiness): bool => $studentReadiness['is_ready']),
+                'data' => $data,
+            ];
+        });
     }
 
     public function publishReport(int $academicYearId): AcademicYear

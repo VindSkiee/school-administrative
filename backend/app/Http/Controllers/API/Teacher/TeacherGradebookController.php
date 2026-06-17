@@ -14,10 +14,25 @@ use App\Models\Subject;
 use App\Services\GradeAggregationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class TeacherGradebookController
 {
     public function __construct(protected GradeAggregationService $gradeAggregation) {}
+
+    /**
+     * GET /report-status
+     * Lightweight endpoint to check if the active academic year's report is published.
+     */
+    public function reportStatus(): JsonResponse
+    {
+        $activeYear = AcademicYear::where('is_active', true)->first();
+
+        return response()->json([
+            'is_report_published' => $activeYear?->is_report_published ?? false,
+            'published_at' => $activeYear?->is_report_published ? $activeYear->updated_at : null,
+        ]);
+    }
 
     /**
      * GET /gradebook/academic-years
@@ -93,7 +108,7 @@ class TeacherGradebookController
             ->orderBy('id')
             ->get(['id', 'title', 'type', 'schedule_id']);
 
-        // 3. Students in this class with their submissions
+        // 3. Students in this class with their submissions (eager loaded)
         $students = Student::with(['user:id,name', 'submissions.grade'])
             ->whereHas('classes', function ($query) use ($schedule) {
                 $query->where('classes.id', $schedule->class_id);
@@ -102,16 +117,24 @@ class TeacherGradebookController
             ->orderBy('nisn')
             ->get();
 
-        // 4. Calculate attendance rate per student across all schedules in this class
+        // PERF FIX: replaced N+1 with pre-fetched lookup — collect all student IDs upfront
+        $studentIds = $students->pluck('user_id');
+
+        // 4. All schedule IDs in this class for attendance calculation
         $allScheduleIds = Schedule::where('class_id', $schedule->class_id)
             ->where('academic_year_id', $academicYearId)
             ->pluck('id');
 
-        $studentData = $students->map(function ($student) use ($assignments, $allScheduleIds) {
-            // Attendance rate
-            $attendances = Attendance::whereIn('schedule_id', $allScheduleIds)
-                ->where('student_id', $student->user_id)
-                ->get();
+        // PERF FIX: replaced N+1 with pre-fetched lookup — single attendance query for all students
+        $attendancesByStudent = Attendance::whereIn('schedule_id', $allScheduleIds)
+            ->whereIn('student_id', $studentIds)
+            ->get()
+            ->groupBy('student_id');
+
+        // PERF FIX: replaced N+1 with pre-fetched lookup — zero queries inside map()
+        $studentData = $students->map(function ($student) use ($assignments, $attendancesByStudent) {
+            // Attendance rate from pre-fetched lookup
+            $attendances = $attendancesByStudent->get($student->user_id, collect());
 
             $totalAttendances = $attendances->count();
             $present = $attendances->where('status', 'present')->count();
@@ -119,7 +142,7 @@ class TeacherGradebookController
                 ? round(($present / $totalAttendances) * 100, 2)
                 : 100;
 
-            // Map assignment_id → score from submissions
+            // Map assignment_id → score from eager-loaded submissions
             $assignmentScores = [];
             foreach ($assignments as $assignment) {
                 $submission = $student->submissions
@@ -183,7 +206,7 @@ class TeacherGradebookController
         })->get(['id', 'name']);
 
         // Get all active students in this class
-        $students = Student::with(['user:id,name', 'submissions.grade'])
+        $students = Student::with(['user:id,name'])
             ->whereHas('classes', function ($query) use ($classId) {
                 $query->where('classes.id', $classId);
             })
@@ -191,44 +214,75 @@ class TeacherGradebookController
             ->orderBy('nisn')
             ->get();
 
-        // All schedule IDs in this class for attendance calculation
+        // PERF FIX: replaced N+1 with pre-fetched lookup — collect student IDs upfront
+        $studentIds = $students->pluck('user_id');
+
+        // PERF FIX: replaced N+1 with pre-fetched lookup — single query for all schedule IDs
         $allScheduleIds = Schedule::where('class_id', $classId)
             ->where('academic_year_id', $academicYearId)
             ->pluck('id');
 
-        $studentData = $students->map(function ($student) use ($classId, $academicYearId, $allScheduleIds) {
-            // Attendance rate
-            $attendances = Attendance::whereIn('schedule_id', $allScheduleIds)
-                ->where('student_id', $student->user_id)
-                ->get();
+        // PERF FIX: replaced N+1 with pre-fetched lookup — single attendance query for all students
+        $attendancesByStudent = Attendance::whereIn('schedule_id', $allScheduleIds)
+            ->whereIn('student_id', $studentIds)
+            ->get()
+            ->groupBy('student_id');
 
+        // PERF FIX: replaced N+1 with pre-fetched lookup — single query: all schedules grouped by subject
+        $schedulesBySubject = Schedule::where('class_id', $classId)
+            ->where('academic_year_id', $academicYearId)
+            ->pluck('id', 'subject_id'); // subject_id => [schedule_ids]
+
+        // PERF FIX: replaced N+1 with pre-fetched lookup — group schedule IDs by subject
+        $scheduleIdsGroupedBySubject = Schedule::where('class_id', $classId)
+            ->where('academic_year_id', $academicYearId)
+            ->get(['id', 'subject_id'])
+            ->groupBy('subject_id')
+            ->map(fn ($group) => $group->pluck('id'));
+
+        // PERF FIX: replaced N+1 with pre-fetched lookup — single query for all assignment IDs
+        $allAssignmentIds = Assignment::whereIn('schedule_id', $allScheduleIds)->pluck('id');
+
+        // PERF FIX: replaced N+1 with pre-fetched lookup — single query: all graded submissions for these students+assignments
+        $gradedScoresLookup = DB::table('grades')
+            ->join('submissions', 'grades.submission_id', '=', 'submissions.id')
+            ->join('assignments', 'submissions.assignment_id', '=', 'assignments.id')
+            ->whereIn('submissions.student_id', $studentIds)
+            ->whereIn('submissions.assignment_id', $allAssignmentIds)
+            ->whereNotNull('grades.score')
+            ->select('submissions.student_id', 'assignments.schedule_id', 'grades.score')
+            ->get();
+
+        // Build lookup: student_id => schedule_id => [scores]
+        $scoresByStudentSchedule = [];
+        foreach ($gradedScoresLookup as $row) {
+            $scoresByStudentSchedule[$row->student_id][$row->schedule_id][] = (float) $row->score;
+        }
+
+        // PERF FIX: replaced N+1 with pre-fetched lookup — zero queries inside map()
+        $studentData = $students->map(function ($student) use (
+            $attendancesByStudent, $scheduleIdsGroupedBySubject, $scoresByStudentSchedule
+        ) {
+            // Attendance rate from pre-fetched lookup
+            $attendances = $attendancesByStudent->get($student->user_id, collect());
             $totalAttendances = $attendances->count();
             $present = $attendances->where('status', 'present')->count();
             $attendanceRate = $totalAttendances > 0
                 ? round(($present / $totalAttendances) * 100, 2)
                 : 100;
 
-            // Calculate weighted average per subject using the existing service
+            // Calculate average per subject from pre-fetched lookup
             $subjectGrades = [];
-            $subjectSchedules = Schedule::where('class_id', $classId)
-                ->where('academic_year_id', $academicYearId)
-                ->with('subject')
-                ->get()
-                ->groupBy('subject_id');
+            foreach ($scheduleIdsGroupedBySubject as $subjectId => $schedIds) {
+                $allScores = [];
+                foreach ($schedIds as $schedId) {
+                    $scores = $scoresByStudentSchedule[$student->user_id][$schedId] ?? [];
+                    $allScores = array_merge($allScores, $scores);
+                }
 
-            foreach ($subjectSchedules as $subjectId => $schedules) {
-                // Get all assignment IDs for this subject in this class
-                $assignmentIds = Assignment::whereIn('schedule_id', $schedules->pluck('id'))->pluck('id');
-
-                // Get graded submissions for this student
-                $gradedScores = \Illuminate\Support\Facades\DB::table('grades')
-                    ->join('submissions', 'grades.submission_id', '=', 'submissions.id')
-                    ->join('assignments', 'submissions.assignment_id', '=', 'assignments.id')
-                    ->where('submissions.student_id', $student->user_id)
-                    ->whereIn('submissions.assignment_id', $assignmentIds)
-                    ->avg('grades.score');
-
-                $subjectGrades[$subjectId] = $gradedScores !== null ? round((float) $gradedScores, 2) : null;
+                $subjectGrades[$subjectId] = ! empty($allScores)
+                    ? round(array_sum($allScores) / count($allScores), 2)
+                    : null;
             }
 
             return [
@@ -261,6 +315,14 @@ class TeacherGradebookController
             'assignment_id' => 'required|integer|exists:assignments,id',
             'score' => 'nullable|numeric|min:0|max:100',
         ]);
+
+        // Block grade changes when report is published
+        $activeYear = AcademicYear::where('is_active', true)->first();
+        if ($activeYear && $activeYear->is_report_published) {
+            return response()->json([
+                'error' => 'Rapor semester ini telah diterbitkan. Anda tidak dapat lagi mengubah nilai.',
+            ], 403);
+        }
 
         $teacherId = auth('api')->user()->id;
         $studentId = (int) $request->input('student_id');

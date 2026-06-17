@@ -3,6 +3,7 @@
     
     <div class="flex justify-start">
       <button
+        v-if="!locked"
         @click="showForm = !showForm"
         :class="showForm ? 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300' : 'bg-brand-red text-white hover:bg-brand-orange shadow-sm'"
         class="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all"
@@ -49,19 +50,19 @@
               <label class="flex-1 min-w-[120px] cursor-pointer">
                 <input type="radio" v-model="form.type" value="task" class="peer sr-only" required>
                 <div class="p-3 border-2 border-gray-200 rounded-xl text-center text-sm font-bold text-gray-500 peer-checked:border-blue-500 peer-checked:text-blue-600 peer-checked:bg-blue-50 transition-all">
-                  📘 Tugas Harian
+                  Tugas Harian
                 </div>
               </label>
               <label class="flex-1 min-w-[120px] cursor-pointer">
                 <input type="radio" v-model="form.type" value="uts" class="peer sr-only" required>
                 <div class="p-3 border-2 border-gray-200 rounded-xl text-center text-sm font-bold text-gray-500 peer-checked:border-brand-orange peer-checked:text-brand-orange peer-checked:bg-orange-50 transition-all">
-                  📙 UTS
+                  UTS
                 </div>
               </label>
               <label class="flex-1 min-w-[120px] cursor-pointer">
                 <input type="radio" v-model="form.type" value="uas" class="peer sr-only" required>
                 <div class="p-3 border-2 border-gray-200 rounded-xl text-center text-sm font-bold text-gray-500 peer-checked:border-brand-red peer-checked:text-brand-red peer-checked:bg-red-50 transition-all">
-                  🚨 UAS
+                  UAS
                 </div>
               </label>
             </div>
@@ -127,7 +128,7 @@
     </div>
       
       <div v-else>
-        <h3 class="text-lg font-bold text-gray-800 mb-3 border-b pb-2">Tugas Pertemuan Ini ({{ selectedDate }})</h3>
+        <h3 class="text-lg font-bold text-gray-800 mb-3 border-b pb-2">Tugas Pertemuan Ini</h3>
         <div v-if="currentAssignments.length === 0" class="bg-gray-50 p-4 rounded-xl text-center text-sm text-gray-500 border border-gray-200 mb-6">Tidak ada tugas yang ditambahkan pada pertemuan ini.</div>
         
         <div v-else class="space-y-3 mb-6">
@@ -201,7 +202,8 @@ import { useToastStore } from '../../../stores/toast';
 
 const props = defineProps({
   scheduleId: { type: [String, Number], required: true },
-  selectedDate: { type: String, required: true }
+  selectedDate: { type: String, required: true },
+  locked: { type: Boolean, default: false },
 });
 
 const router = useRouter();
@@ -221,9 +223,9 @@ const isDragging = ref(false);
 // Badge helper for assignment type
 const getTypeBadge = (type) => {
   switch (type) {
-    case 'uts': return { label: '📙 UTS', classes: 'bg-brand-orange/10 text-brand-orange' };
-    case 'uas': return { label: '🚨 UAS', classes: 'bg-brand-red/10 text-brand-red' };
-    default: return { label: '📘 Tugas Harian', classes: 'bg-blue-50 text-blue-700' };
+    case 'uts': return { label: 'UTS', classes: 'bg-brand-orange/10 text-brand-orange' };
+    case 'uas': return { label: 'UAS', classes: 'bg-brand-red/10 text-brand-red' };
+    default: return { label: 'Tugas Harian', classes: 'bg-blue-50 text-blue-700' };
   }
 };
 
@@ -340,6 +342,13 @@ const goToDetail = (assignmentId) => {
 };
 
 onMounted(() => fetchAssignments());
+
+// FIX: Watch scheduleId — re-fetch saat schedule berubah (A → B)
+watch(() => props.scheduleId, (newId, oldId) => {
+  if (newId && String(newId) !== String(oldId)) {
+    fetchAssignments();
+  }
+});
 
 watch(() => props.selectedDate, () => {
   // Tidak perlu fetch ulang karena computed property menangani filter otomatis

@@ -1,8 +1,8 @@
 <template>
   <div class="space-y-6">
     <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-      <button @click="$router.back()" class="p-2.5 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 hover:text-brand-red transition-colors shadow-sm">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+      <button @click="$router.back()" class="mt-1 text-gray-400 hover:text-brand-red transition-colors flex-shrink-0">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
       </button>
       <div class="flex-1">
         <h1 class="text-2xl md:text-3xl font-bold text-gray-800 font-serif">Detail Mata Pelajaran</h1>

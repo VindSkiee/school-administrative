@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AcademicYear;
 use App\Models\Assignment;
 use App\Models\Schedule;
 use App\Models\Submission;
@@ -16,6 +17,8 @@ class StudentDashboardService
     {
         $today = Carbon::today()->format('Y-m-d');
         $dayOfWeek = strtolower(Carbon::today()->englishDayOfWeek);
+
+        $activeYear = AcademicYear::where('is_active', true)->first();
 
         // 1. Data Kelas (Homeroom) - TAMBAHKAN RELASI 'homeroomTeacher.user'
         $schoolClass = SchoolClass::with('homeroomTeacher.user')->find($activeClassId);
@@ -92,6 +95,7 @@ class StudentDashboardService
             });
 
         return [
+            'academic_year' => $activeYear ? $activeYear->name . ' ' . ($activeYear->semester === 'odd' ? 'Ganjil' : 'Genap') : null,
             'homeroom_class' => $classInfo,
             'today_schedules' => $todaySchedules,
             'deadline_assignments' => $deadlineAssignments,

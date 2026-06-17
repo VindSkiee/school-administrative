@@ -61,23 +61,27 @@ class ReportValidationService
      */
     private function checkSubjectCompletion(Student $student, SchoolClass $class, AcademicYear $academicYear): void
     {
-        $schedules = Schedule::with('subject')
+        // PERF FIX: replaced N+1 with eager-loaded collections — single query for all schedules + assignments + submissions + grades
+        $schedules = Schedule::with(['subject', 'assignments' => function ($q) use ($student) {
+                $q->with(['submissions' => function ($q2) use ($student) {
+                    $q2->where('student_id', $student->user_id)
+                       ->with('grade');
+                }]);
+            }])
             ->where('class_id', $class->id)
             ->where('academic_year_id', $academicYear->id)
             ->get();
 
+        // PERF FIX: replaced N+1 — zero queries inside loop, all data from eager-loaded collections
         foreach ($schedules as $schedule) {
             $subjectName = $schedule->subject?->name ?? 'Tanpa Nama';
 
-            // Check each required type has at least 1 graded submission
             foreach (['task', 'uts', 'uas'] as $type) {
-                $gradedCount = DB::table('grades')
-                    ->join('submissions', 'grades.submission_id', '=', 'submissions.id')
-                    ->join('assignments', 'submissions.assignment_id', '=', 'assignments.id')
-                    ->where('assignments.schedule_id', $schedule->id)
-                    ->where('assignments.type', $type)
-                    ->where('submissions.student_id', $student->user_id)
-                    ->whereNotNull('grades.score')
+                // Count graded submissions from the eager-loaded collection
+                $gradedCount = $schedule->assignments
+                    ->where('type', $type)
+                    ->flatMap->submissions
+                    ->filter(fn ($sub) => $sub->grade !== null && $sub->grade->score !== null)
                     ->count();
 
                 if ($gradedCount < 1) {

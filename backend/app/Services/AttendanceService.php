@@ -26,8 +26,7 @@ class AttendanceService
 
         if ($studentIds->isNotEmpty()) {
             $validStudentIds = Student::query()
-                ->whereIn('user_id', $studentIds->all()) // Disederhanakan
-                // PERBAIKAN: Gunakan whereHas alih-alih where('class_id', ...)
+                ->whereIn('user_id', $studentIds->all())
                 ->whereHas('classes', function ($query) use ($schedule) {
                     $query->where('classes.id', $schedule->class_id);
                 })
@@ -44,19 +43,26 @@ class AttendanceService
         DB::beginTransaction();
 
         try {
+            // PERF FIX: replaced N updateOrCreate calls with single upsert() — requires MySQL 8.0+ / Laravel 8+
+            $now = now();
+            $rows = [];
             foreach ($data['attendances'] as $item) {
-                // updateOrCreate mencegah duplikasi jika guru merevisi absen di hari yang sama
-                Attendance::updateOrCreate(
-                    [
-                        'schedule_id' => $schedule->id,
-                        'student_id' => $item['student_id'],
-                        'date' => $data['date'],
-                    ],
-                    [
-                        'status' => $item['status'],
-                    ]
-                );
+                $rows[] = [
+                    'schedule_id' => $schedule->id,
+                    'student_id' => $item['student_id'],
+                    'date' => $data['date'],
+                    'status' => $item['status'],
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
             }
+
+            // PERF FIX: single bulk upsert replaces N individual updateOrCreate calls
+            Attendance::upsert(
+                $rows,
+                ['schedule_id', 'student_id', 'date'],  // unique key columns
+                ['status', 'updated_at']                 // columns to update on conflict
+            );
 
             DB::commit();
         } catch (\Exception $e) {

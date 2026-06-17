@@ -22,7 +22,7 @@ class DashboardController
         // Ambil 5 aktivitas terakhir untuk widget pengawasan
         $recentActivities = ActivityLog::with('user:id,name,role')
             ->latest()
-            ->take(5)
+            ->take(3)
             ->get();
 
         return response()->json([

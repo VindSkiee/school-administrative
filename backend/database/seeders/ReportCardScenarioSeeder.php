@@ -24,6 +24,9 @@ class ReportCardScenarioSeeder extends Seeder
 {
     private const DEFAULT_PASSWORD = 'password123';
 
+    /** Override in child class to control is_report_published flag */
+    protected bool $reportPublished = true;
+
     private const SUBJECTS = [
         ['code' => 'PAI', 'name' => 'Pendidikan Agama Islam dan Budi Pekerti'],
         ['code' => 'PPKn', 'name' => 'Pendidikan Pancasila'],
@@ -57,6 +60,25 @@ class ReportCardScenarioSeeder extends Seeder
     private const STUDENTS_PER_CLASS = 20;
 
     private const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+
+    /**
+     * Explicit time-slot map for 11 subjects across 5 days.
+     * Each entry: [day, start_hour]. Guaranteed no class-day-time conflicts.
+     * Layout per day: up to 3 subjects with 1.5h gap between slots.
+     */
+    private const TIME_SLOTS = [
+        ['day' => 'monday',    'start' => '07:00'], // 0: PAI
+        ['day' => 'monday',    'start' => '08:30'], // 1: PPKn
+        ['day' => 'monday',    'start' => '10:00'], // 2: B.IND
+        ['day' => 'tuesday',   'start' => '07:00'], // 3: MTK
+        ['day' => 'tuesday',   'start' => '08:30'], // 4: IPA
+        ['day' => 'tuesday',   'start' => '10:00'], // 5: IPS
+        ['day' => 'wednesday', 'start' => '07:00'], // 6: B.ING
+        ['day' => 'wednesday', 'start' => '08:30'], // 7: PJOK
+        ['day' => 'wednesday', 'start' => '10:00'], // 8: SBdP
+        ['day' => 'thursday',  'start' => '07:00'], // 9: MULOK
+        ['day' => 'thursday',  'start' => '08:30'], // 10: INF
+    ];
 
     public function run(): void
     {
@@ -148,10 +170,11 @@ class ReportCardScenarioSeeder extends Seeder
             'name' => '2025/2026',
             'semester' => 'odd',
             'is_active' => true,
-            'is_report_published' => true,
+            'is_report_published' => $this->reportPublished,
         ]);
 
-        $this->command->info('   ✅ Tahun Ajaran: 2025/2026 Ganjil (aktif + published)');
+        $statusLabel = $this->reportPublished ? 'published' : 'unpublished';
+        $this->command->info("   ✅ Tahun Ajaran: 2025/2026 Ganjil (aktif + {$statusLabel})");
 
         return $year;
     }
@@ -313,18 +336,34 @@ class ReportCardScenarioSeeder extends Seeder
             $schedulesByClass[$class->id] = [];
 
             foreach ($subjects as $subjectIndex => $subject) {
-                // Each subject gets a unique teacher (round-robin across 5 teachers)
+                // Use explicit time-slot map to guarantee no class-day-time conflicts
+                $slot = self::TIME_SLOTS[$subjectIndex] ?? [
+                    'day' => self::DAYS[$subjectIndex % count(self::DAYS)],
+                    'start' => sprintf('%02d:00', 7 + $subjectIndex),
+                ];
+
                 $teacher = $teachers[$subjectIndex % $teachers->count()];
 
-                $schedule = Schedule::create([
-                    'class_id' => $class->id,
-                    'subject_id' => $subject->id,
-                    'teacher_id' => $teacher->user_id,
-                    'academic_year_id' => $year->id,
-                    'day_of_week' => self::DAYS[$subjectIndex % count(self::DAYS)],
-                    'start_time' => sprintf('%02d:00:00', 7 + $subjectIndex),
-                    'end_time' => sprintf('%02d:30:00', 7 + $subjectIndex),
-                ]);
+                // Use updateOrCreate to prevent duplicates if seeder runs twice
+                $startTime = $slot['start'] . ':00';
+                $endHour = (int) substr($slot['start'], 0, 2);
+                $endMin = (int) substr($slot['start'], 3, 2) + 30;
+                if ($endMin >= 60) { $endHour++; $endMin -= 60; }
+                $endTime = sprintf('%02d:%02d:00', $endHour, $endMin);
+
+                $schedule = Schedule::updateOrCreate(
+                    [
+                        'class_id' => $class->id,
+                        'day_of_week' => $slot['day'],
+                        'start_time' => $startTime,
+                        'academic_year_id' => $year->id,
+                    ],
+                    [
+                        'subject_id' => $subject->id,
+                        'teacher_id' => $teacher->user_id,
+                        'end_time' => $endTime,
+                    ]
+                );
 
                 // Create 3 assignments per schedule: task, uts, uas
                 $types = [

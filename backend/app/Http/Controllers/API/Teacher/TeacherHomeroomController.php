@@ -2,24 +2,30 @@
 
 namespace App\Http\Controllers\API\Teacher;
 
+use App\Models\AcademicYear;
 use App\Models\Teacher;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 
 class TeacherHomeroomController
 {
-    public function show(\Illuminate\Http\Request $request): \Illuminate\Http\JsonResponse
+    public function show(): JsonResponse
     {
         $teacherId = auth('api')->user()->id;
 
-        // Cari data guru beserta kelas perwalian dan relasi siswanya
-        $teacher = \App\Models\Teacher::with([
-            'homeroomClass.students' => function ($query) {
-                $query->where('status', 'active'); // Hanya siswa aktif
+        // PERF FIX: replaced unbounded eager loads with academic year-scoped queries
+        $activeYear = AcademicYear::where('is_active', true)->first();
+
+        $teacher = Teacher::with([
+            'homeroomClass' => function ($query) use ($activeYear) {
+                if ($activeYear) {
+                    // PERF FIX: scope to active academic year only
+                    $query->where('academic_year_id', $activeYear->id);
+                }
             },
-            'homeroomClass.students.user', 
-            'homeroomClass.students.attendances', 
-            'homeroomClass.students.submissions.grade' // Untuk mengambil nilai
+            'homeroomClass.students' => function ($query) {
+                $query->where('status', 'active');
+            },
+            'homeroomClass.students.user:id,name',
         ])->where('user_id', $teacherId)->first();
 
         if (!$teacher || !$teacher->homeroomClass) {
@@ -27,10 +33,30 @@ class TeacherHomeroomController
         }
 
         $class = $teacher->homeroomClass;
+        $studentIds = $class->students->pluck('user_id');
 
-        // Mapping dan Kalkulasi Data Siswa
-        $studentsData = $class->students->map(function ($student) {
-            $attendances = $student->attendances;
+        // PERF FIX: replaced N+1 — single attendance query for all students, scoped to this class's schedules
+        $classScheduleIds = $class->schedules()->pluck('id');
+
+        $attendancesByStudent = \App\Models\Attendance::whereIn('schedule_id', $classScheduleIds)
+            ->whereIn('student_id', $studentIds)
+            ->get()
+            ->groupBy('student_id');
+
+        // PERF FIX: replaced N+1 — single submission+grade query for all students
+        $submissionIds = \App\Models\Submission::whereIn('student_id', $studentIds)
+            ->pluck('id');
+
+        $gradesByStudent = \App\Models\Grade::whereIn('submission_id', $submissionIds)
+            ->whereNotNull('score')
+            ->join('submissions', 'grades.submission_id', '=', 'submissions.id')
+            ->select('submissions.student_id', 'grades.score')
+            ->get()
+            ->groupBy('student_id');
+
+        // PERF FIX: replaced N+1 — zero queries inside map()
+        $studentsData = $class->students->map(function ($student) use ($attendancesByStudent, $gradesByStudent) {
+            $attendances = $attendancesByStudent->get($student->user_id, collect());
             $totalAttendances = $attendances->count();
 
             $present = $attendances->where('status', 'present')->count();
@@ -38,22 +64,19 @@ class TeacherHomeroomController
             $permission = $attendances->where('status', 'permission')->count();
             $alpa = $attendances->where('status', 'alpa')->count();
 
-            // Hitung persentase kehadiran
-            $attendanceRate = $totalAttendances > 0 
-                ? round(($present / $totalAttendances) * 100, 2) 
-                : 100; // Default 100% jika belum ada absensi
+            $attendanceRate = $totalAttendances > 0
+                ? round(($present / $totalAttendances) * 100, 2)
+                : 100;
 
-            // Hitung rata-rata nilai dari seluruh tugas yang sudah dinilai
-            $grades = $student->submissions->map->grade->filter();
-            $averageScore = $grades->count() > 0 
-                ? round($grades->avg('score'), 2) 
+            // Average score from pre-fetched grades lookup
+            $studentGrades = $gradesByStudent->get($student->user_id, collect());
+            $averageScore = $studentGrades->count() > 0
+                ? round($studentGrades->avg('score'), 2)
                 : 0;
 
             return [
-                // 🌟 PERBAIKAN DI SINI: Ekstrak ID langsung dari relasi user atau foreign key
                 'id' => $student->user_id ?? $student->user->id,
                 'user_id' => $student->user_id ?? $student->user->id,
-                
                 'nis' => $student->nis ?? '-',
                 'name' => $student->user->name ?? 'Tanpa Nama',
                 'gender' => $student->gender ?? 'L',
@@ -63,8 +86,8 @@ class TeacherHomeroomController
                 'permission' => $permission,
                 'alpa' => $alpa,
                 'attendance_rate' => $attendanceRate,
-                'math_score' => $averageScore, 
-                'bio_score' => $averageScore,  
+                'math_score' => $averageScore,
+                'bio_score' => $averageScore,
                 'average_score' => $averageScore,
             ];
         })->values();

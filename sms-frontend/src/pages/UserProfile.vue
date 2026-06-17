@@ -55,7 +55,7 @@
 
               <div
                 v-else
-                class="w-20 h-20 sm:w-28 sm:h-28 lg:w-36 lg:h-36 rounded-full bg-brand-orange text-brand-white flex items-center justify-center text-xl sm:text-2xl lg:text-3xl font-bold border-4 border-white shadow-sm"
+                class="w-20 h-20 sm:w-28 sm:h-28 lg:w-36 lg:h-36 rounded-full bg-brand-orange text-brand-white flex items-center justify-center text-xl sm:text-2xl lg:text-5xl font-bold border-4 border-white shadow-sm"
               >
                 {{ avatarInitial }}
               </div>
@@ -289,8 +289,8 @@
                       <td class="py-2 pr-3 text-gray-700">
                         {{ item.academic_year?.name || "-" }}
                       </td>
-                      <td class="py-2 pr-3 text-gray-700 capitalize">
-                        {{ item.academic_year?.semester || "-" }}
+                      <td class="py-2 pr-3 text-gray-700">
+                        {{ formatSemester(item.academic_year?.semester) }}
                       </td>
                     </tr>
                   </tbody>
@@ -300,32 +300,17 @@
           </div>
 
           <div v-else-if="activeTab === 'academic'" class="space-y-5">
-            <div
-              class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
-            >
-              <h3 class="text-lg font-bold text-gray-800">Riwayat Akademik</h3>
-
-              <select
-                v-model="selectedAcademicYear"
-                class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-brand-red focus:border-brand-red outline-none"
-              >
-                <option value="all">Semua Tahun Ajaran / Semester</option>
-                <option
-                  v-for="option in academicYearOptions"
-                  :key="option.value"
-                  :value="option.value"
-                >
-                  {{ option.label }}
-                </option>
-              </select>
-            </div>
+            <h3 class="text-lg font-bold text-gray-800">Jadwal Pelajaran</h3>
+            <p class="text-sm text-gray-500">
+              Mata pelajaran yang diikuti siswa pada tahun ajaran aktif saat ini.
+            </p>
 
             <div class="border border-gray-200 rounded-xl overflow-hidden">
               <div
-                v-if="filteredGradeHistory.length === 0"
+                v-if="studentSchedules.length === 0"
                 class="p-6 text-sm text-gray-500 text-center"
               >
-                Belum ada data nilai pada filter yang dipilih.
+                Belum ada jadwal pelajaran untuk tahun ajaran aktif.
               </div>
               <div v-else class="overflow-x-auto">
                 <table class="w-full text-sm">
@@ -333,36 +318,36 @@
                     class="bg-gray-50 text-left text-gray-600 border-b border-gray-200"
                   >
                     <tr>
+                      <th class="px-4 py-3">Hari</th>
+                      <th class="px-4 py-3">Jam</th>
                       <th class="px-4 py-3">Mata Pelajaran</th>
-                      <th class="px-4 py-3">Kelas</th>
-                      <th class="px-4 py-3">Tahun Ajaran</th>
-                      <th class="px-4 py-3">Semester</th>
-                      <th class="px-4 py-3 text-right">Nilai Akhir</th>
+                      <th class="px-4 py-3">Guru Pengajar</th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-gray-100">
                     <tr
-                      v-for="grade in filteredGradeHistory"
-                      :key="grade.grade_id"
+                      v-for="schedule in studentSchedules"
+                      :key="schedule.id"
                     >
                       <td class="px-4 py-3 font-semibold text-gray-800">
-                        {{ grade.subject_name || "-" }}
+                        {{ formatDay(schedule.day_of_week) }}
                       </td>
                       <td class="px-4 py-3 text-gray-700">
-                        {{ grade.class_name || "-" }}
+                        {{ formatTime(schedule.start_time) }} -
+                        {{ formatTime(schedule.end_time) }}
                       </td>
                       <td class="px-4 py-3 text-gray-700">
-                        {{ grade.academic_year_name || "-" }}
+                        {{ schedule.subject_name || "-" }}
                       </td>
-                      <td class="px-4 py-3 text-gray-700 capitalize">
-                        {{ grade.semester || "-" }}
-                      </td>
-                      <td class="px-4 py-3 text-right">
-                        <span
-                          class="px-2.5 py-1 rounded-md bg-green-50 text-green-700 border border-green-200 font-bold"
+                      <td class="px-4 py-3 text-gray-700">
+                        <router-link
+                          v-if="schedule.teacher_id"
+                          :to="{ path: `/account/profile/${schedule.teacher_id}` }"
+                          class="text-brand-red hover:text-brand-orange font-semibold hover:underline transition-colors"
                         >
-                          {{ formatScore(grade.score) }}
-                        </span>
+                          {{ schedule.teacher_name || "-" }}
+                        </router-link>
+                        <span v-else>{{ schedule.teacher_name || "-" }}</span>
                       </td>
                     </tr>
                   </tbody>
@@ -475,7 +460,7 @@ const visibleTabs = computed(() => {
   const tabs = [{ key: "general", label: "Informasi Umum" }];
 
   if (user.value?.role === "student") {
-    tabs.push({ key: "academic", label: "Riwayat Akademik" });
+    tabs.push({ key: "academic", label: "Jadwal Pelajaran" });
   }
 
   if (user.value?.role === "teacher") {
@@ -663,6 +648,8 @@ const filteredGradeHistory = computed(() => {
 
 const teacherSchedules = computed(() => user.value?.teacher?.schedules || []);
 
+const studentSchedules = computed(() => user.value?.student_schedules || []);
+
 const formatTime = (time) => {
   if (!time) {
     return "-";
@@ -690,6 +677,12 @@ const formatDay = (day) => {
   };
 
   return dayMap[day] || day || "-";
+};
+
+const formatSemester = (semester) => {
+  if (semester === "odd") return "Ganjil";
+  if (semester === "even") return "Genap";
+  return semester || "-";
 };
 
 const normalizeActiveTab = () => {
@@ -828,10 +821,14 @@ const goBack = () => {
   }
 };
 
+// Ubah watcher di UserProfile.vue (bagian paling bawah script-mu)
 watch(
   () => route.params.id,
   () => {
-    fetchUser();
+    // Jalankan HANYA jika sedang berada di halaman Detail Pengguna
+    if (route.name === 'Detail Pengguna') {
+      fetchUser();
+    }
   },
 );
 

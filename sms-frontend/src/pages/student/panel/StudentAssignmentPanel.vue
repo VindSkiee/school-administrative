@@ -192,7 +192,7 @@
                   d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                 ></path>
               </svg>
-              Tenggat: {{ formatDateTime(task.due_date) }}
+              {{ isReportPublished ? 'Dikunci saat rapor' : 'Tenggat' }}: {{ formatDateTime(effectiveDeadline(task.due_date)) }}
             </div>
           </div>
 
@@ -348,7 +348,7 @@
               disabled
               class="w-full py-2.5 bg-gray-200 text-gray-400 rounded-xl text-sm font-bold cursor-not-allowed"
             >
-              Akses Ditutup
+              {{ isReportPublished ? 'Rapor Diterbitkan' : 'Akses Ditutup' }}
             </button>
           </div>
         </div>
@@ -509,6 +509,7 @@ import { ref, onMounted } from "vue";
 import { studentAssignmentService } from "../../../services/modules/student/assignmentService";
 import { useToastStore } from "../../../stores/toast";
 import BasePopoverInfo from "../../../components/BasePopoverInfo.vue";
+import { useReportStatus } from '../../../composables/useReportStatus';
 
 // PROPS INI WAJIB SAMA SEPERTI MATERIAL
 const props = defineProps({
@@ -517,6 +518,7 @@ const props = defineProps({
 });
 
 const toastStore = useToastStore();
+const { isReportPublished, publishedAt } = useReportStatus('student');
 const assignments = ref([]);
 const isLoading = ref(true);
 
@@ -550,7 +552,14 @@ const formatDateTime = (dateString) => {
 };
 
 const isPastDeadline = (dueDate) => {
+  if (isReportPublished.value) return true;
   return new Date() > new Date(dueDate);
+};
+
+// Effective deadline: show published date as cutoff when report is published
+const effectiveDeadline = (dueDate) => {
+  if (isReportPublished.value && publishedAt.value) return publishedAt.value;
+  return dueDate;
 };
 
 // Logika dinamis untuk warna indikator status Tugas
@@ -594,15 +603,16 @@ const getDeadlineClass = (dueDate) => {
 };
 
 const canSubmit = (task) => {
+  if (isReportPublished.value) return false;
   const hasGrade = task.submission && task.submission.grade;
   return !hasGrade && !isPastDeadline(task.due_date);
 };
 
 const getTypeBadge = (type) => {
   switch (type) {
-    case 'uts': return { label: '📙 UTS', classes: 'bg-brand-orange/10 text-brand-orange' };
-    case 'uas': return { label: '🚨 UAS', classes: 'bg-brand-red/10 text-brand-red' };
-    default: return { label: '📘 Tugas Harian', classes: 'bg-blue-50 text-blue-700' };
+    case 'uts': return { label: 'UTS', classes: 'bg-brand-orange/10 text-brand-orange' };
+    case 'uas': return { label: 'UAS', classes: 'bg-brand-red/10 text-brand-red' };
+    default: return { label: 'Tugas Harian', classes: 'bg-blue-50 text-blue-700' };
   }
 };
 

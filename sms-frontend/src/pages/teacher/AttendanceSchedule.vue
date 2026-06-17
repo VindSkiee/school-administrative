@@ -22,6 +22,29 @@
       </div>
     </div>
 
+    <div
+      v-if="isReportPublished"
+      class="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-3"
+    >
+      <svg
+        class="w-5 h-5 text-amber-600 shrink-0"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+        ></path>
+      </svg>
+      <p class="text-sm font-semibold text-amber-800">
+        Rapor sudah diterbitkan. Semua operasi absensi, materi, dan tugas
+        dikunci.
+      </p>
+    </div>
+
     <div v-if="isLoading" class="flex justify-center items-center py-12">
       <div
         class="animate-spin rounded-full h-10 w-10 border-b-2 border-brand-red"
@@ -59,8 +82,13 @@
       <div
         v-for="schedule in schedules"
         :key="schedule.id"
-        @click="goToScheduleDetail(schedule.id)"
-        class="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm hover:shadow-md hover:border-brand-red/30 transition-all cursor-pointer group flex flex-col h-full relative overflow-hidden"
+        @click="!isReportPublished && goToScheduleDetail(schedule.id)"
+        class="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm transition-all group flex flex-col h-full relative overflow-hidden"
+        :class="
+          isReportPublished
+            ? 'opacity-60 cursor-not-allowed'
+            : 'hover:shadow-md hover:border-brand-red/30 cursor-pointer'
+        "
       >
         <div
           class="absolute left-0 top-0 bottom-0 w-1 bg-brand-red opacity-80"
@@ -105,7 +133,7 @@
             class="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 group-hover:bg-brand-red group-hover:text-white transition-colors"
           >
             <svg
-              class="w-4 h-4"
+              class="w-8 h-6"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -124,11 +152,6 @@
           class="mt-auto pt-4 border-t border-gray-100 flex items-center justify-between pl-2"
         >
           <div class="flex items-center gap-2">
-            <div
-              class="w-8 h-8 bg-brand-orange/10 text-brand-orange rounded-lg flex items-center justify-center font-bold text-xs"
-            >
-              {{ schedule.school_class?.name?.substring(0, 2) || "K" }}
-            </div>
             <div>
               <p
                 class="text-xs text-gray-500 font-medium uppercase tracking-wider"
@@ -146,7 +169,27 @@
             >
               {{ calculateDateForDay(selectedDay) }}
             </p>
-            <p class="text-sm font-semibold text-gray-600">Buka Kelas</p>
+
+            <p
+              class="text-sm font-semibold text-gray-600 flex items-center justify-end gap-1.5"
+            >
+              <template v-if="isReportPublished">
+                <svg
+                  class="w-4 h-4 text-red-600 shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                  ></path>
+                </svg>
+                <span class="text-red-600">Terkunci</span>
+              </template>
+            </p>
           </div>
         </div>
       </div>
@@ -156,15 +199,18 @@
 
 <script setup>
 import { ref, computed, onMounted } from "vue";
-import { useRouter } from "vue-router";
+import { useRouter, useRoute } from "vue-router";
 import BaseSelect from "../../components/BaseSelect.vue";
 import { attendanceService } from "../../services/modules/teacher/attendanceService";
 import { useToastStore } from "../../stores/toast";
-import { useAttendanceDetailStore } from '../../stores/attendanceDetail';
+import { useAttendanceDetailStore } from "../../stores/attendanceDetail";
+import { useReportStatus } from "../../composables/useReportStatus";
 
 const router = useRouter();
+const route = useRoute();
 const toastStore = useToastStore();
 const attendanceDetailStore = useAttendanceDetailStore();
+const { isReportPublished } = useReportStatus("teacher");
 const loadingCardId = ref(null);
 
 const isLoading = ref(true);
@@ -197,7 +243,7 @@ const getCurrentDay = () => {
   return today;
 };
 
-const selectedDay = ref(getCurrentDay());
+const selectedDay = ref(route.query.day || getCurrentDay());
 
 const selectedDayLabel = computed(() => {
   const day = dayOptions.find((d) => d.value === selectedDay.value);
@@ -247,30 +293,26 @@ const formatTime = (timeString) => {
   return timeString.substring(0, 5);
 };
 
-// Navigasi ke detail jadwal dengan menyertakan query date hasil kalkulasi!
+// FIX: Prefetch SEMUA data ke store SEBELUM navigate.
+// Strategi: loading di card → data siap → navigate → ScheduleDetail + children langsung tampil.
 const goToScheduleDetail = async (scheduleId) => {
-  // Hitung tanggal aslinya berdasarkan dropdown hari
-  if (loadingCardId.value) return; 
+  if (loadingCardId.value) return;
 
-  const computedDate = calculateDateForDay(selectedDay.value);
-
-  try{
-    loadingCardId.value = scheduleId;
-    
-    // Ambil data sebelum pindah halaman!
+  loadingCardId.value = scheduleId;
+  try {
+    const computedDate = calculateDateForDay(selectedDay.value);
     await attendanceDetailStore.prefetchAllData(scheduleId, computedDate);
+
     router.push({
-    path: `/teacher/classes/${scheduleId}/detail`,
-    query: { date: computedDate }, // <-- Otomatis terkirim ke ScheduleDetail!
-  });
-  }catch(error){
-    console.error("Gagal memuat detail jadwal:", error);
-    toastStore.error("Gagal memuat detail jadwal. Silakan coba lagi.");
-  }finally{
+      path: `/teacher/classes/${scheduleId}/detail`,
+      query: { date: computedDate },
+    });
+  } catch (error) {
+    console.error("Gagal memuat data jadwal:", error);
+    toastStore.error("Gagal memuat data jadwal. Silakan coba lagi.");
+  } finally {
     loadingCardId.value = null;
   }
-
-  
 };
 
 onMounted(() => {

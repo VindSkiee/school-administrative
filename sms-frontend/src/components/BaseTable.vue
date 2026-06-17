@@ -65,7 +65,7 @@
             :key="item.id || index"
             class="hover:bg-gray-100 transition-colors bg-white"
           >
-            <td class="p-1.5 px-2 text-center font-medium text-gray-600">
+            <td class="p-4 px-2 text-center font-medium text-gray-600">
               {{ getRowNumber(index) }}
             </td>
 

@@ -6,7 +6,7 @@
       <!-- Left Section -->
       <div class="flex items-start gap-3 w-full lg:w-auto">
         <button
-          @click="$router.push('/teacher/schedules/today')"
+          @click="goBack"
           class="mt-1 text-gray-400 hover:text-brand-red transition-colors flex-shrink-0"
         >
           <svg
@@ -87,6 +87,11 @@
     </div>
 
     <div class="transition-all duration-300">
+      <div v-if="isReportPublished" class="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-3 mb-6">
+        <svg class="w-5 h-5 text-amber-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+        <p class="text-sm font-semibold text-amber-800">Rapor sudah diterbitkan. Mode lihat saja — absensi, materi, dan tugas dikunci.</p>
+      </div>
+
       <div v-if="!globalDate" class="flex justify-center py-16">
         <div
           class="animate-spin h-10 w-10 border-4 border-gray-200 border-t-brand-red rounded-full"
@@ -183,23 +188,26 @@
 
             <div v-else-if="globalDate">
               <AttendancePanel
-                :scheduleId="route.params.schedule_id"
+                :scheduleId="scheduleId"
                 :selectedDate="globalDate"
+                :locked="isReportPublished"
               />
             </div>
           </div>
 
           <div v-if="activeTab === 'materials'">
             <MaterialPanel
-              :scheduleId="route.params.schedule_id"
+              :scheduleId="scheduleId"
               :selectedDate="globalDate"
+              :locked="isReportPublished"
             />
           </div>
 
           <div v-if="activeTab === 'assignments'">
             <AssignmentPanel
-              :scheduleId="route.params.schedule_id"
+              :scheduleId="scheduleId"
               :selectedDate="globalDate"
+              :locked="isReportPublished"
             />
           </div>
         </div>
@@ -209,7 +217,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, onUnmounted } from "vue";
+import { ref, computed, onMounted, watch, onActivated } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import AttendancePanel from "./schedulePanel/AttendancePanel.vue";
 import AssignmentPanel from "./schedulePanel/AssignmentPanel.vue";
@@ -218,14 +226,21 @@ import MaterialPanel from "./schedulePanel/MaterialPanel.vue";
 import { attendanceService } from "../../services/modules/teacher/attendanceService";
 import { useToastStore } from "../../stores/toast";
 import { useAttendanceDetailStore } from "../../stores/attendanceDetail";
+import { useReportStatus } from '../../composables/useReportStatus';
 
 const attendanceDetailStore = useAttendanceDetailStore();
 const route = useRoute();
 const router = useRouter();
 const toastStore = useToastStore();
+const { isReportPublished } = useReportStatus('teacher');
 
-const activeTab = ref("attendance");
-const globalDate = ref(route.query.date || ""); 
+// PERF FIX: use local reactive state for tab and date — no URL sync needed
+const activeTab = ref(route.query.tab || "attendance");
+const globalDate = ref(route.query.date || "");
+
+// Capture schedule_id in a local ref — prevents undefined during keep-alive deactivation
+// when the route changes but this component is still in the DOM transitioning out
+const scheduleId = ref(route.params.schedule_id);
 
 // 🔥 TRACING FIX 1: Gunakan `computed` alih-alih `ref`
 // Ini memastikan variabel ini terus membaca (live-sync) dari Store tanpa terputus.
@@ -305,37 +320,53 @@ const resetToTodayOrNearest = () => {
   globalDate.value = `${y}-${m}-${d}`;
 };
 
-onMounted(async () => {
+// Navigate back to attendance schedule with the same day pre-selected
+const goBack = () => {
+  const day = scheduleInfo.value?.day_of_week?.toLowerCase() || '';
+  router.push({ path: '/teacher/schedules/today', query: day ? { day } : {} });
+};
+
+// FIX: Gunakan local ref untuk track scheduleInfo loading, bukan loadedScheduleId.
+// loadedScheduleId diperlukan oleh children (prefetchAllData) — jangan direset di parent.
+const _infoLoadedFor = ref(null);
+
+const fetchScheduleData = async () => {
   try {
-    const scheduleId = route.params.schedule_id;
-
-    // JARING PENGAMAN (F5 Refresh): Jika Store Kosong, fetch ulang dari server
-    if (!scheduleInfo.value || Object.keys(scheduleInfo.value).length === 0) {
-      const response = await attendanceService.getScheduleDetail(scheduleId);
-      
-      // 🔥 TRACING FIX 2: Tembak data langsung ke Store!
-      // Karena `scheduleInfo` sekarang berupa `computed`, ia akan otomatis mendeteksi
-      // perubahan pada Store ini dan langsung merender UI.
-      attendanceDetailStore.scheduleInfo = response.data;
+    const targetId = String(scheduleId.value);
+    // FIX: Jika AttendanceSchedule sudah prefetch data ini, skip fetch
+    if (attendanceDetailStore.isDataLoaded(targetId)) {
+      _infoLoadedFor.value = targetId;
+      return;
     }
-
-    if (!route.query.date) {
-      resetToTodayOrNearest();
+    if (_infoLoadedFor.value !== targetId) {
+      const response = await attendanceService.getScheduleDetail(scheduleId.value);
+      attendanceDetailStore.scheduleInfo = response.data;
+      _infoLoadedFor.value = targetId;
     }
   } catch (error) {
     console.error("Gagal memuat detail jadwal:", error);
     toastStore.error("Jadwal tidak ditemukan atau Anda tidak memiliki akses.");
     router.push("/teacher/attendance");
   }
-});
+};
 
-watch(globalDate, (newDate) => {
-  if (newDate) {
-    router.replace({ query: { ...route.query, date: newDate } });
+// onMounted: fire saat komponen pertama kali dibuat (termasuk di dalam keep-alive)
+onMounted(async () => {
+  await fetchScheduleData();
+  if (!route.query.date) {
+    resetToTodayOrNearest();
   }
 });
 
-onUnmounted(() => {
-  attendanceDetailStore.clearData();
+// FIX: onActivated fire saat komponen di-activate dari cache (keep-alive)
+// Menangani: ScheduleDetail → StudentProfile → Back (data masih ada, skip fetch)
+onActivated(async () => {
+  await fetchScheduleData();
+  if (!route.query.date && !globalDate.value) {
+    resetToTodayOrNearest();
+  }
 });
+
+// PERF FIX: removed router.replace on date change — prevents component remount via Vue Router
+// Date changes are handled locally via reactive state; child panels watch the selectedDate prop
 </script>

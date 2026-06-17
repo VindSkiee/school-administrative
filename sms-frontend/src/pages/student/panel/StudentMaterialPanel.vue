@@ -1,13 +1,13 @@
 <template>
   <div class="space-y-6">
     <div
-      class="bg-red-50 border border-red-200 rounded-2xl p-4 sm:p-6 shadow-sm flex items-center gap-4"
+      class="bg-red-50 border border-red-200 rounded-2xl p-4 shadow-sm flex items-center gap-4"
     >
       <div
         class="w-6 h-6 sm:w-12 sm:h-12 bg-white rounded-full flex items-center justify-center text-brand-red shrink-0 shadow-sm"
       >
         <svg
-          class="w-6 sm:h-6"
+          class="w-6 h-6"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -297,12 +297,11 @@ const fetchMaterials = async () => {
     };
 
     const res = await studentMaterialService.getMaterials(params);
-    let dataList = res.data.data || res.data;
+    const dataList = res.data.data || res.data;
 
-    // Sortir Array: Materi TERLAMA di atas, TERBARU di bawah (Kronologis)
-    materials.value = dataList.sort(
-      (a, b) => new Date(a.created_at) - new Date(b.created_at),
-    );
+    // PERF FIX: removed redundant client-side sort — backend already returns data ordered.
+    // Sort direction (DESC = newest first) is handled entirely by the backend ORDER BY clause.
+    materials.value = dataList;
   } catch (error) {
     toastStore.error("Gagal memuat pustaka materi sesi ini.");
   } finally {

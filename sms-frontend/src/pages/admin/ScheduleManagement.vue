@@ -67,7 +67,7 @@
 
       <template #cell(class_subject)="{ item }">
         <div class="flex flex-col">
-          <span class="font-bold text-brand-red">{{ item.subject?.name }}</span>
+          <span class="font-bold text-black">{{ item.subject?.name }}</span>
           <span class="text-xs font-semibold text-gray-500 mt-0.5 bg-gray-100 px-2 py-0.5 rounded w-max">
             Kelas {{ item.school_class?.name }}
           </span>
@@ -181,11 +181,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, watch } from 'vue';
+import { ref, reactive, computed, onMounted, onActivated, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useToastStore } from '../../stores/toast';
+import { useGlobalDropdownsStore } from '../../stores/globalDropdowns';
 import { scheduleService } from '../../services/modules/admin/scheduleService';
-import api from '../../services/api.js'; // Untuk fetch dropdown data pendukung
 
 import BaseTable from '../../components/BaseTable.vue';
 import BaseSelect from '../../components/BaseSelect.vue';
@@ -193,6 +193,7 @@ import BaseModal from '../../components/BaseModal.vue';
 import ConfirmModal from '../../components/ConfirmModal.vue';
 
 const toastStore = useToastStore();
+const dropdowns = useGlobalDropdownsStore();
 
 const tableColumns = [
   { key: 'day_time', label: 'Hari & Waktu' },
@@ -209,33 +210,11 @@ const isSaving = ref(false);
 const selectedClassFilter = ref(''); // Filter untuk List Table
 const selectedAcademicYearId = ref(''); // Tahun Ajaran terpilih (default: aktif)
 
-// Data Master untuk Dropdown
-const classes = ref([]);
-const subjects = ref([]);
-const teachers = ref([]);
-const academicYears = ref([]);
-
-const academicYearOptions = computed(() =>
-  academicYears.value.map((ay) => ({
-    value: ay.id,
-    label: `${ay.name} — ${ay.semester === 'odd' ? 'Ganjil' : 'Genap'}${ay.is_active ? ' (Aktif)' : ''}`,
-  })),
-);
-
-const classOptions = computed(() =>
-  classes.value.map((cls) => ({ value: cls.id, label: `Kelas ${cls.name}` })),
-);
-
-const subjectOptions = computed(() =>
-  subjects.value.map((sub) => ({ value: sub.id, label: sub.name })),
-);
-
-const teacherOptions = computed(() =>
-  teachers.value.map((teacher) => ({
-    value: teacher.id,
-    label: teacher.name,
-  })),
-);
+// Data Master for Dropdown — sourced from global cache store
+const academicYearOptions = computed(() => dropdowns.academicYearOptions);
+const classOptions = computed(() => dropdowns.classDropdownOptions);
+const subjectOptions = computed(() => dropdowns.subjectDropdownOptions);
+const teacherOptions = computed(() => dropdowns.teacherDropdownOptions);
 
 const dayOptions = [
   { value: 'monday', label: 'Senin' },
@@ -268,27 +247,17 @@ const formatTime = (time) => {
 // --- API CALLS ---
 const fetchMasterData = async () => {
   try {
-    // Kita panggil endpoint master secara paralel agar lebih cepat
-    const [resClass, resSubject, resTeacher, resYears] = await Promise.all([
-      api.get('/v1/admin/classes?per_page=100'), // Asumsi kita melonggarkan per_page untuk dropdown
-      api.get('/v1/admin/subjects?per_page=100'),
-      api.get('/v1/admin/users?role=teacher&per_page=all'),
-      api.get('/v1/admin/academic-years'),
+    // Use global dropdown store — fetches only if cache is empty
+    await Promise.all([
+      dropdowns.ensureAcademicYears(),
+      dropdowns.ensureClasses(),
+      dropdowns.ensureSubjects(),
+      dropdowns.ensureTeacherOptions(),
     ]);
-    
-    classes.value = resClass.data.data || resClass.data;
-    subjects.value = resSubject.data.data || resSubject.data;
-    const teacherData = resTeacher.data.data || resTeacher.data;
-    teachers.value = teacherData.map((teacher) => ({
-      id: teacher.id,
-      name: teacher.name,
-    }));
 
-    const yearsData = resYears.data.data || resYears.data;
-    academicYears.value = yearsData;
-    // Default ke tahun ajaran aktif
-    const activeYear = yearsData.find((y) => y.is_active);
-    if (activeYear) {
+    // Default to active year
+    const activeYear = dropdowns.activeAcademicYear;
+    if (activeYear && !selectedAcademicYearId.value) {
       selectedAcademicYearId.value = activeYear.id;
     }
   } catch (error) {
@@ -396,6 +365,11 @@ const executeDelete = async () => {
 onMounted(() => {
   fetchMasterData();
   fetchSchedules();
+});
+
+// Refresh schedule data when component is re-activated from keep-alive cache
+onActivated(() => {
+  fetchSchedules(paginationMeta.current_page);
 });
 
 watch(selectedClassFilter, () => {

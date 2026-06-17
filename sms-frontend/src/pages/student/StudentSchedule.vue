@@ -13,25 +13,19 @@
       </div>
 
       <div class="w-full md:w-56">
-        <div class="w-full md:w-56">
-          <BaseSelect
-            v-model="selectedDay"
-            :options="dayOptions"
-            placeholder="Pilih Hari"
-            @update:modelValue="fetchSchedules"
-          />
-        </div>
+        <BaseSelect
+          v-model="selectedDay"
+          :options="dayOptions"
+          placeholder="Pilih Hari"
+          @update:modelValue="fetchSchedules"
+        />
       </div>
     </div>
 
-    <div
-      v-if="isLoading"
-      class="flex flex-col justify-center items-center py-16"
-    >
+    <div v-if="isLoading" class="flex justify-center items-center py-12">
       <div
-        class="animate-spin rounded-full h-12 w-12 border-4 border-gray-100 border-t-brand-red mb-4"
+        class="animate-spin rounded-full h-10 w-10 border-b-2 border-brand-red"
       ></div>
-      <p class="text-gray-500 font-medium">Menarik jadwal dari sistem...</p>
     </div>
 
     <div
@@ -39,10 +33,10 @@
       class="bg-white rounded-2xl p-12 text-center border border-gray-200 shadow-sm flex flex-col items-center"
     >
       <div
-        class="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mb-5"
+        class="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-4"
       >
         <svg
-          class="w-12 h-12 text-gray-400"
+          class="w-10 h-10 text-gray-400"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -55,48 +49,39 @@
           ></path>
         </svg>
       </div>
-      <h3 class="text-xl font-bold text-gray-800">Asyik, Kelas Kosong! 🎉</h3>
-      <p class="text-gray-500 mt-2">
+      <h3 class="text-lg font-bold text-gray-800">Tidak Ada Jadwal</h3>
+      <p class="text-gray-500 text-sm mt-1">
         Anda tidak memiliki jadwal pelajaran pada hari
-        <span class="font-bold text-gray-700">{{ selectedDayLabel }}</span
-        >.
+        {{ selectedDayLabel }}.
       </p>
     </div>
 
-    <div v-else class="grid grid-cols-1 lg:grid-cols-3 gap-5">
-      <div 
-        v-for="schedule in schedules" 
+    <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+      <div
+        v-for="schedule in schedules"
         :key="schedule.id"
         @click="handleCardClick(schedule.id)"
-        :class="[
-          'bg-white border rounded-2xl p-5 sm:p-6 shadow-sm transition-all duration-300 relative overflow-hidden flex flex-col',
-          loadingCardId === schedule.id ? 'opacity-70 cursor-wait' : '',
-          isUnlocked ? 'border-gray-200 hover:shadow-lg hover:-translate-y-1 hover:border-brand-red/40 cursor-pointer group' : 'border-gray-100 bg-gray-50/50 opacity-75 cursor-not-allowed grayscale-[20%]'
-        ]"
+        class="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm transition-all group flex flex-col h-full relative overflow-hidden cursor-pointer"
       >
-        <div v-if="!isUnlocked" class="absolute top-4 right-4 bg-gray-200/80 backdrop-blur-sm text-gray-600 text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-md font-bold flex items-center gap-1.5 z-10">
-          🔒 Terkunci
-        </div>
-        <div v-if="isUnlocked" class="absolute left-0 top-0 bottom-0 w-1.5 bg-brand-red opacity-80 group-hover:opacity-100 transition-opacity"></div>
+        <div
+          class="absolute left-0 top-0 bottom-0 w-1 bg-brand-red opacity-80"
+        ></div>
         <div
           v-if="loadingCardId === schedule.id"
-          class="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-20 flex items-center justify-center"
+          class="absolute inset-0 bg-white/50 backdrop-blur-sm z-10 flex items-center justify-center"
         >
           <div
-            class="animate-spin rounded-full h-8 w-8 border-4 border-gray-100 border-t-brand-red"
+            class="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-red"
           ></div>
         </div>
-        <div
-          class="absolute left-0 top-0 bottom-0 w-1.5 bg-brand-red opacity-80 group-hover:opacity-100 transition-opacity"
-        ></div>
 
-        <div class="flex justify-between items-start pl-2 mb-4">
+        <div class="flex justify-between items-start mb-4 pl-2">
           <div>
             <span
-              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 text-brand-red text-xs font-bold mb-3"
+              class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-50 text-brand-red text-xs font-bold mb-2"
             >
               <svg
-                class="w-4 h-4"
+                class="w-3.5 h-3.5"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -112,17 +97,16 @@
               {{ formatTime(schedule.end_time) }}
             </span>
             <h3
-              class="text-xl sm:text-2xl font-bold text-gray-800 group-hover:text-brand-red transition-colors line-clamp-2"
+              class="text-xl font-bold text-gray-800 group-hover:text-brand-red transition-colors"
             >
               {{ schedule.subject?.name || "Mata Pelajaran" }}
             </h3>
           </div>
-
           <div
-            class="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 group-hover:bg-brand-red group-hover:text-white transition-colors shrink-0"
+            class="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 group-hover:bg-brand-red group-hover:text-white transition-colors"
           >
             <svg
-              class="w-5 h-5"
+              class="w-8 h-6"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -138,36 +122,30 @@
         </div>
 
         <div
-          class="mt-auto pt-4 border-t border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between pl-2 gap-3"
+          class="mt-auto pt-4 border-t border-gray-100 flex items-center justify-between pl-2"
         >
-          <div class="flex items-center gap-3">
-            <div
-              class="w-10 h-10 rounded-full bg-orange-100 text-brand-orange flex items-center justify-center font-bold text-sm border border-orange-200"
-            >
-              {{ schedule.teacher?.user?.name?.charAt(0) || "G" }}
-            </div>
+          <div class="flex items-center gap-2">
             <div>
               <p
-                class="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5"
+                class="text-xs text-gray-500 font-medium uppercase tracking-wider"
               >
-                Guru Pengajar
+                Guru
               </p>
-              <p class="text-sm font-bold text-gray-700">
+              <p class="text-sm font-bold text-gray-800">
                 {{ schedule.teacher?.user?.name || "-" }}
               </p>
             </div>
           </div>
-
-          <div
-            class="text-left sm:text-right bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-100"
-          >
+          <div class="text-right">
             <p
-              class="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5"
+              class="text-[10px] text-gray-400 font-medium uppercase tracking-wider"
             >
               {{ calculateDateForDay(selectedDay) }}
             </p>
-            <p class="text-xs font-semibold text-brand-red">
-              Masuk Kelas &rarr;
+            <p
+              class="text-sm font-semibold text-brand-red flex items-center justify-end gap-1.5"
+            >
+              Masuk &rarr;
             </p>
           </div>
         </div>
@@ -178,17 +156,18 @@
 
 <script setup>
 import { ref, computed, onMounted } from "vue";
-import { useRouter } from "vue-router";
+import { useRouter, useRoute } from "vue-router";
 // Sesuaikan dengan letak service API Anda
 import { studentScheduleService } from "../../services/modules/student/scheduleService";
 import { useToastStore } from "../../stores/toast";
 import BaseSelect from "../../components/BaseSelect.vue";
-import { useStudentScheduleDetailStore } from '../../stores/studentScheduleDetail';
+import { useStudentScheduleDetailStore } from "../../stores/studentScheduleDetail";
 
 const studentDetailStore = useStudentScheduleDetailStore();
 const loadingCardId = ref(null);
 
 const router = useRouter();
+const route = useRoute();
 const toastStore = useToastStore();
 
 const isLoading = ref(true);
@@ -219,7 +198,7 @@ const getCurrentDay = () => {
   return today;
 };
 
-const selectedDay = ref(getCurrentDay());
+const selectedDay = ref(route.query.day || getCurrentDay());
 
 const selectedDayLabel = computed(() => {
   const day = dayOptions.find((d) => d.value === selectedDay.value);
@@ -270,17 +249,17 @@ const goToScheduleDetail = async (scheduleId) => {
   if (loadingCardId.value) return; // Cegah double-click
 
   const computedDate = calculateDateForDay(selectedDay.value);
-  
+
   try {
     loadingCardId.value = scheduleId; // Aktifkan loading di kartu ini
-    
+
     // Tarik data ke dalam Pinia Store terlebih dahulu
     await studentDetailStore.prefetchAllData(scheduleId, computedDate);
-    
+
     // Pindah halaman dengan aman karena data dipastikan sudah matang di store
-    router.push({ 
-      path: `/student/schedules/${scheduleId}/detail`, 
-      query: { date: computedDate } 
+    router.push({
+      path: `/student/schedules/${scheduleId}/detail`,
+      query: { date: computedDate },
     });
   } catch (error) {
     toastStore.error("Gagal memuat detail kelas. Silakan coba lagi.");
@@ -289,29 +268,8 @@ const goToScheduleDetail = async (scheduleId) => {
   }
 };
 
-const getLocalTodayString = () => {
-  const today = new Date();
-  const y = today.getFullYear();
-  const m = String(today.getMonth() + 1).padStart(2, '0');
-  const d = String(today.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-};
-
-// Computed property untuk mengecek apakah hari yang dipilih = hari ini
-const isUnlocked = computed(() => {
-  const selectedDateStr = calculateDateForDay(selectedDay.value);
-  const todayStr = getLocalTodayString();
-  
-  // Tanggal yang dipilih KURANG DARI atau SAMA DENGAN hari ini (Masa lalu & Hari ini)
-  return selectedDateStr <= todayStr;
-});
-
 const handleCardClick = (scheduleId) => {
-  if (isUnlocked.value) {
-    goToScheduleDetail(scheduleId);
-  } else {
-    toastStore.warning("Jadwal ini belum dimulai. Anda belum bisa memasuki ruang kelas ini.");
-  }
+  goToScheduleDetail(scheduleId);
 };
 
 onMounted(() => {

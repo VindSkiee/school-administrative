@@ -51,7 +51,7 @@
                   type="button"
                   class="text-blue-600 hover:text-blue-800 font-semibold hover:underline flex items-center gap-1 focus:outline-none"
                 >
-                  Lihat Bukti 📎
+                  Lihat Bukti
                 </button>
                 <span v-else class="text-gray-400 italic">
                   Tidak ada lampiran
@@ -90,7 +90,7 @@
             :disabled="isAlreadySubmitted"
             class="flex-1 sm:flex-none px-4 py-2.5 bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 rounded-xl text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            ✅ Hadir Semua
+            Hadir Semua
           </button>
           <button
             @click="resetAttendance"
@@ -113,7 +113,7 @@
         >
           <span v-if="isAlreadySubmitted">🔒 Absensi Terkunci (Selesai)</span>
           <span v-else>{{
-            isSubmitting ? "Menyimpan..." : "💾 Simpan Absensi"
+            isSubmitting ? "Menyimpan..." : "Simpan Absensi"
           }}</span>
         </button>
       </div>
@@ -130,10 +130,7 @@
           <template #cell(name)="{ item }">
             <div class="flex items-center h-full font-medium text-gray-800">
               <router-link
-                :to="{
-                  name: 'TeacherStudentProfile',
-                  params: { id: item.user?.id || item.user_id || item.id },
-                }"
+                :to="{ name: 'TeacherStudentProfile', params: { id: String(item.user_id || item.user?.id || item.id) } }"
                 class="text-brand-red py-2 hover:text-brand-orange font-semibold hover:underline transition-colors"
               >
                 {{ item.user?.name || "Tanpa Nama" }}
@@ -142,7 +139,7 @@
           </template>
 
           <template #cell(status)="{ item }">
-            <div class="flex items-center gap-1.5 md:gap-2">
+            <div class="flex items-center gap-1.5 md:gap-2 justify-center">
               <button
                 @click="setAttendance(item.user?.id || item.id, 'present')"
                 :disabled="isAlreadySubmitted"
@@ -236,7 +233,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from "vue";
+import { ref, computed, onMounted, watch, onActivated } from "vue";
 import BaseTable from "../../../components/BaseTable.vue";
 import { useToastStore } from "../../../stores/toast";
 import { attendanceService } from "../../../services/modules/teacher/attendanceService";
@@ -245,14 +242,18 @@ import { useAttendanceDetailStore } from "../../../stores/attendanceDetail";
 const props = defineProps({
   scheduleId: { type: [String, Number], required: true },
   selectedDate: { type: String, required: true },
+  locked: { type: Boolean, default: false },
 });
 
 const toastStore = useToastStore();
 const attendanceDetailStore = useAttendanceDetailStore();
 
-const isAlreadySubmitted = ref(false);
+const _isAlreadySubmitted = ref(false);
+const isAlreadySubmitted = computed(() => {
+  if (props.locked) return true;
+  return _isAlreadySubmitted.value;
+});
 const isSubmitting = ref(false);
-// Default false karena kita berharap datanya instan dari pre-fetch
 const isLoading = ref(false); 
 
 const students = ref([]);
@@ -262,7 +263,7 @@ const attendanceForm = ref({});
 const tableColumns = [
   { key: "nis", label: "NIS / NISN" },
   { key: "name", label: "Nama Lengkap Siswa" },
-  { key: "status", label: "Aksi Kehadiran" },
+  { key: "status", label: "Aksi Kehadiran", align: "center" },
 ];
 
 // FUNGSI BARU: Memetakan data dari Store ke UI
@@ -271,11 +272,11 @@ const mapStoreDataToUI = () => {
   pendingRequests.value = attendanceDetailStore.pendingRequests;
   const existingData = attendanceDetailStore.existingAttendances;
 
-  isAlreadySubmitted.value = false;
+  _isAlreadySubmitted.value = false;
   attendanceForm.value = {};
 
   if (existingData && existingData.length > 0) {
-    isAlreadySubmitted.value = true;
+    _isAlreadySubmitted.value = true;
     existingData.forEach((record) => {
       const student = students.value.find(
         (s) =>
@@ -292,10 +293,12 @@ const mapStoreDataToUI = () => {
   }
 };
 
-// Fetching manual HANYA dieksekusi jika:
-// 1. User ganti tanggal di kalender Detail.
-// 2. User me-refresh browser (F5) langsung di halaman ini.
+// Fetching: Jika data sudah di-store (prefetched oleh AttendanceSchedule), langsung map.
 const fetchPanelData = async () => {
+  if (attendanceDetailStore.isDataLoaded(String(props.scheduleId))) {
+    mapStoreDataToUI();
+    return;
+  }
   isLoading.value = true;
   try {
     await attendanceDetailStore.prefetchAllData(props.scheduleId, props.selectedDate);
@@ -372,7 +375,7 @@ const submitAttendance = async () => {
     await attendanceService.storeBulk(payload);
 
     toastStore.success("Mantap! Data absensi berhasil disimpan.");
-    isAlreadySubmitted.value = true;
+    _isAlreadySubmitted.value = true;
   } catch (error) {
     const errorMessage = error.response?.data?.message || "Terjadi kesalahan saat menyimpan absensi.";
     toastStore.error(errorMessage);
@@ -421,14 +424,32 @@ watch(
   },
 );
 
+// FIX: Watch scheduleId prop — re-fetch saat schedule berubah (A → B)
+// Ini menangani keep-alive scenario: AttendanceSchedule → Schedule A → Back → Schedule B
+watch(
+  () => props.scheduleId,
+  (newId, oldId) => {
+    if (newId && String(newId) !== String(oldId)) {
+      fetchPanelData();
+    }
+  },
+);
+
+// onMounted: initial load (F5 refresh atau pertama kali)
 onMounted(() => {
-  // Pengecekan Cerdas:
-  // Jika store kosong (berarti user reload web pakai F5), lakukan fetching mandiri.
-  // Jika store sudah ada isinya (berarti masuk dari tombol Master), langsung render instan!
-  if (attendanceDetailStore.students.length === 0) {
-    fetchPanelData();
-  } else {
+  if (attendanceDetailStore.isDataLoaded(String(props.scheduleId))) {
     mapStoreDataToUI();
+  } else {
+    fetchPanelData();
+  }
+});
+
+// FIX: onActivated: skip fetch jika data sudah di-load oleh AttendanceSchedule
+onActivated(() => {
+  if (attendanceDetailStore.isDataLoaded(String(props.scheduleId))) {
+    mapStoreDataToUI();
+  } else {
+    fetchPanelData();
   }
 });
 </script>

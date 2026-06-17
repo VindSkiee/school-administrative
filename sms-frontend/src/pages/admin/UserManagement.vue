@@ -496,6 +496,11 @@ watch(searchQuery, () => {
   }, 500); // Tunggu 500ms (setengah detik)
 });
 
+// Refetch saat filter role berubah
+watch(roleFilter, () => {
+  fetchUsers(1);
+});
+
 const saveUser = async () => {
   isSaving.value = true;
   try {

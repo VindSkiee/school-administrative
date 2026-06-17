@@ -136,8 +136,11 @@
                   isClosed(item.due_date) ? 'text-red-600' : 'text-gray-800'
                 "
               >
-                {{ formatDate(item.due_date) }}
+                {{ formatDate(effectiveDeadline(item.due_date)) }}
               </span>
+              <p v-if="isReportPublished" class="text-[10px] text-amber-600 font-semibold mt-1">
+                Dikunci saat penerbitan rapor
+              </p>
             </div>
             <div class="flex justify-between items-center text-sm">
               <span class="text-gray-500">Terkumpul:</span>
@@ -215,9 +218,11 @@ import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { assignmentService } from "../../services/modules/teacher/assignmentService";
 import { useToastStore } from "../../stores/toast";
+import { useReportStatus } from '../../composables/useReportStatus';
 
 const router = useRouter();
 const toastStore = useToastStore();
+const { isReportPublished, publishedAt } = useReportStatus('teacher');
 
 const assignments = ref([]);
 const isLoading = ref(true);
@@ -226,14 +231,21 @@ const isLoading = ref(true);
 const currentFilter = ref("active"); // Default langsung ke tugas aktif
 const tabs = [
   { id: "all", label: "Semua Tugas" },
-  { id: "active", label: "⏳ Aktif (Berjalan)" },
-  { id: "closed", label: "✅ Selesai (Riwayat)" },
+  { id: "active", label: "Aktif" },
+  { id: "closed", label: "Tenggat Selesai" },
 ];
 
-// Helper Pendeteksi Waktu
+// Helper Pendeteksi Waktu — when report is published, all assignments are treated as closed
 const isClosed = (dueDate) => {
+  if (isReportPublished.value) return true;
   if (!dueDate) return false;
   return new Date() > new Date(dueDate);
+};
+
+// Effective deadline: when report is published, show published date as the cutoff
+const effectiveDeadline = (dueDate) => {
+  if (isReportPublished.value && publishedAt.value) return publishedAt.value;
+  return dueDate;
 };
 
 // Filter Otomatis Data Tugas

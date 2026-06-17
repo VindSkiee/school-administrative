@@ -1,13 +1,11 @@
 <template>
   <div class="space-y-6">
-    <div
-      class="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border-l-4 border-brand-red flex flex-col sm:flex-row items-start sm:items-center justify-between transition-all"
-    >
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
-        <h1 class="text-3xl font-bold text-gray-800 font-serif">
+        <h1 class="text-[23px] lg:text-3xl font-bold text-gray-800 font-serif">
           Selamat datang, {{ authStore.user?.name }}!
         </h1>
-        <p class="text-gray-500 mt-1">
+        <p class="text-xs lg:text-sm text-gray-500 mt-1">
           Pusat sistem administrasi sekolah hari ini.
         </p>
       </div>
@@ -35,7 +33,7 @@
       <div
         v-for="stat in computedStats"
         :key="stat.title"
-        class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between hover:shadow-md transition-shadow"
+        class="bg-white p-6 px-8 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between hover:shadow-md transition-shadow"
       >
         <div>
           <p class="text-sm font-medium text-gray-500">{{ stat.title }}</p>
@@ -66,9 +64,7 @@
         <div
           class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50"
         >
-          <h2 class="font-bold text-gray-800 font-serif">
-            Aktivitas Sistem Terbaru
-          </h2>
+          <h2 class="font-bold text-gray-800">Aktivitas Sistem Terbaru</h2>
           <router-link
             :to="{ name: 'Log Aktivitas' }"
             class="text-sm text-brand-red font-semibold hover:underline"
@@ -78,7 +74,7 @@
         </div>
         <div class="p-0 flex-1">
           <div v-if="isLoading" class="p-6 space-y-4">
-            <div v-for="i in 4" :key="i" class="flex gap-4">
+            <div v-for="i in 3" :key="i" class="flex gap-4">
               <div
                 class="w-10 h-10 bg-gray-200 rounded-full animate-pulse"
               ></div>
@@ -257,7 +253,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, onActivated, computed } from "vue";
 import { useAuthStore } from "../../stores/auth";
 import { dashboardService } from "../../services/modules/admin/dashboardService";
 
@@ -311,11 +307,11 @@ const translateModelName = (modelName) => {
 };
 
 const formatActionLabel = (action) => {
-  const normalized = String(action || '').toLowerCase();
+  const normalized = String(action || "").toLowerCase();
   const map = {
-    created: 'Membuat',
-    updated: 'Memperbarui',
-    deleted: 'Menghapus',
+    created: "Membuat",
+    updated: "Memperbarui",
+    deleted: "Menghapus",
   };
   return map[normalized] || action;
 };
@@ -324,27 +320,32 @@ const computedStats = computed(() => [
   {
     title: "Total Siswa Aktif",
     value: dashboardData.value.stats.students,
-    bgColor: "bg-red-50",
+    bgColor: "bg-transparent",
     textColor: "text-brand-red",
     icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>',
   },
   {
     title: "Total Guru",
     value: dashboardData.value.stats.teachers,
-    bgColor: "bg-orange-50",
-    textColor: "text-brand-orange",
+    bgColor: "bg-transparent",
+    textColor: "text-brand-red",
     icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>',
   },
   {
     title: "Kelas Terdaftar",
     value: dashboardData.value.stats.classes,
-    bgColor: "bg-blue-50",
-    textColor: "text-blue-600",
+    bgColor: "bg-transparent",
+    textColor: "text-brand-red",
     icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>',
   },
 ]);
 
 onMounted(() => {
+  fetchDashboardData();
+});
+
+// Refresh dashboard stats when re-activated from keep-alive cache
+onActivated(() => {
   fetchDashboardData();
 });
 </script>

@@ -1,23 +1,43 @@
 <template>
   <div class="space-y-6">
-    <div class="flex items-start justify-between gap-4 flex-col sm:flex-row">
-      <div>
+    <div
+      class="bg-white p-4 md:p-8 rounded-3xl shadow-sm border border-gray-200 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6"
+    >
+      <div class="flex items-start gap-3 w-full lg:w-auto">
         <button
           @click="goBack"
-          class="inline-flex items-center px-4 py-2 mb-4 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-lg text-sm font-semibold transition-colors"
+          class="mt-1 text-gray-400 hover:text-brand-red transition-colors flex-shrink-0"
         >
-          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
-          Kembali
         </button>
 
-        <h1 class="text-3xl font-bold text-gray-800 font-serif tracking-wide">
-          Detail Kelas {{ classData?.name || '-' }}
-        </h1>
-        <p class="text-gray-500 text-sm mt-1">
-          {{ academicYearLabel }}
-        </p>
+        <div class="min-w-0 flex-1">
+          <div class="flex flex-wrap items-center gap-2 mb-2">
+            <span class="px-2.5 py-1 bg-red-50 text-brand-red text-xs font-bold rounded-lg uppercase tracking-wider">
+              {{ academicYearLabel }}
+            </span>
+          </div>
+          <h1 class="text-xl sm:text-2xl md:text-3xl font-bold text-gray-800 font-serif break-words">
+            Detail Kelas {{ classData?.name || '-' }}
+          </h1>
+        </div>
+      </div>
+
+      <div class="flex flex-col sm:flex-row sm:items-center gap-3 shrink-0">
+        <button
+          @click="exportStudentsCsv"
+          class="inline-flex items-center justify-center px-4 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-lg text-sm font-semibold transition-colors"
+        >
+          Export Siswa CSV
+        </button>
+        <button
+          @click="exportSchedulesCsv"
+          class="inline-flex items-center justify-center px-4 py-2 bg-brand-red hover:bg-brand-orange text-white rounded-lg text-sm font-semibold transition-colors shadow-sm"
+        >
+          Export Jadwal CSV
+        </button>
       </div>
     </div>
 
@@ -32,21 +52,6 @@
     </div>
 
     <template v-else-if="classData">
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3">
-        <button
-          @click="exportStudentsCsv"
-          class="inline-flex items-center justify-center px-4 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-lg text-sm font-semibold transition-colors"
-        >
-          Export Siswa CSV
-        </button>
-        <button
-          @click="exportSchedulesCsv"
-          class="inline-flex items-center justify-center px-4 py-2 bg-brand-red hover:bg-brand-orange text-white rounded-lg text-sm font-semibold transition-colors shadow-sm"
-        >
-          Export Jadwal CSV
-        </button>
-      </div>
-
       <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
           <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">Wali Kelas</p>
@@ -168,7 +173,7 @@
               </template>
 
               <template #cell(subject)="{ item }">
-                <span class="font-semibold text-brand-red">{{ item.subject?.name || '-' }}</span>
+                <span class="font-semibold text-black">{{ item.subject?.name || '-' }}</span>
               </template>
 
               <template #cell(teacher)="{ item }">
@@ -197,12 +202,14 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useToastStore } from '../../stores/toast';
+import { useGlobalDropdownsStore } from '../../stores/globalDropdowns';
 import { classService } from '../../services/modules/admin/classService';
 import BaseTable from '../../components/BaseTable.vue';
 
 const route = useRoute();
 const router = useRouter();
 const toastStore = useToastStore();
+const dropdowns = useGlobalDropdownsStore();
 
 const classData = ref(null);
 const isLoading = ref(true);
@@ -279,17 +286,23 @@ const genderStats = computed(() => {
 
 const academicYearLabel = computed(() => {
   const academicYear = classData.value?.academic_year;
-  if (!academicYear) {
-    return '-';
+  if (academicYear) {
+    const semesterLabel = academicYear.semester === 'odd'
+      ? 'Ganjil'
+      : academicYear.semester === 'even'
+        ? 'Genap'
+        : academicYear.semester || '-';
+    return `${academicYear.name || '-'} • Semester ${semesterLabel}`;
   }
 
-  const semesterLabel = academicYear.semester === 'odd'
-    ? 'Ganjil'
-    : academicYear.semester === 'even'
-      ? 'Genap'
-      : academicYear.semester || '-';
+  // Fallback to current active academic year from global store
+  const active = dropdowns.activeAcademicYear;
+  if (active) {
+    const semesterLabel = active.semester === 'odd' ? 'Ganjil' : 'Genap';
+    return `${active.name} • Semester ${semesterLabel}`;
+  }
 
-  return `${academicYear.name || '-'} • Semester ${semesterLabel}`;
+  return '-';
 });
 
 const translateDay = (day) => {
@@ -399,6 +412,8 @@ const fetchClassDetail = async () => {
   isLoading.value = true;
 
   try {
+    // Ensure dropdowns are loaded so academicYearLabel fallback works
+    await dropdowns.ensureAcademicYears();
     const { data } = await classService.getById(route.params.id);
     classData.value = data;
     activeTab.value = 'students';
@@ -414,10 +429,14 @@ const goBack = () => {
   router.push('/admin/classes');
 };
 
+// Ubah kode watcher di ClassDetail.vue menjadi seperti ini:
 watch(
   () => route.params.id,
-  () => {
-    fetchClassDetail();
+  (newId) => {
+    // Jalankan HANYA jika user memang masih/sedang berada di halaman Detail Kelas
+    if (route.name === 'Detail Kelas') { // <-- Sesuaikan dengan 'name' di router Detail Kelasmu
+      fetchClassDetail(newId);
+    }
   },
 );
 

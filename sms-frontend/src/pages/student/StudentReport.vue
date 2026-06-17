@@ -15,7 +15,7 @@
         </p>
       </div>
 
-      <div class="relative z-10 w-full md:w-auto shrink-0 bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/20 flex flex-col sm:flex-row md:flex-col items-start sm:items-center md:items-start justify-between gap-4">
+      <div class="relative z-10 w-full md:w-auto shrink-0 bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/20 flex flex-col sm:flex-row md:flex-col items-center justify-between gap-4">
         <div>
           <p class="text-[10px] text-red-100 font-bold uppercase tracking-wider mb-1">Status Dokumen Rapor</p>
           <span 
@@ -64,9 +64,9 @@
               <th class="py-4 px-6 w-12 text-center"></th>
               <th class="py-4 px-6">Kode</th>
               <th class="py-4 px-6">Mata Pelajaran</th>
-              <th class="py-4 px-6 text-center">Tugas Dinilai</th>
-              <th class="py-4 px-6 text-center w-36">Nilai Akhir</th>
-              <th class="py-4 px-6 text-center w-32">Predikat</th>
+              <th class="py-4 px-6 text-center">Penilaian</th>
+              <th class="py-4 px-6 text-center w-28">Nilai Akhir</th>
+              <th class="py-4 px-6 text-center w-36">Predikat</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
@@ -85,7 +85,7 @@
                 </td>
                 <td class="py-4 px-6 font-mono text-xs text-gray-400 font-bold">{{ row.subject_code }}</td>
                 <td class="py-4 px-6 font-bold text-gray-800">{{ row.subject_name }}</td>
-                <td class="py-4 px-6 text-center text-gray-500 font-semibold">{{ row.total_graded_assignments }} Sesi</td>
+                <td class="py-4 px-6 text-center text-gray-500 font-semibold">{{ row.total_graded_assignments }} Penilaian</td>
                 <td class="py-4 px-6 text-center">
                   <span 
                     v-if="row.final_grade !== null" 
@@ -97,7 +97,8 @@
                   <span v-else class="text-xs text-gray-400 italic">Belum ada nilai</span>
                 </td>
                 <td class="py-4 px-6 text-center">
-                  <span v-if="row.final_grade !== null" class="font-bold text-gray-700">
+                  <span v-if="row.final_grade !== null" class="font-bold px-3 py-1.5 rounded-lg text-xs whitespace-nowrap inline-block"
+                    :class="getPredicateColor(row.final_grade)">
                     {{ getPredicate(row.final_grade) }}
                   </span>
                   <span v-else class="text-gray-300">-</span>
@@ -106,28 +107,35 @@
 
               <tr v-if="expandedRows.includes(row.subject_id)" class="bg-gray-50/50">
                 <td colspan="6" class="py-4 px-8 border-b border-gray-100">
-                  <div class="bg-white border border-gray-100 rounded-2xl p-4 shadow-inner max-w-3xl space-y-2">
+                  <div class="bg-white border border-gray-100 rounded-2xl p-4 shadow-inner max-w-3xl space-y-4">
                     <p class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                      <span>📋</span> Komponen Nilai Tugas Harian:
+                      Rincian Nilai per Komponen:
                     </p>
-                    
-                    <div v-if="row.details.length === 0" class="text-xs text-gray-400 italic py-2 pl-2">
-                      Belum ada penugasan terdaftar untuk mata pelajaran ini.
-                    </div>
 
-                    <div 
-                      v-else
-                      v-for="(task, idx) in row.details" :key="idx"
-                      class="flex items-center justify-between py-2 px-3 hover:bg-gray-50 rounded-lg text-xs transition-colors border-b border-gray-50 last:border-0"
-                    >
-                      <span class="font-semibold text-gray-700">{{ task.title }}</span>
-                      <span 
-                        class="font-black px-2 py-0.5 rounded-md"
-                        :class="typeof task.score === 'number' ? (task.score >= 75 ? 'text-green-600 bg-green-50' : 'text-brand-red bg-red-50') : 'text-gray-400 bg-gray-100'"
-                      >
-                        {{ task.score }}
-                      </span>
-                    </div>
+                    <template v-for="group in groupDetails(row.details)" :key="group.label">
+                      <div class="mb-3">
+                        <div class="flex items-center gap-2 mb-1.5">
+                          <span class="px-2 py-0.5 rounded text-[10px] font-bold" :class="group.badgeClass">{{ group.label }}</span>
+                        </div>
+                        <div v-if="group.items.length === 0" class="text-xs text-gray-400 italic py-1 pl-2">
+                          Belum ada nilai untuk komponen ini.
+                        </div>
+                        <div v-else class="space-y-1">
+                          <div
+                            v-for="(task, idx) in group.items" :key="idx"
+                            class="flex items-center justify-between py-2 px-3 hover:bg-gray-50 rounded-lg text-xs transition-colors border-b border-gray-50 last:border-0"
+                          >
+                            <span class="font-semibold text-gray-700">{{ task.title }}</span>
+                            <span
+                              class="font-black px-2 py-0.5 rounded-md"
+                              :class="task.score != null ? (task.score >= 75 ? 'text-green-600 bg-green-50' : 'text-brand-red bg-red-50') : 'text-gray-400 bg-gray-100'"
+                            >
+                              {{ task.score != null ? task.score : '—' }}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </template>
                   </div>
                 </td>
               </tr>
@@ -155,10 +163,29 @@ const isPublished = ref(false);
 const isDownloading = ref(false);
 
 const getPredicate = (score) => {
-  if (score >= 90) return 'A (Sangat Baik)';
-  if (score >= 80) return 'B (Baik)';
-  if (score >= 75) return 'C (Cukup)';
-  return 'D (Kurang)';
+  if (score >= 85) return 'Sangat Baik';
+  if (score >= 75) return 'Baik';
+  if (score >= 60) return 'Kurang';
+  return 'Sangat Kurang';
+};
+
+const getPredicateColor = (score) => {
+  if (score >= 85) return 'text-green-700 bg-green-50';
+  if (score >= 75) return 'text-blue-700 bg-blue-50';
+  if (score >= 60) return 'text-amber-700 bg-amber-50';
+  return 'text-red-700 bg-red-50';
+};
+
+const groupDetails = (details) => {
+  const tasks = details.filter(d => d.type === 'task' || !d.type);
+  const uts = details.filter(d => d.type === 'uts');
+  const uas = details.filter(d => d.type === 'uas');
+
+  return [
+    { label: 'Tugas Harian', badgeClass: 'bg-blue-50 text-blue-700', items: tasks },
+    { label: 'UTS', badgeClass: 'bg-orange-50 text-brand-orange', items: uts },
+    { label: 'UAS', badgeClass: 'bg-red-50 text-brand-red', items: uas },
+  ];
 };
 
 const toggleRow = (subjectId) => {
@@ -172,21 +199,25 @@ const toggleRow = (subjectId) => {
 const loadPageData = async () => {
   isLoading.value = true;
   try {
-    // 1. Ambil data agregasi nilai harian & detail tugas
-    const resAggregate = await studentReportService.getGradesAggregate();
-    aggregates.value = resAggregate.data.data || resAggregate.data;
+    // PERF FIX: parallel fetch — these two requests are independent, saves ~1 RTT latency
+    const [resAggregate, statusResult] = await Promise.allSettled([
+      studentReportService.getGradesAggregate(),
+      studentReportService.getSemesterReportStatus(),
+    ]);
 
-    // 2. Cek gerbang apakah rapor resmi sudah diterbitkan admin?
-    try {
-      await studentReportService.getSemesterReportStatus();
-      isPublished.value = true; // Jika sukses 200, berarti sudah dipublikasikan
-    } catch (err) {
-      if (err.response?.status === 403) {
-        isPublished.value = false; // Dikunci oleh kebijakan sekolah
-      }
+    // Process grades aggregate
+    if (resAggregate.status === 'fulfilled') {
+      aggregates.value = resAggregate.value.data.data || resAggregate.value.data;
+    } else {
+      toastStore.error('Gagal menyusun transkrip nilai semester.');
     }
-  } catch (error) {
-    toastStore.error("Gagal menyusun transkrip nilai semester.");
+
+    // Process report publish status
+    if (statusResult.status === 'fulfilled') {
+      isPublished.value = true;
+    } else {
+      isPublished.value = statusResult.reason?.response?.status !== 403 ? false : false;
+    }
   } finally {
     isLoading.value = false;
   }

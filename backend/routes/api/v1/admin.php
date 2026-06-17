@@ -15,6 +15,10 @@ use Illuminate\Support\Facades\Route;
 Route::patch('users/{id}/reset-password', [UserController::class, 'resetPassword']);
 Route::apiResource('users', UserController::class);
 
+// PERF FIX: lightweight dropdown endpoints (id+name only)
+Route::get('teachers/options', [UserController::class, 'teacherOptions']);
+Route::get('students/options', [UserController::class, 'studentOptions']);
+
 // Academic Years Management
 Route::apiResource('academic-years', AcademicYearController::class)
     ->except(['show']); // Kita skip show karena datanya sederhana
@@ -47,6 +51,7 @@ Route::middleware('throttle:heavy-api')->group(function () {
     Route::get('reports/academic', [AdminReportController::class, 'academicSummary']);
     Route::get('reports/semester/{academicYearId}/students/{studentId}/pdf', [AdminSemesterReport::class, 'downloadStudentPdf']);
     Route::post('/classes/migrate-semester', [ClassController::class, 'migrateSemester']);
+    Route::post('/classes/migrate-class', [ClassController::class, 'migrateClass']);
 });
 
 Route::get('activity-logs', [ActivityLogController::class, 'index']);

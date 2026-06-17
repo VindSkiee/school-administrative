@@ -33,13 +33,28 @@
         </div>
       </div>
 
+      <div v-else-if="isReportPublished" class="bg-amber-50 border border-amber-200 rounded-2xl p-8 text-center max-w-2xl mx-auto shadow-sm">
+        <div class="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+        </div>
+        <h3 class="text-xl font-bold text-amber-800 mb-2">Rapor Sudah Diterbitkan</h3>
+        <p class="text-amber-600 font-medium max-w-md mx-auto">
+          Semester ini telah selesai. Pengajuan izin atau sakit tidak lagi tersedia karena rapor sudah diterbitkan.
+        </p>
+      </div>
+
       <div v-else-if="isTimeLocked" class="bg-red-50 border border-red-200 rounded-2xl p-8 text-center max-w-2xl mx-auto shadow-sm">
         <div class="w-16 h-16 bg-red-100 text-brand-red rounded-full flex items-center justify-center mx-auto mb-4">
           <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
         </div>
-        <h3 class="text-xl font-bold text-red-800 mb-2">Waktu Pengajuan Habis</h3>
+        <h3 class="text-xl font-bold text-red-800 mb-2">
+          {{ isToday ? 'Waktu Pengajuan Habis' : 'Form Terkunci' }}
+        </h3>
         <p class="text-red-600 font-medium max-w-md mx-auto">
-          Jam pelajaran untuk sesi ini telah berakhir pada pukul <strong class="text-red-800">{{ formattedEndTime }}</strong>. Anda sudah tidak dapat mengajukan izin atau sakit.
+          {{ isToday
+            ? `Jam pelajaran untuk sesi ini telah berakhir pada pukul ${formattedEndTime}. Anda sudah tidak dapat mengajukan izin atau sakit.`
+            : 'Form absensi hanya dapat diakses pada hari H jadwal pelajaran ini.'
+          }}
         </p>
         <p class="text-xs text-red-500 mt-4">Hubungi guru yang bersangkutan jika terjadi kesalahan.</p>
       </div>
@@ -116,6 +131,7 @@ import { ref, onMounted, computed } from 'vue';
 import { studentScheduleService } from '../../../services/modules/student/scheduleService';
 import { useStudentScheduleDetailStore } from '../../../stores/studentScheduleDetail';
 import { useToastStore } from '../../../stores/toast';
+import { useReportStatus } from '../../../composables/useReportStatus';
 
 const props = defineProps({
   scheduleId: { type: [String, Number], required: true },
@@ -123,6 +139,7 @@ const props = defineProps({
 });
 
 const toastStore = useToastStore();
+const { isReportPublished } = useReportStatus('student');
 // Akses Pinia Store untuk mendapatkan data jadwal aslinya (termasuk start_time dan end_time)
 const studentDetailStore = useStudentScheduleDetailStore();
 
@@ -164,26 +181,21 @@ const formattedEndTime = computed(() => {
 
 // Mengecek apakah form harus dikunci?
 const isTimeLocked = computed(() => {
-  // Jika tanggal yang dipilih adalah hari-hari MASA LALU (misal kemarin), otomatis terkunci.
-  if (props.selectedDate < getLocalTodayString()) return true;
+  // Kunci jika BUKAN hari ini (baik masa lalu maupun masa depan)
+  if (!isToday.value) return true;
   
-  // Jika tanggal yang dipilih adalah HARI INI, cek apakah sudah lewat jamnya.
-  if (isToday.value) {
-    const endTime = formattedEndTime.value;
-    if (endTime === '...') return false; // Tunggu data API beres
-    
-    // Dapatkan jam saat ini dalam format HH:mm
-    const now = new Date();
-    const currentH = String(now.getHours()).padStart(2, '0');
-    const currentM = String(now.getMinutes()).padStart(2, '0');
-    const currentTime = `${currentH}:${currentM}`;
+  // Jika hari ini, cek apakah jam pelajaran sudah selesai
+  const endTime = formattedEndTime.value;
+  if (endTime === '...') return false; // Tunggu data API beres
+  
+  // Dapatkan jam saat ini dalam format HH:mm
+  const now = new Date();
+  const currentH = String(now.getHours()).padStart(2, '0');
+  const currentM = String(now.getMinutes()).padStart(2, '0');
+  const currentTime = `${currentH}:${currentM}`;
 
-    // Terkunci jika waktu saat ini MELEBIHI jam pelajaran selesai
-    return currentTime > endTime;
-  }
-  
-  // Jika masa depan (secara logika dilarang masuk dari halaman List, tapi untuk keamanan)
-  return false; 
+  // Terkunci jika waktu saat ini MELEBIHI jam pelajaran selesai
+  return currentTime > endTime;
 });
 // ===================================================================
 

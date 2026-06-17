@@ -178,11 +178,65 @@
       </section>
 
       <section v-if="activeTab === 'distribution'" class="space-y-6">
+        <!-- DANGER ZONE: Only visible when NOT yet published -->
+        <div v-if="!selectedAcademicYear?.is_report_published" class="rounded-2xl border-2 border-red-300 bg-red-50 p-5 space-y-4">
+          <div>
+            <h3 class="text-lg font-bold text-red-700">Danger Zone: Publikasi Semester</h3>
+            <p class="text-sm text-red-600 mt-1">
+              Setelah dipublikasikan, semester akan dikunci dan rapor dianggap final.
+            </p>
+          </div>
+
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div class="text-sm text-red-700">
+              Status saat ini:
+              <span class="font-bold">Belum Dipublikasikan</span>
+            </div>
+
+            <button
+              @click="handlePublishReports"
+              :disabled="isPublishing || !selectedAcademicYearId || !isAllStudentsReady"
+              class="inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              <svg
+                v-if="isPublishing"
+                class="animate-spin h-4 w-4 mr-2"
+                viewBox="0 0 24 24"
+                fill="none"
+              >
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              {{ isPublishing ? 'Memproses...' : 'Publikasikan Rapor & Kunci Semester' }}
+            </button>
+          </div>
+
+          <p v-if="!isAllStudentsReady" class="text-sm font-medium text-red-600">
+            Tombol Publikasi dikunci. Harap lengkapi semua nilai & kehadiran siswa terlebih dahulu.
+          </p>
+        </div>
+
+        <!-- LOCKED STATE: Visible when already published -->
+        <div v-else class="rounded-2xl border-2 border-green-300 bg-green-50 p-5 space-y-3">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-green-100 text-green-600 rounded-xl flex items-center justify-center shrink-0">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+            </div>
+            <div>
+              <h3 class="text-lg font-bold text-green-800">Rapor Sudah Dipublikasikan & Semester Terkunci</h3>
+              <p class="text-sm text-green-600 mt-0.5">
+                Nilai telah difinalisasi. Siswa sekarang dapat mengunduh rapor PDF mereka. Tidak ada perubahan yang dapat dilakukan.
+              </p>
+            </div>
+          </div>
+        </div>
         <div class="bg-white rounded-2xl border border-gray-200 overflow-hidden">
           <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
             <h2 class="font-semibold text-gray-800">Distribusi Rapor Siswa</h2>
             <span class="text-xs text-gray-500">{{ filteredDistributionStudents.length }} siswa</span>
           </div>
+
+          
 
           <div class="p-4 border-b border-gray-100 bg-gray-50">
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
@@ -319,58 +373,7 @@
           </div>
         </div>
 
-        <!-- DANGER ZONE: Only visible when NOT yet published -->
-        <div v-if="!selectedAcademicYear?.is_report_published" class="rounded-2xl border-2 border-red-300 bg-red-50 p-5 space-y-4">
-          <div>
-            <h3 class="text-lg font-bold text-red-700">Danger Zone: Publikasi Semester</h3>
-            <p class="text-sm text-red-600 mt-1">
-              Setelah dipublikasikan, semester akan dikunci dan rapor dianggap final.
-            </p>
-          </div>
-
-          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div class="text-sm text-red-700">
-              Status saat ini:
-              <span class="font-bold">Belum Dipublikasikan</span>
-            </div>
-
-            <button
-              @click="handlePublishReports"
-              :disabled="isPublishing || !selectedAcademicYearId || !isAllStudentsReady"
-              class="inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
-            >
-              <svg
-                v-if="isPublishing"
-                class="animate-spin h-4 w-4 mr-2"
-                viewBox="0 0 24 24"
-                fill="none"
-              >
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              {{ isPublishing ? 'Memproses...' : 'Publikasikan Rapor & Kunci Semester' }}
-            </button>
-          </div>
-
-          <p v-if="!isAllStudentsReady" class="text-sm font-medium text-red-600">
-            Tombol Publikasi dikunci. Harap lengkapi semua nilai & kehadiran siswa terlebih dahulu.
-          </p>
-        </div>
-
-        <!-- LOCKED STATE: Visible when already published -->
-        <div v-else class="rounded-2xl border-2 border-green-300 bg-green-50 p-5 space-y-3">
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 bg-green-100 text-green-600 rounded-xl flex items-center justify-center shrink-0">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
-            </div>
-            <div>
-              <h3 class="text-lg font-bold text-green-800">Rapor Sudah Dipublikasikan & Semester Terkunci</h3>
-              <p class="text-sm text-green-600 mt-0.5">
-                Nilai telah difinalisasi. Siswa sekarang dapat mengunduh rapor PDF mereka. Tidak ada perubahan yang dapat dilakukan.
-              </p>
-            </div>
-          </div>
-        </div>
+        
       </section>
     </template>
 
@@ -387,7 +390,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, onActivated, reactive, ref, watch } from 'vue';
 import BaseSelect from '../../components/BaseSelect.vue';
 import ConfirmModal from '../../components/ConfirmModal.vue';
 import { useToastStore } from '../../stores/toast';
@@ -756,8 +759,9 @@ const executePublishReports = async () => {
   }
 };
 
+// PERF FIX: skip watcher during initial load to prevent duplicate requests
 watch(selectedAcademicYearId, async (newValue, oldValue) => {
-  if (!newValue || newValue === oldValue) {
+  if (isInitialLoad.value || !newValue || newValue === oldValue) {
     return;
   }
 
@@ -777,13 +781,26 @@ watch(filteredDistributionStudents, () => {
   }
 });
 
+// PERF FIX: single-pass initial load — watcher is suppressed via isInitialLoad flag
+const isInitialLoad = ref(true);
+
 onMounted(async () => {
   isLoadingInitial.value = true;
+  isInitialLoad.value = true;
   try {
     await fetchAcademicYears();
+    // PERF FIX: single manual fetch after year is set — watcher was suppressed
     await Promise.all([fetchReportSummaries(), fetchDistributionStudents(), fetchDistributionClasses()]);
   } finally {
+    isInitialLoad.value = false;
     isLoadingInitial.value = false;
+  }
+});
+
+// Refresh report data when re-activated from keep-alive cache
+onActivated(() => {
+  if (selectedAcademicYearId.value) {
+    Promise.all([fetchReportSummaries(), fetchDistributionStudents(), fetchDistributionClasses()]);
   }
 });
 </script>

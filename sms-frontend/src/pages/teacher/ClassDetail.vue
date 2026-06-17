@@ -1,63 +1,56 @@
 <template>
   <div class="space-y-6">
     <div
-      class="bg-gradient-to-r from-brand-red to-brand-orange p-6 md:p-8 rounded-3xl text-white shadow-md relative overflow-hidden"
-    >
-      <svg
-        class="absolute top-0 right-0 transform translate-x-1/4 -translate-y-1/4 opacity-10 w-64 h-64"
-        fill="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-      </svg>
+  class="bg-gradient-to-r from-brand-red to-brand-orange p-6 md:p-8 rounded-3xl text-white shadow-md relative overflow-hidden"
+>
+  <svg
+    class="absolute top-0 right-0 transform translate-x-1/4 -translate-y-1/4 opacity-10 w-64 h-64"
+    fill="currentColor"
+    viewBox="0 0 24 24"
+  >
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+  </svg>
 
-      <div
-        class="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
+  <div class="relative z-10">
+    <div class="mb-4">
+      <button
+        @click="goBack"
+        class="inline-flex items-center gap-2 text-white/70 hover:text-white text-xs font-semibold uppercase tracking-wider transition-colors group"
       >
-        <div>
-          <button
-            @click="goBack"
-            class="mb-4 flex items-center text-white/80 hover:text-white transition-colors text-sm font-semibold"
-          >
-            <svg
-              class="w-4 h-4 mr-1"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M10 19l-7-7m0 0l7-7m-7 7h18"
-              ></path>
-            </svg>
-            Kembali ke Dashboard
-          </button>
-          <span
-            class="bg-white/20 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide backdrop-blur-sm border border-white/20"
-          >
-            Kelas Perwalian Anda
-          </span>
-          <h1 class="text-3xl md:text-4xl font-bold font-serif mt-3">
-            Kelas {{ classInfo.name }}
-          </h1>
-          <p class="text-white/90 text-sm mt-1">
-            Tahun Ajaran 2023/2024 • Semester Ganjil
-          </p>
-        </div>
-        <div
-          class="bg-white/10 p-4 rounded-2xl backdrop-blur-sm border border-white/20 text-center min-w-[120px]"
+        <svg 
+          class="w-4 h-4 transform group-hover:-translate-x-1 transition-transform" 
+          fill="none" 
+          stroke="currentColor" 
+          viewBox="0 0 24 24"
         >
-          <p class="text-4xl font-bold">{{ classInfo.total_students }}</p>
-          <p
-            class="text-xs text-white/80 font-medium uppercase tracking-wider mt-1"
-          >
-            Total Siswa
-          </p>
-        </div>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+        </svg>
+        Kembali
+      </button>
+    </div>
+
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div>
+        <span class="bg-white/20 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide backdrop-blur-sm border border-white/20">
+          Kelas Perwalian Anda
+        </span>
+        <h1 class="text-3xl md:text-4xl font-bold font-serif mt-3">
+          Kelas {{ classInfo.name }}
+        </h1>
+        <p class="text-white/90 text-sm mt-1">
+          Tahun Ajaran 2023/2024 • Semester Ganjil
+        </p>
+      </div>
+      
+      <div class="bg-white/10 p-4 rounded-2xl backdrop-blur-sm border border-white/20 text-center min-w-[120px]">
+        <p class="text-4xl font-bold">{{ classInfo.total_students }}</p>
+        <p class="text-xs text-white/80 font-medium uppercase tracking-wider mt-1">
+          Total Siswa
+        </p>
       </div>
     </div>
+  </div>
+</div>
 
     <div
       class="bg-white p-2 rounded-2xl shadow-sm border border-gray-200 inline-flex w-full md:w-auto overflow-x-auto"

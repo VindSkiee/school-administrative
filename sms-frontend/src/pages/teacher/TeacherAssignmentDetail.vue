@@ -2,8 +2,8 @@
   <div class="space-y-6 relative">
     
     <div class="flex items-center gap-4">
-      <button @click="$router.back()" class="p-2.5 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 hover:text-brand-red transition-colors shadow-sm">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+      <button @click="$router.back()" class="mt-1 text-gray-400 hover:text-brand-red transition-colors flex-shrink-0">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
       </button>
       <div>
         <h1 class="text-2xl md:text-3xl font-bold text-gray-800 font-serif">Detail Penilaian</h1>
@@ -24,8 +24,11 @@
                 {{ isClosed ? 'Waktu Habis / Ditutup' : 'Sedang Berjalan' }}
               </span>
               <span class="text-sm font-semibold text-gray-500">
-                Tenggat: <span :class="isClosed ? 'text-red-500' : 'text-gray-800'">{{ formatDate(assignment.due_date) }}</span>
+                Tenggat: <span :class="isClosed ? 'text-red-500' : 'text-gray-800'">{{ effectiveDeadlineDisplay }}</span>
               </span>
+              <p v-if="isReportPublished" class="text-[11px] text-amber-600 font-semibold mt-1">
+                Dikunci saat penerbitan rapor
+              </p>
             </div>
             <h2 class="text-2xl font-bold text-gray-800">{{ assignment.title }}</h2>
             <span class="inline-flex items-center mt-2 px-3 py-1 text-xs font-bold rounded-lg" :class="assignmentTypeBadge.classes">
@@ -96,9 +99,14 @@
                   {{ sub.grade ? sub.grade.score : '-' }}
                 </td>
                 <td class="p-4 text-right">
-                  <button @click="openGradingDrawer(sub)" class="px-4 py-2 bg-brand-red hover:bg-brand-orange text-white text-sm font-bold rounded-xl shadow-sm transition-colors">
+                  <button
+                    v-if="!isReportPublished"
+                    @click="openGradingDrawer(sub)"
+                    class="px-4 py-2 bg-brand-red hover:bg-brand-orange text-white text-sm font-bold rounded-xl shadow-sm transition-colors"
+                  >
                     {{ sub.grade ? 'Ubah Nilai' : 'Periksa' }}
                   </button>
+                  <span v-else class="text-xs text-gray-400 italic">Terkunci</span>
                 </td>
               </tr>
             </tbody>
@@ -179,9 +187,11 @@ import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { assignmentService } from '../../services/modules/teacher/assignmentService';
 import { useToastStore } from '../../stores/toast';
+import { useReportStatus } from '../../composables/useReportStatus';
 
 const route = useRoute();
 const toastStore = useToastStore();
+const { isReportPublished, publishedAt } = useReportStatus('teacher');
 
 const assignment = ref(null);
 const isLoading = ref(true);
@@ -192,8 +202,16 @@ const gradeForm = ref({ score: '', feedback: '' });
 const isGrading = ref(false);
 
 const isClosed = computed(() => {
+  // When report is published, all assignments are closed
+  if (isReportPublished.value) return true;
   if (!assignment.value?.due_date) return false;
   return new Date() > new Date(assignment.value.due_date);
+});
+
+// Effective deadline display — show published date when locked by report
+const effectiveDeadlineDisplay = computed(() => {
+  if (isReportPublished.value && publishedAt.value) return formatDate(publishedAt.value);
+  return formatDate(assignment.value?.due_date);
 });
 
 const gradedCount = computed(() => {
@@ -204,9 +222,9 @@ const gradedCount = computed(() => {
 const assignmentTypeBadge = computed(() => {
   const type = assignment.value?.type;
   switch (type) {
-    case 'uts': return { label: '📙 UTS', classes: 'bg-brand-orange/10 text-brand-orange' };
-    case 'uas': return { label: '🚨 UAS', classes: 'bg-brand-red/10 text-brand-red' };
-    default: return { label: '📘 Tugas Harian', classes: 'bg-blue-50 text-blue-700' };
+    case 'uts': return { label: 'UTS', classes: 'bg-brand-orange/10 text-brand-orange' };
+    case 'uas': return { label: 'UAS', classes: 'bg-brand-red/10 text-brand-red' };
+    default: return { label: 'Tugas Harian', classes: 'bg-blue-50 text-blue-700' };
   }
 });
 

@@ -19,16 +19,38 @@ class SemesterReportController
         protected AdminSemesterReportService $adminReportService,
     ) {}
 
+    /**
+     * GET /reports/report-status
+     * Lightweight check if the active year report is published.
+     */
+    public function reportStatus(): JsonResponse
+    {
+        $activeYear = AcademicYear::where('is_active', true)->first();
+
+        return response()->json([
+            'is_report_published' => $activeYear?->is_report_published ?? false,
+            'published_at' => $activeYear?->is_report_published ? $activeYear->updated_at : null,
+        ]);
+    }
+
     public function show(): JsonResponse
     {
         $student = auth('api')->user()->student;
 
-        if (!$student || $student->status !== 'active' || !$student->class_id) {
+        if (!$student || $student->status !== 'active') {
             return response()->json(['error' => 'Anda tidak memiliki kelas aktif.'], 403);
         }
 
+        // Get student's active class via pivot
+        $activeYear = AcademicYear::where('is_active', true)->first();
+        $class = $activeYear ? $student->classes()->where('classes.academic_year_id', $activeYear->id)->first() : null;
+
+        if (!$class) {
+            return response()->json(['error' => 'Anda belum terdaftar di kelas pada tahun ajaran aktif.'], 403);
+        }
+
         try {
-            $report = $this->reportService->getSemesterReport($student->user_id, $student->class_id);
+            $report = $this->reportService->getSemesterReport($student->user_id, $class->id);
 
             return response()->json([
                 'success' => true,
@@ -57,7 +79,7 @@ class SemesterReportController
 
             // 2. Get student's class for this academic year
             $class = $student->classes()
-                ->where('academic_year_id', $activeYear->id)
+                ->where('classes.academic_year_id', $activeYear->id)
                 ->first();
 
             if (! $class) {

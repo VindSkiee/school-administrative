@@ -1,15 +1,14 @@
 import { createRouter, createWebHistory } from "vue-router";
 import { useAuthStore } from "../stores/auth";
 
-// Komponen Halaman
-import Login from "../pages/Login.vue";
+// MainLayout is statically imported — it wraps all authenticated routes
 import MainLayout from "../layouts/MainLayout.vue";
 
 const routes = [
   {
     path: "/login",
     name: "Login",
-    component: Login,
+    component: () => import("../pages/Login.vue"),
     meta: { requiresGuest: true },
   },
   {

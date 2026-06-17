@@ -8,53 +8,53 @@
       ]"
     >
       <div
-  class="flex items-center justify-center px-2 py-2 h-16 border-b border-red-800/50 shadow-sm relative overflow-hidden shrink-0"
->
-  <div
-    class="bg-white h-full border border-white/30 rounded-xl flex items-center justify-center px-2.5 gap-2.5 relative overflow-hidden shadow-inner"
-  >
-    <div
-      class="text-black border-r-2 flex flex-col items-center px-2 py-1 min-w-[2.75rem] shrink-0"
-    >
-      <span
-        class="text-[9px] uppercase font-bold tracking-wider leading-none mb-0.5"
+        class="flex items-center justify-center px-2 py-2 h-16 border-b border-red-800/50 shadow-sm relative overflow-hidden shrink-0"
       >
-        {{ currentMonth }}
-      </span>
-      <span class="text-base font-black leading-none">
-        {{ currentDateNum }}
-      </span>
-    </div>
-
-    <div class="flex flex-col items-center">
-      <h2 class="text-xs font-bold text-gray-800 tracking-wide">
-        {{ currentDayName }}
-      </h2>
-
-      <div class="flex items-center gap-1 mt-0.5">
-        <svg
-          class="w-3 h-3 text-gray-500 shrink-0"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
+        <div
+          class="bg-white h-full border border-white/30 rounded-xl flex items-center justify-center px-2.5 gap-2.5 relative overflow-hidden shadow-inner"
         >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-          />
-        </svg>
+          <div
+            class="text-black border-r-2 flex flex-col items-center px-2 py-1 min-w-[2.75rem] shrink-0"
+          >
+            <span
+              class="text-[9px] uppercase font-bold tracking-wider leading-none mb-0.5"
+            >
+              {{ currentMonth }}
+            </span>
+            <span class="text-base font-black leading-none">
+              {{ currentDateNum }}
+            </span>
+          </div>
 
-        <span
-          class="text-[11px] text-gray-500 font-mono font-bold tracking-widest"
-        >
-          {{ currentTime }}
-        </span>
+          <div class="flex flex-col items-center">
+            <h2 class="text-xs font-bold text-gray-800 tracking-wide">
+              {{ currentDayName }}
+            </h2>
+
+            <div class="flex items-center gap-1 mt-0.5">
+              <svg
+                class="w-3 h-3 text-gray-500 shrink-0"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+
+              <span
+                class="text-[11px] text-gray-500 font-mono font-bold tracking-widest"
+              >
+                {{ currentTime }}
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
-  </div>
-</div>
 
       <!-- Navigation Menu -->
       <nav class="flex-1 overflow-y-auto py-6 px-3">
@@ -176,72 +176,61 @@
 
     <!-- MAIN CONTENT AREA (30% Vibe - Brand White) -->
     <div class="flex-1 flex flex-col min-w-0">
-      <!-- Top Navbar -->
-      <header
-        class="h-16 bg-brand-white shadow-sm flex items-center justify-between px-4 sm:px-6 z-10 border-b border-gray-200"
+  <header
+    class="h-16 bg-brand-white shadow-sm flex items-center justify-between px-4 sm:px-6 z-10 border-b border-gray-200"
+  >
+    <button
+      @click="isMobileMenuOpen = true"
+      class="md:hidden p-2 rounded-md text-gray-500 hover:text-brand-orange focus:outline-none"
+    >
+      <svg
+        class="w-6 h-6"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
       >
-        <!-- Hamburger Menu (Mobile) -->
-        <button
-          @click="isMobileMenuOpen = true"
-          class="md:hidden p-2 rounded-md text-gray-500 hover:text-brand-orange focus:outline-none"
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M4 6h16M4 12h16M4 18h16"
+        ></path>
+      </svg>
+    </button>
+
+    <div class="flex items-center space-x-4 ml-auto">
+      <button
+        @click="promptLogout"
+        class="text-sm font-medium text-gray-500 hover:text-brand-red transition-colors flex items-center"
+      >
+        <svg
+          class="w-5 h-5 mr-1"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
         >
-          <svg
-            class="w-6 h-6"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M4 6h16M4 12h16M4 18h16"
-            ></path>
-          </svg>
-        </button>
-
-        <div class="hidden md:block">
-          <h2 class="text-lg font-semibold text-gray-700 capitalize">
-            {{ $route.name?.replace(/([A-Z])/g, " $1").trim() }}
-          </h2>
-        </div>
-
-        <!-- Action Buttons -->
-        <div class="flex items-center space-x-4">
-          <!-- UBAH: Event click sekarang memanggil promptLogout, bukan handleLogout langsung -->
-          <button
-            @click="promptLogout"
-            class="text-sm font-medium text-gray-500 hover:text-brand-red transition-colors flex items-center"
-          >
-            <svg
-              class="w-5 h-5 mr-1"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-              ></path>
-            </svg>
-            <span class="hidden sm:inline">Logout</span>
-          </button>
-        </div>
-      </header>
-
-      <!-- Router View (Dynamic Content) -->
-      <main class="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-50">
-        <router-view v-slot="{ Component, route }">
-          <transition name="fade" mode="out-in">
-            <div :key="route.fullPath">
-              <component :is="Component" />
-            </div>
-          </transition>
-        </router-view>
-      </main>
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+          ></path>
+        </svg>
+        <span class="hidden sm:inline">Logout</span>
+      </button>
     </div>
+  </header>
+
+  <main class="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-50">
+    <router-view v-slot="{ Component, route }">
+      <transition name="fade" mode="out-in">
+        <keep-alive :max="10">
+          <component :is="Component" :key="route.path" />
+        </keep-alive>
+      </transition>
+    </router-view>
+  </main>
+</div>
 
     <!-- TAMBAHAN: Komponen Global Confirm Modal untuk Logout -->
     <ConfirmModal
@@ -294,23 +283,22 @@ const currentDateNum = computed(() => {
   return timeNow.value.getDate();
 });
 
-// Mengambil jam:menit:detik (contoh: "14:30:45")
+// PERF FIX: only display hours:minutes — eliminates per-second reactive invalidation across entire layout
 const currentTime = computed(() => {
   return new Intl.DateTimeFormat("id-ID", {
     hour: "2-digit",
     minute: "2-digit",
-    second: "2-digit",
     hour12: false,
   })
     .format(timeNow.value)
-    .replace(/\./g, ":"); // Pastikan formatnya titik dua
+    .replace(/\./g, ":");
 });
 
 onMounted(() => {
-  // Jalankan detak jam setiap 1000 milidetik (1 detik)
+  // PERF FIX: 60-second interval instead of 1-second — HH:MM only changes once per minute
   clockTimer = setInterval(() => {
     timeNow.value = new Date();
-  }, 1000);
+  }, 60000);
 });
 
 onUnmounted(() => {
@@ -417,7 +405,7 @@ const teacherNav = [
     name: "Buku Nilai",
     path: "/teacher/gradebook",
     icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
-  }
+  },
 ];
 
 const studentNav = [
@@ -439,7 +427,7 @@ const studentNav = [
   {
     name: "Nilai & Rapor",
     path: "/student/report",
-    icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a２ ２ ０ ０１-２ -２z",
+    icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z",
   },
 ];
 

@@ -35,6 +35,7 @@ Route::get('schedules/{schedule_id}', [AttendanceController::class, 'show']);
 Route::get('students/{id}', [\App\Http\Controllers\Api\Teacher\TeacherStudentController::class, 'showProfile']);
 
 // === Gradebook (Buku Nilai) ===
+Route::get('report-status', [TeacherGradebookController::class, 'reportStatus']);
 Route::get('gradebook/academic-years', [TeacherGradebookController::class, 'academicYears']);
 Route::get('gradebook/schedules', [TeacherGradebookController::class, 'schedules']);
 Route::get('gradebook', [TeacherGradebookController::class, 'index']);

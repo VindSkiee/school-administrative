@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\API\Admin;
 
 use App\Http\Requests\Admin\StoreUserRequest;
+use App\Models\AcademicYear;
 use App\Models\Grade;
+use App\Models\Schedule;
 use App\Models\User;
 use App\Services\UserService;
 use Illuminate\Http\JsonResponse;
@@ -13,10 +15,34 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Illuminate\Support\Facades\Storage;
+use App\Models\Student;
 
 class UserController
 {
     public function __construct(protected UserService $userService) {}
+
+    // PERF FIX: lightweight dropdown endpoint — only id+name, no pagination overhead
+    public function teacherOptions(): JsonResponse
+    {
+        $options = \App\Models\Teacher::with('user:id,name')
+            ->get()
+            ->map(fn ($t) => ['id' => $t->user_id, 'name' => $t->user?->name ?? '-'])
+            ->values();
+
+        return response()->json(['data' => $options]);
+    }
+
+    // PERF FIX: lightweight dropdown endpoint — only id+name, no pagination overhead
+    public function studentOptions(): JsonResponse
+    {
+        $options = Student::with('user:id,name')
+            ->where('status', 'active')
+            ->get()
+            ->map(fn ($s) => ['id' => $s->user_id, 'name' => $s->user?->name ?? '-', 'nis' => $s->nis ?? '-'])
+            ->values();
+
+        return response()->json(['data' => $options]);
+    }
 
     // READ (Daftar semua user dengan pagination & filter role)
     public function index(Request $request): JsonResponse
@@ -42,15 +68,8 @@ class UserController
             $query->with(['student', 'teacher', 'admin', 'principal']);
         }
 
-        // TANGKAP PERMINTAAN 'ALL' UNTUK KEBUTUHAN DROPDOWN FRONTEND
-        if ($request->query('per_page') === 'all') {
-            return response()->json([
-                'data' => $query->get(), // Dibungkus 'data' agar format response sama dengan paginate
-            ]);
-        }
-
-        $perPage = (int) $request->query('per_page', 100);
-        $perPage = max(1, min($perPage, 100));
+        // PERF FIX: removed per_page=all branch, capped max at 200
+        $perPage = min((int) $request->query('per_page', 20), 200);
         $users = $query->paginate($perPage);
 
         return response()->json($users);
@@ -123,6 +142,35 @@ class UserController
                     ->values();
 
                 $user->setAttribute('grade_history', $gradeHistory);
+            }
+
+            // Load student's schedules for the active academic year
+            $activeYear = AcademicYear::where('is_active', true)->first();
+            if ($activeYear && $user->student) {
+                $classIds = $user->student->classes()
+                    ->where('classes.academic_year_id', $activeYear->id)
+                    ->pluck('classes.id');
+
+                $studentSchedules = Schedule::with(['subject', 'teacher.user', 'schoolClass'])
+                    ->where('academic_year_id', $activeYear->id)
+                    ->whereIn('class_id', $classIds)
+                    ->orderByRaw("CASE day_of_week WHEN 'monday' THEN 1 WHEN 'tuesday' THEN 2 WHEN 'wednesday' THEN 3 WHEN 'thursday' THEN 4 WHEN 'friday' THEN 5 WHEN 'saturday' THEN 6 ELSE 7 END")
+                    ->orderBy('start_time')
+                    ->get()
+                    ->map(static function (Schedule $schedule): array {
+                        return [
+                            'id' => $schedule->id,
+                            'day_of_week' => $schedule->day_of_week,
+                            'start_time' => $schedule->start_time,
+                            'end_time' => $schedule->end_time,
+                            'subject_name' => $schedule->subject?->name,
+                            'teacher_name' => $schedule->teacher?->user?->name,
+                            'teacher_id' => $schedule->teacher?->user_id,
+                            'class_name' => $schedule->schoolClass?->name,
+                        ];
+                    });
+
+                $user->setAttribute('student_schedules', $studentSchedules);
             }
         }
 

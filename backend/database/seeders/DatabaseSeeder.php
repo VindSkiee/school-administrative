@@ -18,7 +18,7 @@ class DatabaseSeeder extends Seeder
 
             // 2. Master Kelas (Akan membuat Tahun Ajaran & Daftar Kelas)
             ClassSeeder::class,
-            ReportCardScenarioSeeder::class,
+            ReportCardUnpublishedSeeder::class,
         ]);
     }
 }

@@ -33,24 +33,20 @@ class ClassController
 
             if (isset($romanMap[$grade])) {
                 $roman = $romanMap[$grade];
+                
+                // REFACTOR: Gunakan Eloquent biasa, jangan gunakan DB::raw() atau UPPER()
+                // karena MySQL secara default sudah case-insensitive (utf8_general_ci / utf8mb4_unicode_ci)
                 $query->where(function ($subQuery) use ($grade, $roman) {
-                    $subQuery
-                        ->whereRaw('UPPER(name) LIKE ?', [strtoupper($grade).'%'])
-                        ->orWhereRaw('UPPER(name) LIKE ?', [strtoupper('KELAS '.$grade).'%'])
-                        ->orWhereRaw('UPPER(name) LIKE ?', [$roman.'%'])
-                        ->orWhereRaw('UPPER(name) LIKE ?', [strtoupper('KELAS '.$roman).'%']);
+                    $subQuery->where('name', 'like', $grade . '%')
+                             ->orWhere('name', 'like', 'KELAS ' . $grade . '%')
+                             ->orWhere('name', 'like', $roman . '%')
+                             ->orWhere('name', 'like', 'KELAS ' . $roman . '%');
                 });
             }
         }
 
-        if ($request->query('per_page') === 'all') {
-            return response()->json([
-                'data' => $query->get(),
-            ]);
-        }
-
-        $perPage = (int) $request->query('per_page', 100);
-        $perPage = max(1, min($perPage, 100));
+        // PERF FIX: removed per_page=all branch, capped max at 200
+        $perPage = min((int) $request->query('per_page', 20), 200);
         $classes = $query->paginate($perPage);
 
         return response()->json($classes);
@@ -157,7 +153,9 @@ class ClassController
     }
 
     /**
-     * BULK ACTION: Migrasi Kelas dari Ganjil ke Genap (Arsitektur Pivot)
+     * POST /classes/migrate-semester
+     * Bulk migrate classes from odd to even semester (duplicate classes, students, and schedules).
+     * Uses raw queries for maximum performance.
      */
     public function migrateSemester(Request $request)
     {
@@ -166,76 +164,315 @@ class ClassController
             'to_academic_year_id' => 'required|exists:academic_years,id|different:from_academic_year_id',
         ]);
 
+        $fromYearId = (int) $request->from_academic_year_id;
+        $toYearId = (int) $request->to_academic_year_id;
+
         try {
             DB::beginTransaction();
 
-            // Eager load 'students' agar query ke database lebih efisien
-            $oldClasses = SchoolClass::with('students')
-                ->where('academic_year_id', $request->from_academic_year_id)
+            // 1. Fetch old classes (raw query for performance)
+            $oldClasses = DB::table('classes')
+                ->where('academic_year_id', $fromYearId)
                 ->get();
 
             if ($oldClasses->isEmpty()) {
+                DB::rollBack();
                 return response()->json(['message' => 'Tidak ada kelas di tahun ajaran asal.'], 404);
             }
 
+            $now = now()->toDateTimeString();
             $migratedClassCount = 0;
             $migratedStudentCount = 0;
+            $classIdMap = []; // old_id => new_id
 
             foreach ($oldClasses as $oldClass) {
-                // 1. Duplikasi kelas (atau gunakan kelas tujuan yang sudah ada)
-                $newClass = SchoolClass::firstOrCreate(
-                    [
-                        'name' => $oldClass->name,
-                        'academic_year_id' => $request->to_academic_year_id,
-                    ],
-                    [
-                        'homeroom_teacher_id' => $oldClass->homeroom_teacher_id,
-                    ]
-                );
+                // 2. Upsert class (firstOrCreate equivalent with raw)
+                $existingNew = DB::table('classes')
+                    ->where('name', $oldClass->name)
+                    ->where('academic_year_id', $toYearId)
+                    ->first();
 
-                // Jika kelas sudah ada tapi wali kelasnya kosong, update wali kelasnya
-                if ($newClass->homeroom_teacher_id === null && $oldClass->homeroom_teacher_id) {
-                    $newClass->update([
+                if (! $existingNew) {
+                    $newClassId = DB::table('classes')->insertGetId([
+                        'name' => $oldClass->name,
+                        'academic_year_id' => $toYearId,
                         'homeroom_teacher_id' => $oldClass->homeroom_teacher_id,
+                        'created_at' => $now,
+                        'updated_at' => $now,
                     ]);
+                } else {
+                    $newClassId = $existingNew->id;
+                    // Update homeroom if empty
+                    if ($existingNew->homeroom_teacher_id === null && $oldClass->homeroom_teacher_id) {
+                        DB::table('classes')
+                            ->where('id', $newClassId)
+                            ->update(['homeroom_teacher_id' => $oldClass->homeroom_teacher_id, 'updated_at' => $now]);
+                    }
                 }
 
-                // 2. Ambil semua ID siswa dari kelas lama (Ingat, PK student adalah user_id)
-                $studentIds = $oldClass->students->pluck('user_id')->toArray();
+                $classIdMap[$oldClass->id] = $newClassId;
+                $migratedClassCount++;
+            }
 
-                if (count($studentIds) > 0) {
-                    // 3. Siapkan data pivot untuk di-sync ke kelas baru
-                    $syncData = [];
+            // 3. Bulk insert student pivots (single raw query per class)
+            foreach ($oldClasses as $oldClass) {
+                $newClassId = $classIdMap[$oldClass->id];
+
+                $studentIds = DB::table('class_student')
+                    ->where('class_id', $oldClass->id)
+                    ->pluck('student_id');
+
+                if ($studentIds->isNotEmpty()) {
+                    $pivotRows = [];
                     foreach ($studentIds as $studentId) {
-                        $syncData[$studentId] = [
-                            'academic_year_id' => $request->to_academic_year_id,
-                            'created_at' => now(),
-                            'updated_at' => now(),
+                        $pivotRows[] = [
+                            'class_id' => $newClassId,
+                            'student_id' => $studentId,
+                            'academic_year_id' => $toYearId,
+                            'created_at' => $now,
+                            'updated_at' => $now,
                         ];
                     }
 
-                    // 4. Attach siswa ke kelas baru TANPA menghapus mereka dari kelas lama
-                    // syncWithoutDetaching mencegah error jika siswa kebetulan sudah ada di kelas baru
-                    $newClass->students()->syncWithoutDetaching($syncData);
+                    // Insert ignoring duplicates (INSERT IGNORE for MySQL)
+                    foreach (array_chunk($pivotRows, 100) as $chunk) {
+                        DB::table('class_student')->insertOrIgnore($chunk);
+                    }
 
-                    $migratedStudentCount += count($studentIds);
+                    $migratedStudentCount += $studentIds->count();
                 }
+            }
 
-                $migratedClassCount++;
+            // 4. Bulk duplicate schedules (map class_id to new class_id)
+            foreach ($classIdMap as $oldClassId => $newClassId) {
+                $oldSchedules = DB::table('schedules')
+                    ->where('class_id', $oldClassId)
+                    ->where('academic_year_id', $fromYearId)
+                    ->get();
+
+                if ($oldSchedules->isNotEmpty()) {
+                    $scheduleRows = [];
+                    foreach ($oldSchedules as $sched) {
+                        $scheduleRows[] = [
+                            'class_id' => $newClassId,
+                            'subject_id' => $sched->subject_id,
+                            'teacher_id' => $sched->teacher_id,
+                            'academic_year_id' => $toYearId,
+                            'day_of_week' => $sched->day_of_week,
+                            'start_time' => $sched->start_time,
+                            'end_time' => $sched->end_time,
+                            'created_at' => $now,
+                            'updated_at' => $now,
+                        ];
+                    }
+
+                    DB::table('schedules')->insert($scheduleRows);
+                }
             }
 
             DB::commit();
 
             return response()->json([
-                'message' => "Berhasil memigrasi $migratedClassCount kelas dan menyalin $migratedStudentCount siswa ke semester baru.",
+                'message' => "Berhasil memigrasi $migratedClassCount kelas, menyalin $migratedStudentCount siswa, dan menduplikasi jadwal ke semester baru.",
             ], 200);
         } catch (Exception $e) {
             DB::rollBack();
-
             return response()->json([
                 'message' => 'Terjadi kesalahan saat migrasi.',
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * POST /classes/migrate-class
+     * Promote students to next grade level (7→8, 8→9, 9→alumni).
+     * Creates new classes for the next academic year WITHOUT homeroom teacher and schedules.
+     * Only works when active year is EVEN semester. Auto-activates the new year after success.
+     * Uses raw queries for maximum performance.
+     */
+    public function migrateClass(Request $request)
+    {
+        $request->validate([
+            'to_academic_year_id' => 'required|exists:academic_years,id',
+        ]);
+
+        $toYearId = (int) $request->to_academic_year_id;
+
+        try {
+            DB::beginTransaction();
+
+            // 1. Find current active year (must be even)
+            $activeYear = DB::table('academic_years')->where('is_active', true)->first();
+
+            if (! $activeYear) {
+                DB::rollBack();
+                return response()->json(['message' => 'Tidak ada tahun ajaran aktif.'], 422);
+            }
+
+            if ($activeYear->semester !== 'even') {
+                DB::rollBack();
+                return response()->json(['message' => 'Migrasi kelas hanya dapat dilakukan pada semester Genap.'], 422);
+            }
+
+            // 2. Verify target year is not yet active and is different
+            $targetYear = DB::table('academic_years')->where('id', $toYearId)->first();
+
+            if (! $targetYear) {
+                DB::rollBack();
+                return response()->json(['message' => 'Tahun ajaran tujuan tidak ditemukan.'], 404);
+            }
+
+            if ($targetYear->is_active) {
+                DB::rollBack();
+                return response()->json(['message' => 'Tahun ajaran tujuan sudah aktif. Gunakan tahun ajaran yang belum aktif.'], 422);
+            }
+
+            if ($targetYear->id === $activeYear->id) {
+                DB::rollBack();
+                return response()->json(['message' => 'Tahun ajaran tujuan tidak boleh sama dengan tahun ajaran aktif.'], 422);
+            }
+
+            $now = now()->toDateTimeString();
+            $fromYearId = $activeYear->id;
+
+            // 3. Fetch all classes from current even year
+            $oldClasses = DB::table('classes')->where('academic_year_id', $fromYearId)->get();
+
+            if ($oldClasses->isEmpty()) {
+                DB::rollBack();
+                return response()->json(['message' => 'Tidak ada kelas di tahun ajaran aktif.'], 404);
+            }
+
+            $promotedCount = 0;
+            $graduatedCount = 0;
+            $newClassCount = 0;
+
+            // Grade promotion map
+            $gradeMap = ['7' => '8', '8' => '9'];
+
+            foreach ($oldClasses as $oldClass) {
+                $grade = $this->extractGrade($oldClass->name);
+                $suffix = $this->extractSuffix($oldClass->name);
+
+                // Grade 9 students become alumni
+                if ($grade === '9') {
+                    // Mark all students in this class as graduated
+                    $studentIds = DB::table('class_student')
+                        ->where('class_id', $oldClass->id)
+                        ->pluck('student_id');
+
+                    if ($studentIds->isNotEmpty()) {
+                        DB::table('students')
+                            ->whereIn('user_id', $studentIds)
+                            ->update(['status' => 'graduated', 'updated_at' => $now]);
+                        $graduatedCount += $studentIds->count();
+                    }
+                    continue;
+                }
+
+                // Grade 7 and 8 get promoted
+                if (! isset($gradeMap[$grade])) {
+                    continue;
+                }
+
+                $newGrade = $gradeMap[$grade];
+                $newClassName = $newGrade . $suffix;
+
+                // Create new class in target year (no homeroom, no schedules)
+                $newClassId = DB::table('classes')->insertGetId([
+                    'name' => $newClassName,
+                    'academic_year_id' => $toYearId,
+                    'homeroom_teacher_id' => null,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
+                $newClassCount++;
+
+                // Copy students to new class
+                $studentIds = DB::table('class_student')
+                    ->where('class_id', $oldClass->id)
+                    ->pluck('student_id');
+
+                if ($studentIds->isNotEmpty()) {
+                    $pivotRows = [];
+                    foreach ($studentIds as $studentId) {
+                        $pivotRows[] = [
+                            'class_id' => $newClassId,
+                            'student_id' => $studentId,
+                            'academic_year_id' => $toYearId,
+                            'created_at' => $now,
+                            'updated_at' => $now,
+                        ];
+                    }
+
+                    foreach (array_chunk($pivotRows, 100) as $chunk) {
+                        DB::table('class_student')->insertOrIgnore($chunk);
+                    }
+
+                    $promotedCount += $studentIds->count();
+                }
+            }
+
+            // 4. Auto-activate the target academic year, deactivate old year
+            DB::table('academic_years')->where('is_active', true)->update(['is_active' => false, 'updated_at' => $now]);
+            DB::table('academic_years')->where('id', $toYearId)->update(['is_active' => true, 'updated_at' => $now]);
+
+            DB::commit();
+
+            return response()->json([
+                'message' => "Migrasi kelas berhasil! $newClassCount kelas baru dibuat, $promotedCount siswa dinaikkan kelas, $graduatedCount siswa kelas 9 diluluskan. Tahun ajaran baru telah diaktifkan.",
+            ], 200);
+        } catch (Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Terjadi kesalahan saat migrasi kelas.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Extract grade number from class name (e.g. "7A" → "7", "VIII-A" → "8").
+     */
+    private function extractGrade(string $name): ?string
+    {
+        $romanMap = ['VII' => '7', 'VIII' => '8', 'IX' => '9'];
+        $upper = strtoupper(trim($name));
+
+        foreach ($romanMap as $roman => $digit) {
+            if (str_starts_with($upper, $roman)) {
+                return $digit;
+            }
+        }
+
+        // Try digit prefix
+        if (preg_match('/^(\d)/', $name, $m)) {
+            return $m[1];
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract suffix after grade (e.g. "7A" → "A", "8-B" → "-B", "VII C" → " C").
+     */
+    private function extractSuffix(string $name): string
+    {
+        $romanMap = ['VIII', 'VII', 'IX'];
+        $upper = strtoupper(trim($name));
+
+        foreach ($romanMap as $roman) {
+            if (str_starts_with($upper, $roman)) {
+                return substr($name, strlen($roman));
+            }
+        }
+
+        // Digit prefix: take everything after first digit
+        if (preg_match('/^\d/', $name)) {
+            return substr($name, 1);
+        }
+
+        return $name;
     }
 }

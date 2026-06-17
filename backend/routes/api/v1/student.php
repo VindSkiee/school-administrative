@@ -19,6 +19,7 @@ Route::middleware('throttle:upload-api')->group(function () {
 Route::get('grades', [StudentGradeController::class, 'index']);
 Route::get('grades/aggregate', [StudentAggregate::class, 'index']);
 // Endpoint khusus yang dilindungi Gatekeeper untuk mengambil rekap nilai akhir
+Route::get('reports/report-status', [StudentSemesterReport::class, 'reportStatus']);
 Route::get('reports/semester', [StudentSemesterReport::class, 'show']);
 Route::get('reports/semester/pdf', [StudentSemesterReport::class, 'downloadPdf']);
 Route::get('dashboard', [\App\Http\Controllers\Api\Student\StudentDashboardController::class, 'index']);

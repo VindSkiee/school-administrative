@@ -27,7 +27,7 @@
             d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
           ></path>
         </svg>
-        Migrasi Ganjil ➔ Genap
+        {{ migrateButtonLabel }}
       </button>
       <button
         @click="exportClassDetailsCsv"
@@ -660,8 +660,9 @@
       @confirm="executeDeleteClass"
       @cancel="confirmModal.isOpen = false"
     />
-    <!-- MODAL: MIGRASI SEMESTER -->
+    <!-- MODAL: MIGRASI SEMESTER (Ganjil → Genap) -->
     <BaseModal
+      v-if="isActiveYearOdd"
       :isOpen="isMigrateModalOpen"
       title="Migrasi Semester (Ganjil ke Genap)"
       @close="isMigrateModalOpen = false"
@@ -669,7 +670,7 @@
       <form id="migrateForm" @submit.prevent="executeMigration" class="space-y-4">
         <div class="p-3 bg-blue-50 border border-blue-100 rounded-lg">
           <p class="text-xs text-blue-700 font-medium leading-relaxed">
-            <strong class="font-bold">Info Pintar:</strong> Fitur ini akan menduplikasi semua kelas dari semester asal ke semester tujuan beserta <strong class="font-bold">Wali Kelas</strong> dan <strong class="font-bold">Siswa</strong> di dalamnya. Jadwal pelajaran akan dikosongkan. Sangat cocok untuk perpindahan Ganjil ke Genap!
+            <strong class="font-bold">Info:</strong> Menduplikasi semua kelas dari semester Ganjil ke Genap beserta <strong class="font-bold">Wali Kelas</strong>, <strong class="font-bold">Siswa</strong>, dan <strong class="font-bold">Jadwal Pelajaran</strong>.
           </p>
         </div>
 
@@ -706,13 +707,48 @@
         </div>
       </template>
     </BaseModal>
+
+    <!-- MODAL: MIGRASI KELAS (Genap → Tahun Ajaran Baru) -->
+    <BaseModal
+      v-if="isActiveYearEven"
+      :isOpen="isClassMigrationModalOpen"
+      title="Migrasikan Kelas (Kenaikan Kelas)"
+      @close="isClassMigrationModalOpen = false"
+    >
+      <form id="classMigrateForm" @submit.prevent="executeClassMigration" class="space-y-4">
+        <div class="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <p class="text-xs text-amber-800 font-medium leading-relaxed">
+            <strong class="font-bold">Peringatan:</strong> Siswa kelas 7 naik ke 8, kelas 8 naik ke 9, dan <strong class="font-bold">kelas 9 akan diluluskan</strong>. Kelas baru dibuat <strong>tanpa</strong> wali kelas dan jadwal. Tahun ajaran baru akan otomatis aktif setelah migrasi berhasil.
+          </p>
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1.5">Tahun Ajaran Baru (Tujuan)</label>
+          <BaseSelect
+            v-model="classMigrateForm.to_academic_year_id"
+            :options="classMigrationTargetOptions"
+            placeholder="Pilih tahun ajaran baru..."
+            required
+          />
+        </div>
+      </form>
+      <template #footer>
+        <div class="flex justify-end gap-3">
+          <button type="button" @click="isClassMigrationModalOpen = false" class="px-5 py-2 bg-white border text-gray-700 font-semibold rounded-lg">Batal</button>
+          <button type="submit" form="classMigrateForm" :disabled="isSaving || !classMigrateForm.to_academic_year_id" class="px-5 py-2 bg-brand-red hover:bg-brand-orange text-white font-semibold rounded-lg disabled:opacity-70 flex items-center">
+            {{ isSaving ? 'Memigrasi...' : 'Migrasikan Kelas' }}
+          </button>
+        </div>
+      </template>
+    </BaseModal>
   </div>
 </template>
 
 <script setup>
 import { Icon } from "@iconify/vue";
-import { ref, reactive, computed, onMounted, watch } from "vue";
+import { ref, reactive, computed, onMounted, onActivated, watch } from "vue";
 import { useToastStore } from "../../stores/toast";
+import { useGlobalDropdownsStore } from "../../stores/globalDropdowns";
 import { classService } from "../../services/modules/admin/classService";
 import { userService } from "../../services/modules/admin/userService";
 import api from "../../services/api"; // Akses langsung untuk route yang belum ada servicenya
@@ -724,6 +760,7 @@ import BaseModal from "../../components/BaseModal.vue";
 import ConfirmModal from "../../components/ConfirmModal.vue";
 
 const toastStore = useToastStore();
+const dropdowns = useGlobalDropdownsStore();
 
 // --- CONFIGURATION ---
 const tableColumns = [
@@ -744,9 +781,10 @@ const paginationMeta = reactive({
   last_page: 1,
   per_page: 100,
 });
-const academicYearOptions = ref([]);
-const teacherOptions = ref([]);
-const availableStudents = ref([]);
+const academicYearOptions = computed(() => dropdowns.academicYearOptions);
+const allAcademicYearsRaw = computed(() => dropdowns.academicYearsRaw);
+const teacherOptions = computed(() => dropdowns.teacherDropdownOptions);
+const availableStudents = computed(() => dropdowns.studentOptionsRaw);
 
 const classGradeFilter = ref("");
 const academicYearFilter = ref("");
@@ -945,62 +983,37 @@ const isAllSelected = computed({
 });
 
 // --- DATA FETCHING ---
+// PERF FIX: single-pass initial load — watcher is suppressed via isInitialLoad flag
+const isInitialLoad = ref(true);
+
 const fetchInitialData = async () => {
   isLoading.value = true;
+  isInitialLoad.value = true;
   try {
-    // 1. Ambil Data Kelas untuk tabel (Pagination)
-    const resClasses = await classService.getAll({
-      page: 1,
-      per_page: paginationMeta.per_page,
-      academic_year_id: academicYearFilter.value || undefined,
-      grade: classGradeFilter.value || undefined,
-    });
-    const classPayload = resClasses.data;
-    classes.value = classPayload.data || classPayload;
-    paginationMeta.total = classPayload.total ?? classes.value.length;
-    paginationMeta.current_page = classPayload.current_page ?? 1;
-    paginationMeta.last_page = classPayload.last_page ?? 1;
-    paginationMeta.per_page = classPayload.per_page ?? paginationMeta.per_page;
+    // Use global dropdown store — fetches only if cache is empty
+    await Promise.all([
+      dropdowns.ensureAcademicYears(),
+      dropdowns.ensureTeacherOptions(),
+      dropdowns.ensureStudentOptions(),
+    ]);
 
-    // 1b. Ambil semua kelas untuk kebutuhan logika internal
-    const resAllClasses = await classService.getAll({ per_page: "all" });
-    allClasses.value = resAllClasses.data.data || resAllClasses.data;
-
-    // 2. Ambil Data Tahun Ajaran (Untuk Dropdown Buat Kelas)
-    const resYears = await api.get("/v1/admin/academic-years");
-    const yearsData = resYears.data.data || resYears.data;
-    academicYearOptions.value = yearsData.map((y) => ({
-      label: `${y.name} ${y.semester === "odd" ? "(Ganjil)" : "(Genap)"} ${y.is_active ? " - Aktif" : ""}`,
-      value: y.id,
-    }));
-
-    // Default filter ke tahun ajaran aktif
-    const activeYear = yearsData.find((y) => y.is_active);
+    // Default filter to active year (only on first load)
+    const activeYear = dropdowns.activeAcademicYear;
     if (activeYear && !academicYearFilter.value) {
       academicYearFilter.value = activeYear.id;
     }
 
-    // 3. Ambil Data Guru (Langsung difilter dari Backend & tarik semua data)
-    const resTeachers = await userService.getAll({
-      role: "teacher",
-      per_page: "all",
-    });
-    const teachersData = resTeachers.data.data || resTeachers.data;
-    teacherOptions.value = teachersData.map((t) => ({
-      label: t.name,
-      value: t.id,
-    }));
+    // fetch classes AFTER year is set — single fetch, no watcher duplicate
+    await fetchClasses(1);
 
-    // 4. Ambil Data Siswa (Langsung difilter dari Backend & tarik semua data)
-    const resStudents = await userService.getAll({
-      role: "student",
-      per_page: "all",
-    });
-    availableStudents.value = resStudents.data.data || resStudents.data;
+    // Fetch all classes for internal logic (migration, etc.)
+    const resAllClasses = await classService.getAll({ per_page: 200 });
+    allClasses.value = resAllClasses.data.data || resAllClasses.data;
   } catch (error) {
     toastStore.error("Gagal memuat data referensi sistem.");
-    console.error(error); // Membantu debug jika ada error di console browser
+    console.error(error);
   } finally {
+    isInitialLoad.value = false;
     isLoading.value = false;
   }
 };
@@ -1195,7 +1208,9 @@ const exportClassDetailsCsv = async () => {
     isExportingCsv.value = false;
   }
 };
+// PERF FIX: skip watcher during initial load to prevent duplicate class fetch
 watch([academicYearFilter, classGradeFilter], () => {
+  if (isInitialLoad.value) return;
   fetchClasses(1);
 });
 
@@ -1219,6 +1234,7 @@ const saveClass = async () => {
       toastStore.success("Kelas baru berhasil dibuat.");
     }
     isClassModalOpen.value = false;
+    dropdowns.invalidateAll(); // Classes changed — invalidate global cache
     refreshClasses();
   } catch (error) {
     toastStore.error(error.response?.data?.message || "Gagal menyimpan kelas.");
@@ -1238,6 +1254,7 @@ const executeDeleteClass = async () => {
   try {
     await classService.delete(confirmModal.targetId);
     toastStore.success("Kelas berhasil dihapus.");
+    dropdowns.invalidateAll(); // Classes changed — invalidate global cache
     refreshClasses();
   } catch (error) {
     // Tangkap error 403 dari controller jika kelas masih ada siswanya
@@ -1328,18 +1345,90 @@ const saveStudentAssignment = async () => {
   }
 };
 
+// --- MIGRATION MODE COMPUTED ---
+const activeAcademicYear = computed(() => {
+  return allAcademicYearsRaw.value.find(y => y.is_active) || null;
+});
+
+const isActiveYearOdd = computed(() => {
+  return activeAcademicYear.value?.semester === 'odd';
+});
+
+const isActiveYearEven = computed(() => {
+  return activeAcademicYear.value?.semester === 'even';
+});
+
+// Available target years for class migration (inactive years only)
+const classMigrationTargetOptions = computed(() => {
+  return allAcademicYearsRaw.value
+    .filter(y => !y.is_active && y.id !== activeAcademicYear.value?.id)
+    .map(y => ({
+      label: `${y.name} ${y.semester === 'odd' ? '(Ganjil)' : '(Genap)'}`,
+      value: y.id,
+    }));
+});
+
+const canMigrateClass = computed(() => {
+  return isActiveYearEven.value && classMigrationTargetOptions.value.length > 0;
+});
+
+const migrateButtonLabel = computed(() => {
+  if (isActiveYearOdd.value) return 'Migrasi Ganjil ➔ Genap';
+  if (isActiveYearEven.value) return 'Migrasikan Kelas';
+  return 'Migrasi';
+});
+
 // --- STATE MIGRASI ---
 const isMigrateModalOpen = ref(false);
+const isClassMigrationModalOpen = ref(false);
 const migrateForm = reactive({
   from_academic_year_id: "",
+  to_academic_year_id: ""
+});
+const classMigrateForm = reactive({
   to_academic_year_id: ""
 });
 
 // --- FUNGSI MIGRASI ---
 const openMigrateModal = () => {
-  migrateForm.from_academic_year_id = "";
-  migrateForm.to_academic_year_id = "";
-  isMigrateModalOpen.value = true;
+  if (isActiveYearOdd.value) {
+    // Semester migration mode
+    migrateForm.from_academic_year_id = "";
+    migrateForm.to_academic_year_id = "";
+    isMigrateModalOpen.value = true;
+  } else if (isActiveYearEven.value) {
+    // Class promotion mode
+    if (!canMigrateClass.value) {
+      toastStore.error("Buat tahun ajaran baru terlebih dahulu sebelum melakukan migrasi kelas.");
+      return;
+    }
+    classMigrateForm.to_academic_year_id = "";
+    isClassMigrationModalOpen.value = true;
+  } else {
+    toastStore.error("Tidak ada tahun ajaran aktif untuk migrasi.");
+  }
+};
+
+const executeClassMigration = async () => {
+  if (!classMigrateForm.to_academic_year_id) {
+    toastStore.error("Pilih tahun ajaran tujuan.");
+    return;
+  }
+
+  isSaving.value = true;
+  try {
+    const response = await classService.migrateClass(classMigrateForm);
+    toastStore.success(response.data.message || "Migrasi kelas berhasil!");
+    isClassMigrationModalOpen.value = false;
+
+    // Invalidate all cached dropdowns (years, classes changed)
+    dropdowns.invalidateAll();
+    await fetchInitialData();
+  } catch (error) {
+    toastStore.error(error.response?.data?.message || "Gagal melakukan migrasi kelas.");
+  } finally {
+    isSaving.value = false;
+  }
 };
 
 const executeMigration = async () => {
@@ -1353,7 +1442,8 @@ const executeMigration = async () => {
     const response = await classService.migrateSemester(migrateForm);
     toastStore.success(response.data.message || "Migrasi semester berhasil!");
     isMigrateModalOpen.value = false;
-    refreshClasses(); // Refresh data tabel kelas
+    dropdowns.invalidateAll(); // Years + classes changed
+    await fetchInitialData();
   } catch (error) {
     toastStore.error(error.response?.data?.message || "Gagal melakukan migrasi semester.");
   } finally {
@@ -1363,5 +1453,10 @@ const executeMigration = async () => {
 
 onMounted(() => {
   fetchInitialData();
+});
+
+// Refresh class data when component is re-activated from keep-alive cache
+onActivated(() => {
+  refreshClasses();
 });
 </script>

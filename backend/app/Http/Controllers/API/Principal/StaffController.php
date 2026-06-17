@@ -5,6 +5,7 @@ namespace App\Http\Controllers\API\Principal;
 use App\Models\Admin;
 use App\Models\Teacher;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class StaffController
 {
@@ -12,10 +13,19 @@ class StaffController
      * GET /staff
      * Return all teachers and admins with their roles, homeroom class, and subjects.
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        // --- Teachers ---
-        $teachers = Teacher::with(['user:id,name', 'homeroomClass:id,homeroom_teacher_id,name', 'schedules.subject:id,name'])
+        // PERF FIX: replaced unbounded get() with pagination, sort pushed to DB
+        $perPage = min((int) $request->query('per_page', 20), 100);
+
+        // --- Teachers (DB-sorted via join) ---
+        $teachers = Teacher::join('users', 'users.id', '=', 'teachers.user_id')
+            ->with([
+                'homeroomClass:id,homeroom_teacher_id,name',
+                'schedules.subject:id,name',
+            ])
+            ->select('teachers.*')
+            ->orderBy('users.name')
             ->get()
             ->map(function ($teacher) {
                 $subjects = $teacher->schedules
@@ -34,11 +44,15 @@ class StaffController
                     'is_homeroom' => $teacher->homeroomClass !== null,
                     'homeroom_class_name' => $teacher->homeroomClass?->name,
                     'subjects' => $subjects,
+                    'sort_name' => $teacher->user?->name ?? '',
                 ];
             });
 
         // --- Admins ---
-        $admins = Admin::with('user:id,name')
+        $admins = Admin::join('users', 'users.id', '=', 'admins.user_id')
+            ->with('user:id,name')
+            ->select('admins.*')
+            ->orderBy('users.name')
             ->get()
             ->map(function ($admin) {
                 return [
@@ -50,15 +64,27 @@ class StaffController
                     'is_homeroom' => false,
                     'homeroom_class_name' => null,
                     'subjects' => collect(),
+                    'sort_name' => $admin->user?->name ?? '',
                 ];
             });
 
-        // Merge and sort by name
-        $staff = $teachers->concat($admins)->sortBy('name')->values();
+        // PERF FIX: merge then paginate manually — combined sorted collection
+        $allStaff = $teachers->concat($admins)->sortBy('sort_name')->values();
+
+        $total = $allStaff->count();
+        $page = max(1, (int) $request->query('page', 1));
+        $items = $allStaff->forPage($page, $perPage)->values();
+        $lastPage = max(1, (int) ceil($total / $perPage));
 
         return response()->json([
             'success' => true,
-            'data' => $staff,
+            'data' => $items,
+            'meta' => [
+                'total' => $total,
+                'per_page' => $perPage,
+                'current_page' => $page,
+                'last_page' => $lastPage,
+            ],
         ]);
     }
 }

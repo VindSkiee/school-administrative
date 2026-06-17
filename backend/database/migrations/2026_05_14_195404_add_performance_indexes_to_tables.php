@@ -29,6 +29,13 @@ return new class extends Migration {
         Schema::table('classes', function (Blueprint $table) {
             $table->index('academic_year_id');
         });
+
+        Schema::table('students', function (Blueprint $table) {
+            // Ini akan membuat withCount('students') memuat dalam 0.01 detik!
+            if (Schema::hasColumn('students', 'class_id')) {
+                $table->index('class_id');
+            }
+        });
     }
 
     public function down(): void
@@ -37,6 +44,21 @@ return new class extends Migration {
             $table->dropIndex(['schedule_id', 'date']);
             $table->dropIndex(['status']);
         });
-        // ... drop index lainnya untuk rollback
+        Schema::table('submissions', function (Blueprint $table) {
+            $table->dropIndex(['assignment_id', 'student_id']);
+        });
+        Schema::table('schedules', function (Blueprint $table) {
+            $table->dropIndex(['class_id']);
+            $table->dropIndex(['teacher_id']);
+            $table->dropIndex(['day_of_week']);
+        });
+        Schema::table('classes', function (Blueprint $table) {
+            $table->dropIndex(['academic_year_id']);
+        });
+        Schema::table('students', function (Blueprint $table) {
+            if (Schema::hasColumn('students', 'class_id')) {
+                $table->dropIndex(['class_id']);
+            }
+        });
     }
 };
