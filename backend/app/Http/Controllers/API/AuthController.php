@@ -68,13 +68,23 @@ class AuthController
     // 1. TAMBAHKAN FUNGSI HELPER INI
     private function formatUserData(User $user): array
     {
-        // 1. Eager load relasi bersarang (nested) yang dibutuhkan oleh Vue Frontend
+        $activeYear = \App\Models\AcademicYear::where('is_active', true)->first();
+
+        // PERF FIX: removed 'teacher.schedules' from loadMissing — it loaded ALL years unscoped
         $user->loadMissing([
-            'student.classes.academicYear', // Memuat riwayat kelas siswa beserta data tahun ajarannya
-            'teacher.schedules',            // Memuat jadwal mengajar untuk profil guru
-            'admin', 
-            'principal'
+            'student.classes.academicYear',
+            'admin',
+            'principal',
         ]);
+
+        // PERF FIX: load teacher.schedules scoped to active academic year only
+        if ($user->teacher && ! $user->teacher->relationLoaded('schedules')) {
+            $schedulesQuery = $user->teacher->schedules();
+            if ($activeYear) {
+                $schedulesQuery->where('academic_year_id', $activeYear->id);
+            }
+            $user->teacher->setRelation('schedules', $schedulesQuery->with(['subject', 'schoolClass'])->get());
+        }
 
         $userData = [
             'id' => $user->id,

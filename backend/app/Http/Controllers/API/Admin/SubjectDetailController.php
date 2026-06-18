@@ -23,20 +23,26 @@ class SubjectDetailController
         $subject = Subject::findOrFail($subjectId);
         $academicYearId = (int) $request->query('academic_year_id');
 
-        // Get teachers who teach this subject in the given academic year
-        $teachers = Schedule::with(['teacher.user', 'schoolClass'])
-            ->where('subject_id', $subjectId)
-            ->where('academic_year_id', $academicYearId)
-            ->get()
-            ->map(function ($schedule) {
-                return [
-                    'teacher_id' => $schedule->teacher_id,
-                    'teacher_name' => $schedule->teacher?->user?->name ?? '-',
-                    'class_name' => $schedule->schoolClass?->name ?? '-',
-                ];
-            })
-            ->unique('teacher_id')
-            ->values();
+        // PERF FIX: use raw SQL with GROUP BY instead of loading all schedules + dedup in PHP
+        $teacherRows = \Illuminate\Support\Facades\DB::select("
+            SELECT DISTINCT
+                s.teacher_id,
+                u.name AS teacher_name,
+                sc.name AS class_name
+            FROM schedules s
+            INNER JOIN teachers t ON t.user_id = s.teacher_id
+            INNER JOIN users u ON u.id = t.user_id
+            INNER JOIN classes sc ON sc.id = s.class_id
+            WHERE s.subject_id = ?
+            AND s.academic_year_id = ?
+            ORDER BY u.name, sc.name
+        ", [$subjectId, $academicYearId]);
+
+        $teachers = collect($teacherRows)->map(fn ($row) => [
+            'teacher_id' => $row->teacher_id,
+            'teacher_name' => $row->teacher_name ?? '-',
+            'class_name' => $row->class_name ?? '-',
+        ])->values();
 
         // Get or prepare competency settings
         $setting = SubjectCompetencySetting::where('subject_id', $subjectId)

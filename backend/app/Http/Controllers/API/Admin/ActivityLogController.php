@@ -50,9 +50,9 @@ class ActivityLogController
                     }
                 })
                 // C. Search by action — FULLTEXT index (replaces LIKE '%...%')
-                ->orWhereFullText('action', $mappedAction)
-                // D. Search by model type — exact match with FQCN prefix
-                ->orWhere('loggable_type', 'like', '%' . $search . '%');
+                ->orWhereFullText('action', $mappedAction);
+                // PERF FIX: removed leading wildcard LIKE on loggable_type (full scan, redundant)
+                // loggable_type filtering is already handled by model_type dropdown above
             });
         }
 

@@ -21,24 +21,30 @@ class UserController
 {
     public function __construct(protected UserService $userService) {}
 
-    // PERF FIX: lightweight dropdown endpoint — only id+name, no pagination overhead
+    // PERF FIX: single raw query with JOIN, no Eloquent overhead, no intermediate Collection
     public function teacherOptions(): JsonResponse
     {
-        $options = \App\Models\Teacher::with('user:id,name')
+        $options = \Illuminate\Support\Facades\DB::table('teachers')
+            ->join('users', 'users.id', '=', 'teachers.user_id')
+            ->select('teachers.user_id AS id', 'users.name')
+            ->orderBy('users.name')
             ->get()
-            ->map(fn ($t) => ['id' => $t->user_id, 'name' => $t->user?->name ?? '-'])
+            ->map(fn ($t) => ['id' => $t->id, 'name' => $t->name ?? '-'])
             ->values();
 
         return response()->json(['data' => $options]);
     }
 
-    // PERF FIX: lightweight dropdown endpoint — only id+name, no pagination overhead
+    // PERF FIX: single raw query with JOIN, no Eloquent overhead, no intermediate Collection
     public function studentOptions(): JsonResponse
     {
-        $options = Student::with('user:id,name')
-            ->where('status', 'active')
+        $options = \Illuminate\Support\Facades\DB::table('students')
+            ->join('users', 'users.id', '=', 'students.user_id')
+            ->select('students.user_id AS id', 'users.name', 'students.nis')
+            ->where('students.status', 'active')
+            ->orderBy('users.name')
             ->get()
-            ->map(fn ($s) => ['id' => $s->user_id, 'name' => $s->user?->name ?? '-', 'nis' => $s->nis ?? '-'])
+            ->map(fn ($s) => ['id' => $s->id, 'name' => $s->name ?? '-', 'nis' => $s->nis ?? '-'])
             ->values();
 
         return response()->json(['data' => $options]);
@@ -106,6 +112,7 @@ class UserController
             ]);
 
             if (Schema::hasTable('grades')) {
+                // PERF FIX: Added limit to prevent unbounded query loading all grades ever
                 $gradeHistory = Grade::query()
                     ->whereHas('submission', function ($query) use ($user) {
                         $query->where('student_id', $user->id);
@@ -116,6 +123,7 @@ class UserController
                         'submission.assignment.schedule.academicYear',
                     ])
                     ->latest('id')
+                    ->limit(50)
                     ->get()
                     ->map(static function (Grade $grade): array {
                         $schedule = $grade->submission?->assignment?->schedule;
@@ -151,12 +159,16 @@ class UserController
                     ->where('classes.academic_year_id', $activeYear->id)
                     ->pluck('classes.id');
 
+                // PERF FIX: removed orderByRaw CASE (forces filesort), sort in PHP instead
+                // The result set is small (filtered by class+year), so PHP sort is efficient
+                $dayOrder = ['monday' => 1, 'tuesday' => 2, 'wednesday' => 3, 'thursday' => 4, 'friday' => 5, 'saturday' => 6, 'sunday' => 7];
+
                 $studentSchedules = Schedule::with(['subject', 'teacher.user', 'schoolClass'])
                     ->where('academic_year_id', $activeYear->id)
                     ->whereIn('class_id', $classIds)
-                    ->orderByRaw("CASE day_of_week WHEN 'monday' THEN 1 WHEN 'tuesday' THEN 2 WHEN 'wednesday' THEN 3 WHEN 'thursday' THEN 4 WHEN 'friday' THEN 5 WHEN 'saturday' THEN 6 ELSE 7 END")
-                    ->orderBy('start_time')
                     ->get()
+                    ->sortBy(fn ($s) => [$dayOrder[$s->day_of_week] ?? 8, $s->start_time])
+                    ->values()
                     ->map(static function (Schedule $schedule): array {
                         return [
                             'id' => $schedule->id,

@@ -33,8 +33,9 @@ class MaterialController extends Controller
                 $q->where('class_id', $activeClass->id); // Ganti ke ID dari tabel pivot
             });
 
-        // Fitur FILTER PENCARIAN (Judul / Deskripsi)
-        if ($request->filled('search')) {
+        // PERF FIX: only apply wildcard search when query has >= 3 chars
+        // Single/double char searches with % prefix cause full table scan
+        if ($request->filled('search') && mb_strlen($request->search) >= 3) {
             $search = $request->search;
             $query->where(function($q) use ($search) {
                 $q->where('title', 'like', "%{$search}%")

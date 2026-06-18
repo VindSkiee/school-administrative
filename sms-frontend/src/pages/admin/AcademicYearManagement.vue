@@ -258,6 +258,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from "vue";
 import { useToastStore } from "../../stores/toast";
+import { useGlobalDropdownsStore } from "../../stores/globalDropdowns";
 import { academicYearService } from "../../services/modules/admin/academicYearService";
 
 import BaseSelect from "../../components/BaseSelect.vue";
@@ -266,6 +267,7 @@ import BaseModal from "../../components/BaseModal.vue";
 import ConfirmModal from "../../components/ConfirmModal.vue";
 
 const toastStore = useToastStore();
+const dropdowns = useGlobalDropdownsStore();
 
 const tableColumns = [
   { key: "name", label: "Tahun Ajaran" },
@@ -365,9 +367,11 @@ const executeConfirmAction = async () => {
     if (confirmModal.actionType === "set_active") {
       await academicYearService.setActive(confirmModal.targetId);
       toastStore.success("Tahun ajaran berhasil diaktifkan.");
+      dropdowns.invalidateAcademicYears();
     } else if (confirmModal.actionType === "delete") {
       await academicYearService.delete(confirmModal.targetId);
       toastStore.success("Tahun ajaran berhasil dihapus.");
+      dropdowns.invalidateAcademicYears();
     }
     fetchAcademicYears(paginationMeta.current_page);
   } catch (error) {

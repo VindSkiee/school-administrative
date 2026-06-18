@@ -68,33 +68,45 @@ class TeacherStudentController extends Controller
                 ->orderBy('start_time')
                 ->get();
 
+            $allScheduleIds = $schedules->pluck('id')->toArray();
+
+            // PERF FIX: Bulk prefetch all attendance in ONE query (instead of 2N queries)
+            $allAttendance = Attendance::whereIn('schedule_id', $allScheduleIds)
+                ->where('student_id', $studentUserId)
+                ->get()
+                ->groupBy('schedule_id');
+
+            // PERF FIX: Bulk prefetch all assignments in ONE query (instead of N queries)
+            $allAssignments = Assignment::whereIn('schedule_id', $allScheduleIds)
+                ->get()
+                ->groupBy('schedule_id');
+
+            // PERF FIX: Bulk prefetch all submissions + grades in ONE query (instead of N queries)
+            $allAssignmentIds = $allAssignments->flatten()->pluck('id')->toArray();
+            $allSubmissions = Submission::with('grade')
+                ->where('student_id', $studentUserId)
+                ->whereIn('assignment_id', $allAssignmentIds)
+                ->get()
+                ->keyBy('assignment_id');
+
             // 7. Build grades per subject
-            $subjectsGrades = $schedules->map(function (Schedule $schedule) use ($studentUserId, $teacherId, $isHomeroom) {
+            $subjectsGrades = $schedules->map(function (Schedule $schedule) use ($studentUserId, $teacherId, $isHomeroom, $allAttendance, $allAssignments, $allSubmissions) {
                 $isMySubject = (int) $schedule->teacher_id === $teacherId;
 
-                // Attendance for this schedule + student
-                $attendanceQuery = Attendance::where('schedule_id', $schedule->id)
-                    ->where('student_id', $studentUserId);
-                $totalMeetings = $attendanceQuery->count();
-                $presentCount = (clone $attendanceQuery)->where('status', 'present')->count();
+                // PERF FIX: Use pre-fetched data instead of per-schedule query
+                $scheduleAttendance = $allAttendance->get($schedule->id, collect());
+                $totalMeetings = $scheduleAttendance->count();
+                $presentCount = $scheduleAttendance->where('status', 'present')->count();
                 $attendanceRate = $totalMeetings > 0 ? round(($presentCount / $totalMeetings) * 100, 1) : null;
 
-                // Get all assignments for this schedule
-                $assignments = Assignment::where('schedule_id', $schedule->id)->get();
-                $assignmentIds = $assignments->pluck('id');
-
-                // Get submissions + grades for this student
-                $submissions = Submission::with('grade')
-                    ->where('student_id', $studentUserId)
-                    ->whereIn('assignment_id', $assignmentIds)
-                    ->get()
-                    ->keyBy('assignment_id');
+                // PERF FIX: Use pre-fetched assignments instead of per-schedule query
+                $assignments = $allAssignments->get($schedule->id, collect());
 
                 $totalScore = 0;
                 $gradedCount = 0;
 
-                $assignmentDetails = $assignments->map(function ($assignment) use ($submissions, &$totalScore, &$gradedCount) {
-                    $submission = $submissions->get($assignment->id);
+                $assignmentDetails = $assignments->map(function ($assignment) use ($allSubmissions, &$totalScore, &$gradedCount) {
+                    $submission = $allSubmissions->get($assignment->id);
                     $grade = $submission?->grade;
                     $score = $grade?->score;
 
@@ -114,8 +126,6 @@ class TeacherStudentController extends Controller
 
                 $averageScore = $gradedCount > 0 ? round($totalScore / $gradedCount, 2) : null;
 
-                // Only include full assignment details if this is the viewing teacher's subject
-                // or if the viewer is the homeroom teacher (sees everything)
                 $includeDetails = $isMySubject || $isHomeroom;
 
                 return [
@@ -161,16 +171,11 @@ class TeacherStudentController extends Controller
         })->sortByDesc(fn ($c) => $c['academic_year']['id'] ?? 0)->values();
 
         // 9. Overall attendance summary (across all subjects for selected year)
-        $allScheduleIds = $schedules->pluck('id');
+        // PERF FIX: Reuse pre-fetched attendance data instead of 2 new queries
         $overallAttendance = [];
-        if ($allScheduleIds->isNotEmpty()) {
-            $overallTotal = Attendance::whereIn('schedule_id', $allScheduleIds)
-                ->where('student_id', $studentUserId)
-                ->count();
-            $overallPresent = Attendance::whereIn('schedule_id', $allScheduleIds)
-                ->where('student_id', $studentUserId)
-                ->where('status', 'present')
-                ->count();
+        if (! empty($allScheduleIds)) {
+            $overallTotal = $allAttendance->flatten()->count();
+            $overallPresent = $allAttendance->flatten()->where('status', 'present')->count();
             $overallAttendance = [
                 'total' => $overallTotal,
                 'present' => $overallPresent,

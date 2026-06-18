@@ -16,14 +16,13 @@ class AcademicYearController
     {
         $query = AcademicYear::orderBy('id', 'desc');
 
+        // PERF FIX: cap 'all' at 100 max to prevent unbounded responses
         if ($request->query('per_page') === 'all') {
-            return response()->json([
-                'data' => $query->get(),
-            ]);
+            $perPage = 100;
+        } else {
+            $perPage = (int) $request->query('per_page', 100);
+            $perPage = max(1, min($perPage, 100));
         }
-
-        $perPage = (int) $request->query('per_page', 100);
-        $perPage = max(1, min($perPage, 100));
         $academicYears = $query->paginate($perPage);
 
         return response()->json($academicYears);

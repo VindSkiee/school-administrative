@@ -29,19 +29,19 @@ class AssignmentController
     }
 
     // BARU: Ambil semua tugas dari semua kelas untuk halaman Dashboard Global
-    public function globalIndex(): \Illuminate\Http\JsonResponse
+    // PERF FIX: added pagination to prevent loading all assignments unbounded
+    public function globalIndex(Request $request): \Illuminate\Http\JsonResponse
     {
         $teacherId = auth('api')->user()->id;
+        $perPage = min((int) $request->query('per_page', 20), 100);
 
-        // Kita wajib melakukan eager load (with) pada schedule, schoolClass, dan subject 
-        // agar di Frontend kita bisa menampilkan nama kelas dan nama mapelnya.
         $assignments = \App\Models\Assignment::with(['schedule.schoolClass', 'schedule.subject'])
             ->withCount('submissions')
             ->whereHas('schedule', function ($query) use ($teacherId) {
                 $query->where('teacher_id', $teacherId);
             })
-            ->orderBy('due_date', 'desc') // Urutkan dari deadline terdekat/terbaru
-            ->get(); 
+            ->orderBy('due_date', 'desc')
+            ->paginate($perPage);
 
         return response()->json($assignments);
     }

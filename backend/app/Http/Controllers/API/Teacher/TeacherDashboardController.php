@@ -78,17 +78,22 @@ class TeacherDashboardController
         });
 
         // 3. Ambil Tugas yang Menunggu Penilaian (Ada submission tapi belum di-grade)
+        // PERF FIX: replaced HAVING with subquery approach — filter ungraded in WHERE, not HAVING
+        // This avoids computing counts for ALL assignments before filtering
         $pendingTasks = Assignment::whereHas('schedule', function ($q) use ($teacherId) {
             $q->where('teacher_id', $teacherId);
         })
+            ->whereHas('submissions', function ($q) {
+                $q->whereDoesntHave('grade');
+            })
             ->withCount(['submissions as ungraded_count' => function ($q) {
                 $q->whereDoesntHave('grade');
             }])
             ->with(['schedule.schoolClass', 'schedule.subject'])
-            ->having('ungraded_count', '>', 0)
             ->orderBy('due_date', 'desc')
             ->take(5)
             ->get()
+            ->filter(fn ($task) => $task->ungraded_count > 0)
             ->map(function ($task) {
                 return [
                     'id' => $task->id,

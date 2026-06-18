@@ -170,105 +170,63 @@ class ClassController
         try {
             DB::beginTransaction();
 
-            // 1. Fetch old classes (raw query for performance)
-            $oldClasses = DB::table('classes')
-                ->where('academic_year_id', $fromYearId)
-                ->get();
-
-            if ($oldClasses->isEmpty()) {
+            // PERF FIX: Check source classes exist in one query
+            $classCount = DB::table('classes')->where('academic_year_id', $fromYearId)->count();
+            if ($classCount === 0) {
                 DB::rollBack();
                 return response()->json(['message' => 'Tidak ada kelas di tahun ajaran asal.'], 404);
             }
 
             $now = now()->toDateTimeString();
-            $migratedClassCount = 0;
-            $migratedStudentCount = 0;
-            $classIdMap = []; // old_id => new_id
 
-            foreach ($oldClasses as $oldClass) {
-                // 2. Upsert class (firstOrCreate equivalent with raw)
-                $existingNew = DB::table('classes')
-                    ->where('name', $oldClass->name)
-                    ->where('academic_year_id', $toYearId)
-                    ->first();
+            // PERF FIX: Bulk upsert classes using INSERT ... SELECT with ON DUPLICATE KEY
+            // Step 1: Insert new classes that don't exist yet in target year
+            DB::statement("
+                INSERT INTO classes (name, academic_year_id, homeroom_teacher_id, created_at, updated_at)
+                SELECT c.name, ?, c.homeroom_teacher_id, ?, ?
+                FROM classes c
+                WHERE c.academic_year_id = ?
+                AND NOT EXISTS (
+                    SELECT 1 FROM classes c2
+                    WHERE c2.name = c.name AND c2.academic_year_id = ?
+                )
+            ", [$toYearId, $now, $now, $fromYearId, $toYearId]);
 
-                if (! $existingNew) {
-                    $newClassId = DB::table('classes')->insertGetId([
-                        'name' => $oldClass->name,
-                        'academic_year_id' => $toYearId,
-                        'homeroom_teacher_id' => $oldClass->homeroom_teacher_id,
-                        'created_at' => $now,
-                        'updated_at' => $now,
-                    ]);
-                } else {
-                    $newClassId = $existingNew->id;
-                    // Update homeroom if empty
-                    if ($existingNew->homeroom_teacher_id === null && $oldClass->homeroom_teacher_id) {
-                        DB::table('classes')
-                            ->where('id', $newClassId)
-                            ->update(['homeroom_teacher_id' => $oldClass->homeroom_teacher_id, 'updated_at' => $now]);
-                    }
-                }
+            // Step 2: Update homeroom_teacher_id where target class has NULL but source has value
+            DB::statement("
+                UPDATE classes target
+                INNER JOIN classes source ON source.name = target.name
+                    AND source.academic_year_id = ?
+                SET target.homeroom_teacher_id = source.homeroom_teacher_id,
+                    target.updated_at = ?
+                WHERE target.academic_year_id = ?
+                AND target.homeroom_teacher_id IS NULL
+                AND source.homeroom_teacher_id IS NOT NULL
+            ", [$fromYearId, $now, $toYearId]);
 
-                $classIdMap[$oldClass->id] = $newClassId;
-                $migratedClassCount++;
-            }
+            $migratedClassCount = DB::table('classes')->where('academic_year_id', $toYearId)->count();
 
-            // 3. Bulk insert student pivots (single raw query per class)
-            foreach ($oldClasses as $oldClass) {
-                $newClassId = $classIdMap[$oldClass->id];
+            // PERF FIX: Bulk insert student pivots using INSERT ... SELECT (single query)
+            DB::statement("
+                INSERT IGNORE INTO class_student (class_id, student_id, academic_year_id, created_at, updated_at)
+                SELECT target.id, cs.student_id, ?, ?, ?
+                FROM class_student cs
+                INNER JOIN classes source ON source.id = cs.class_id AND source.academic_year_id = ?
+                INNER JOIN classes target ON target.name = source.name AND target.academic_year_id = ?
+            ", [$toYearId, $now, $now, $fromYearId, $toYearId]);
 
-                $studentIds = DB::table('class_student')
-                    ->where('class_id', $oldClass->id)
-                    ->pluck('student_id');
+            $migratedStudentCount = DB::table('class_student')
+                ->where('academic_year_id', $toYearId)
+                ->count();
 
-                if ($studentIds->isNotEmpty()) {
-                    $pivotRows = [];
-                    foreach ($studentIds as $studentId) {
-                        $pivotRows[] = [
-                            'class_id' => $newClassId,
-                            'student_id' => $studentId,
-                            'academic_year_id' => $toYearId,
-                            'created_at' => $now,
-                            'updated_at' => $now,
-                        ];
-                    }
-
-                    // Insert ignoring duplicates (INSERT IGNORE for MySQL)
-                    foreach (array_chunk($pivotRows, 100) as $chunk) {
-                        DB::table('class_student')->insertOrIgnore($chunk);
-                    }
-
-                    $migratedStudentCount += $studentIds->count();
-                }
-            }
-
-            // 4. Bulk duplicate schedules (map class_id to new class_id)
-            foreach ($classIdMap as $oldClassId => $newClassId) {
-                $oldSchedules = DB::table('schedules')
-                    ->where('class_id', $oldClassId)
-                    ->where('academic_year_id', $fromYearId)
-                    ->get();
-
-                if ($oldSchedules->isNotEmpty()) {
-                    $scheduleRows = [];
-                    foreach ($oldSchedules as $sched) {
-                        $scheduleRows[] = [
-                            'class_id' => $newClassId,
-                            'subject_id' => $sched->subject_id,
-                            'teacher_id' => $sched->teacher_id,
-                            'academic_year_id' => $toYearId,
-                            'day_of_week' => $sched->day_of_week,
-                            'start_time' => $sched->start_time,
-                            'end_time' => $sched->end_time,
-                            'created_at' => $now,
-                            'updated_at' => $now,
-                        ];
-                    }
-
-                    DB::table('schedules')->insert($scheduleRows);
-                }
-            }
+            // PERF FIX: Bulk duplicate schedules using INSERT ... SELECT (single query)
+            DB::statement("
+                INSERT INTO schedules (class_id, subject_id, teacher_id, academic_year_id, day_of_week, start_time, end_time, created_at, updated_at)
+                SELECT target.id, s.subject_id, s.teacher_id, ?, s.day_of_week, s.start_time, s.end_time, ?, ?
+                FROM schedules s
+                INNER JOIN classes source ON source.id = s.class_id AND source.academic_year_id = ?
+                INNER JOIN classes target ON target.name = source.name AND target.academic_year_id = ?
+            ", [$toYearId, $now, $now, $fromYearId, $toYearId]);
 
             DB::commit();
 
@@ -336,83 +294,75 @@ class ClassController
             $now = now()->toDateTimeString();
             $fromYearId = $activeYear->id;
 
-            // 3. Fetch all classes from current even year
-            $oldClasses = DB::table('classes')->where('academic_year_id', $fromYearId)->get();
-
-            if ($oldClasses->isEmpty()) {
+            // 3. Check source classes exist
+            $classCount = DB::table('classes')->where('academic_year_id', $fromYearId)->count();
+            if ($classCount === 0) {
                 DB::rollBack();
                 return response()->json(['message' => 'Tidak ada kelas di tahun ajaran aktif.'], 404);
             }
 
-            $promotedCount = 0;
-            $graduatedCount = 0;
-            $newClassCount = 0;
+            // PERF FIX: Bulk mark grade 9 students as graduated (single query instead of loop)
+            // Extract grade from class name: if name starts with '9' or 'IX', it's grade 9
+            $graduatedCount = DB::statement("
+                UPDATE students s
+                INNER JOIN class_student cs ON cs.student_id = s.user_id
+                INNER JOIN classes c ON c.id = cs.class_id
+                SET s.status = 'graduated', s.updated_at = ?
+                WHERE c.academic_year_id = ?
+                AND (c.name REGEXP '^9' OR c.name REGEXP '^IX')
+            ", [$now, $fromYearId]);
 
-            // Grade promotion map
-            $gradeMap = ['7' => '8', '8' => '9'];
+            // PERF FIX: Bulk create new classes for promoted students (grade 7→8, 8→9)
+            // Using CASE expression to map grade numbers in SQL
+            DB::statement("
+                INSERT INTO classes (name, academic_year_id, homeroom_teacher_id, created_at, updated_at)
+                SELECT
+                    CASE
+                        WHEN c.name REGEXP '^7' THEN CONCAT('8', SUBSTRING(c.name, 2))
+                        WHEN c.name REGEXP '^VII' THEN CONCAT('VIII', SUBSTRING(c.name, 4))
+                        WHEN c.name REGEXP '^8' THEN CONCAT('9', SUBSTRING(c.name, 2))
+                        WHEN c.name REGEXP '^VIII' THEN CONCAT('IX', SUBSTRING(c.name, 4))
+                    END,
+                    ?,
+                    NULL,
+                    ?,
+                    ?
+                FROM classes c
+                WHERE c.academic_year_id = ?
+                AND (
+                    c.name REGEXP '^7' OR c.name REGEXP '^VII'
+                    OR c.name REGEXP '^8' OR c.name REGEXP '^VIII'
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM classes c2
+                    WHERE c2.academic_year_id = ?
+                    AND c2.name = CASE
+                        WHEN c.name REGEXP '^7' THEN CONCAT('8', SUBSTRING(c.name, 2))
+                        WHEN c.name REGEXP '^VII' THEN CONCAT('VIII', SUBSTRING(c.name, 4))
+                        WHEN c.name REGEXP '^8' THEN CONCAT('9', SUBSTRING(c.name, 2))
+                        WHEN c.name REGEXP '^VIII' THEN CONCAT('IX', SUBSTRING(c.name, 4))
+                    END
+                )
+            ", [$toYearId, $now, $now, $fromYearId, $toYearId]);
 
-            foreach ($oldClasses as $oldClass) {
-                $grade = $this->extractGrade($oldClass->name);
-                $suffix = $this->extractSuffix($oldClass->name);
+            $newClassCount = DB::table('classes')->where('academic_year_id', $toYearId)->count();
 
-                // Grade 9 students become alumni
-                if ($grade === '9') {
-                    // Mark all students in this class as graduated
-                    $studentIds = DB::table('class_student')
-                        ->where('class_id', $oldClass->id)
-                        ->pluck('student_id');
-
-                    if ($studentIds->isNotEmpty()) {
-                        DB::table('students')
-                            ->whereIn('user_id', $studentIds)
-                            ->update(['status' => 'graduated', 'updated_at' => $now]);
-                        $graduatedCount += $studentIds->count();
-                    }
-                    continue;
-                }
-
-                // Grade 7 and 8 get promoted
-                if (! isset($gradeMap[$grade])) {
-                    continue;
-                }
-
-                $newGrade = $gradeMap[$grade];
-                $newClassName = $newGrade . $suffix;
-
-                // Create new class in target year (no homeroom, no schedules)
-                $newClassId = DB::table('classes')->insertGetId([
-                    'name' => $newClassName,
-                    'academic_year_id' => $toYearId,
-                    'homeroom_teacher_id' => null,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ]);
-                $newClassCount++;
-
-                // Copy students to new class
-                $studentIds = DB::table('class_student')
-                    ->where('class_id', $oldClass->id)
-                    ->pluck('student_id');
-
-                if ($studentIds->isNotEmpty()) {
-                    $pivotRows = [];
-                    foreach ($studentIds as $studentId) {
-                        $pivotRows[] = [
-                            'class_id' => $newClassId,
-                            'student_id' => $studentId,
-                            'academic_year_id' => $toYearId,
-                            'created_at' => $now,
-                            'updated_at' => $now,
-                        ];
-                    }
-
-                    foreach (array_chunk($pivotRows, 100) as $chunk) {
-                        DB::table('class_student')->insertOrIgnore($chunk);
-                    }
-
-                    $promotedCount += $studentIds->count();
-                }
-            }
+            // PERF FIX: Bulk copy student pivots to new classes (single query)
+            $promotedCount = DB::statement("
+                INSERT IGNORE INTO class_student (class_id, student_id, academic_year_id, created_at, updated_at)
+                SELECT target.id, cs.student_id, ?, ?, ?
+                FROM class_student cs
+                INNER JOIN classes source ON source.id = cs.class_id AND source.academic_year_id = ?
+                INNER JOIN classes target ON target.academic_year_id = ?
+                AND (
+                    -- Grade 7→8 mapping
+                    (source.name REGEXP '^7' AND target.name = CONCAT('8', SUBSTRING(source.name, 2)))
+                    OR (source.name REGEXP '^VII' AND target.name = CONCAT('VIII', SUBSTRING(source.name, 4)))
+                    -- Grade 8→9 mapping
+                    OR (source.name REGEXP '^8' AND target.name = CONCAT('9', SUBSTRING(source.name, 2)))
+                    OR (source.name REGEXP '^VIII' AND target.name = CONCAT('IX', SUBSTRING(source.name, 4)))
+                )
+            ", [$toYearId, $now, $now, $fromYearId, $toYearId]);
 
             // 4. Auto-activate the target academic year, deactivate old year
             DB::table('academic_years')->where('is_active', true)->update(['is_active' => false, 'updated_at' => $now]);

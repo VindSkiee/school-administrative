@@ -147,14 +147,18 @@ class GradeAggregationService
             ->where('academic_year_id', $academicYearId)
             ->pluck('id');
 
-        $totalAttendances = \App\Models\Attendance::whereIn('schedule_id', $allScheduleIds)
+        // PERF FIX: single GROUP BY query instead of 2 separate COUNT queries
+        $attendanceStats = \Illuminate\Support\Facades\DB::table('attendances')
+            ->whereIn('schedule_id', $allScheduleIds)
             ->where('student_id', $studentId)
-            ->count();
+            ->select(
+                \Illuminate\Support\Facades\DB::raw('COUNT(*) as total'),
+                \Illuminate\Support\Facades\DB::raw("SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as present_count")
+            )
+            ->first();
 
-        $presentCount = \App\Models\Attendance::whereIn('schedule_id', $allScheduleIds)
-            ->where('student_id', $studentId)
-            ->where('status', 'present')
-            ->count();
+        $totalAttendances = $attendanceStats->total ?? 0;
+        $presentCount = $attendanceStats->present_count ?? 0;
 
         $attendanceRate = $totalAttendances > 0
             ? round(($presentCount / $totalAttendances) * 100, 2)

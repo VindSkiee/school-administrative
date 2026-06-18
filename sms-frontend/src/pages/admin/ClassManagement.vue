@@ -788,6 +788,7 @@ const availableStudents = computed(() => dropdowns.studentOptionsRaw);
 
 const classGradeFilter = ref("");
 const academicYearFilter = ref("");
+const lastActiveYearId = ref(null);
 const classGradeOptions = [
   { value: "7", label: "Kelas 7" },
   { value: "8", label: "Kelas 8" },
@@ -1002,6 +1003,7 @@ const fetchInitialData = async () => {
     if (activeYear && !academicYearFilter.value) {
       academicYearFilter.value = activeYear.id;
     }
+    lastActiveYearId.value = activeYear?.id || null;
 
     // fetch classes AFTER year is set — single fetch, no watcher duplicate
     await fetchClasses(1);
@@ -1456,7 +1458,19 @@ onMounted(() => {
 });
 
 // Refresh class data when component is re-activated from keep-alive cache
-onActivated(() => {
-  refreshClasses();
+onActivated(async () => {
+  // 1. Invalidate and re-fetch academic years to get latest active year
+  dropdowns.invalidateAcademicYears();
+  await dropdowns.ensureAcademicYears();
+
+  // 2. Auto-update filter to new active year if user hasn't manually changed it
+  const newActiveYear = dropdowns.activeAcademicYear;
+  if (newActiveYear && academicYearFilter.value === lastActiveYearId.value) {
+    academicYearFilter.value = newActiveYear.id;
+  }
+  lastActiveYearId.value = newActiveYear?.id || null;
+
+  // 3. Fetch classes with (possibly updated) filter
+  await refreshClasses();
 });
 </script>
