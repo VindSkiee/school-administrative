@@ -21,31 +21,37 @@ class UserController
 {
     public function __construct(protected UserService $userService) {}
 
-    // PERF FIX: single raw query with JOIN, no Eloquent overhead, no intermediate Collection
+    // PERF FIX: single raw query with JOIN + 120s cache (plain array to avoid serialization issues)
     public function teacherOptions(): JsonResponse
     {
-        $options = \Illuminate\Support\Facades\DB::table('teachers')
-            ->join('users', 'users.id', '=', 'teachers.user_id')
-            ->select('teachers.user_id AS id', 'users.name')
-            ->orderBy('users.name')
-            ->get()
-            ->map(fn ($t) => ['id' => $t->id, 'name' => $t->name ?? '-'])
-            ->values();
+        $options = \Illuminate\Support\Facades\Cache::remember('admin_teacher_options', 120, function () {
+            return \Illuminate\Support\Facades\DB::table('teachers')
+                ->join('users', 'users.id', '=', 'teachers.user_id')
+                ->select('teachers.user_id AS id', 'users.name')
+                ->orderBy('users.name')
+                ->get()
+                ->map(fn ($t) => ['id' => $t->id, 'name' => $t->name ?? '-'])
+                ->values()
+                ->toArray();
+        });
 
         return response()->json(['data' => $options]);
     }
 
-    // PERF FIX: single raw query with JOIN, no Eloquent overhead, no intermediate Collection
+    // PERF FIX: single raw query with JOIN + 120s cache (plain array to avoid serialization issues)
     public function studentOptions(): JsonResponse
     {
-        $options = \Illuminate\Support\Facades\DB::table('students')
-            ->join('users', 'users.id', '=', 'students.user_id')
-            ->select('students.user_id AS id', 'users.name', 'students.nis')
-            ->where('students.status', 'active')
-            ->orderBy('users.name')
-            ->get()
-            ->map(fn ($s) => ['id' => $s->id, 'name' => $s->name ?? '-', 'nis' => $s->nis ?? '-'])
-            ->values();
+        $options = \Illuminate\Support\Facades\Cache::remember('admin_student_options', 120, function () {
+            return \Illuminate\Support\Facades\DB::table('students')
+                ->join('users', 'users.id', '=', 'students.user_id')
+                ->select('students.user_id AS id', 'users.name', 'students.nis')
+                ->where('students.status', 'active')
+                ->orderBy('users.name')
+                ->get()
+                ->map(fn ($s) => ['id' => $s->id, 'name' => $s->name ?? '-', 'nis' => $s->nis ?? '-'])
+                ->values()
+                ->toArray();
+        });
 
         return response()->json(['data' => $options]);
     }
@@ -86,6 +92,11 @@ class UserController
     {
         try {
             $user = $this->userService->createUser($request->validated());
+
+            // Invalidate options cache based on role
+            $role = $request->input('role');
+            if ($role === 'teacher') \Illuminate\Support\Facades\Cache::forget('admin_teacher_options');
+            if ($role === 'student') \Illuminate\Support\Facades\Cache::forget('admin_student_options');
 
             return response()->json([
                 'success' => true,
@@ -299,6 +310,10 @@ class UserController
             }
         }
 
+        // Invalidate options cache for the user's role
+        if ($role === 'teacher') \Illuminate\Support\Facades\Cache::forget('admin_teacher_options');
+        if ($role === 'student') \Illuminate\Support\Facades\Cache::forget('admin_student_options');
+
         return response()->json([
             'success' => true,
             'message' => 'Data user berhasil diperbarui',
@@ -316,8 +331,13 @@ class UserController
             return response()->json(['error' => 'Anda tidak bisa menghapus akun Anda sendiri.'], 403);
         }
 
+        $role = $user->role;
         $user->update(['is_active' => false]);
         $user->delete(); // Memicu SoftDelete
+
+        // Invalidate options cache
+        if ($role === 'teacher') \Illuminate\Support\Facades\Cache::forget('admin_teacher_options');
+        if ($role === 'student') \Illuminate\Support\Facades\Cache::forget('admin_student_options');
 
         return response()->json([
             'success' => true,

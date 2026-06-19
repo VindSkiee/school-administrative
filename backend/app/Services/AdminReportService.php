@@ -100,9 +100,8 @@ class AdminReportService
     {
         $yearId = $academicYearId ?? $this->getActiveAcademicYearId();
 
-        // Cache hasil selama 10 menit (600 detik) saja karena data ini lebih sensitif
-        // dan sering berubah ketika guru melengkapi nilai yang kurang.
-        return Cache::remember("admin_distribution_list_{$yearId}", 600, function () use ($yearId) {
+        // Cache hasil selama 15 menit (900 detik) — balance between freshness and performance
+        return Cache::remember("admin_distribution_list_{$yearId}", 900, function () use ($yearId) {
             return $this->semesterReportService->getAcademicYearReadiness($yearId);
         });
     }

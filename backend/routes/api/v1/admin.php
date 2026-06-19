@@ -15,9 +15,14 @@ use Illuminate\Support\Facades\Route;
 Route::patch('users/{id}/reset-password', [UserController::class, 'resetPassword']);
 Route::apiResource('users', UserController::class);
 
-// PERF FIX: lightweight dropdown endpoints (id+name only)
-Route::get('teachers/options', [UserController::class, 'teacherOptions']);
-Route::get('students/options', [UserController::class, 'studentOptions']);
+
+Route::middleware(['auth:sanctum'])->group(function () {
+    // PERF FIX: lightweight dropdown endpoints (id+name only)
+    Route::get('teachers/options', [UserController::class, 'teacherOptions']);
+    Route::get('students/options', [UserController::class, 'studentOptions']);
+    Route::get('classes/options', [ClassController::class, 'options']);
+});
+
 
 // Academic Years Management
 Route::apiResource('academic-years', AcademicYearController::class)
@@ -31,6 +36,7 @@ Route::post('grading-settings', [GradingSettingController::class, 'updateOrCreat
 Route::get('grading-settings/{academicYearId}', [GradingSettingController::class, 'show']);
 
 // Class Management
+
 Route::apiResource('classes', ClassController::class);
 
 // Custom routes untuk assign

@@ -17,6 +17,19 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureRateLimiting();
+
+        // In AppServiceProvider::boot() — TEMPORARY, remove after tracing
+        if (app()->environment('local')) {
+            \DB::listen(function ($query) {
+                if ($query->time > 100) { // Log queries > 100ms
+                    \Log::warning('SLOW QUERY', [
+                        'time_ms' => $query->time,
+                        'sql' => $query->sql,
+                        'bindings' => $query->bindings,
+                    ]);
+                }
+            });
+        }
     }
 
     /**

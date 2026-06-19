@@ -199,7 +199,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onActivated, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useToastStore } from '../../stores/toast';
 import { useGlobalDropdownsStore } from '../../stores/globalDropdowns';
@@ -441,4 +441,14 @@ watch(
 );
 
 onMounted(fetchClassDetail);
+
+// Refresh years + class detail when re-activated from keep-alive cache
+// Only re-fetches if data was actually mutated elsewhere
+onActivated(async () => {
+  const yearsDirty = dropdowns.consumeDirtyFlag('academicYears');
+  if (yearsDirty) {
+    await dropdowns.refreshAcademicYears();
+  }
+  fetchClassDetail();
+});
 </script>

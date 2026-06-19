@@ -3,13 +3,12 @@
 namespace App\Http\Controllers\API;
 
 use App\Models\User;
+use App\Models\AcademicYear;
 use App\Rules\RecaptchaV2;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Tymon\JWTAuth\Facades\JWTAuth;
+use Illuminate\Validation\ValidationException;
 
 class AuthController
 {
@@ -21,22 +20,19 @@ class AuthController
             'password' => 'required|string',
         ]);
 
-        // 2. Cari User untuk mengetahui Role-nya
-        $user = User::query()->where('email', $request->email)->first();
+        // 2. Cari User
+        $user = User::query()->where('email', $request->email)->where('is_active', true)->first();
 
-        if (! $user) {
-            return response()->json(['error' => 'Kredensial tidak valid.'], 401);
+        // Verifikasi keberadaan user dan kecocokan password secara manual (karena Sanctum API)
+        if (! $user || ! Hash::check($request->password, $user->password)) {
+            // Gunakan ValidationException agar response error otomatis diseragamkan oleh Laravel
+            throw ValidationException::withMessages([
+                'email' => ['Kredensial tidak valid.'],
+            ]);
         }
-
-        $credentials = $request->only('email', 'password');
-        $credentials['is_active'] = true;
 
         // 3. THE GATEKEEPER: Cek reCAPTCHA HANYA JIKA role adalah admin
         if ($user->role === 'admin') {
-            if (! Auth::guard('api')->validate($credentials)) {
-                return response()->json(['error' => 'Kredensial tidak valid.'], 401);
-            }
-
             if (! $request->filled('g-recaptcha-response')) {
                 return response()->json([
                     'error' => 'Verifikasi keamanan reCAPTCHA wajib untuk Admin.',
@@ -44,40 +40,34 @@ class AuthController
                 ], 428);
             }
 
-            // Kita gunakan kembali Custom Rule RecaptchaV2 di sini! Jauh lebih bersih.
             $request->validate([
                 'g-recaptcha-response' => ['required', 'string', new RecaptchaV2],
             ], [
                 'g-recaptcha-response.required' => 'Verifikasi keamanan reCAPTCHA wajib untuk Admin.',
             ]);
-
-            $token = Auth::guard('api')->attempt($credentials);
-        } else {
-            $token = Auth::guard('api')->attempt($credentials);
         }
 
-        // 4. Verifikasi Password & Generate JWT Token
-        if (! $token) {
-            return response()->json(['error' => 'Kredensial tidak valid.'], 401);
-        }
+        // 4. Generate Sanctum Token
+        // Hapus semua token lama agar satu akun hanya aktif di satu perangkat (opsional, hapus baris ini jika ingin multi-device)
+        $user->tokens()->delete(); 
+
+        $token = $user->createToken('auth_token')->plainTextToken;
 
         // 5. Sukses Login
         return $this->respondWithToken($token, $user);
     }
 
-    // 1. TAMBAHKAN FUNGSI HELPER INI
     private function formatUserData(User $user): array
     {
-        $activeYear = \App\Models\AcademicYear::where('is_active', true)->first();
+        $activeYear = AcademicYear::where('is_active', true)->first();
 
-        // PERF FIX: removed 'teacher.schedules' from loadMissing — it loaded ALL years unscoped
         $user->loadMissing([
             'student.classes.academicYear',
             'admin',
             'principal',
+            'teacher', // Pastikan teacher di-load agar relasi di bawahnya aman
         ]);
 
-        // PERF FIX: load teacher.schedules scoped to active academic year only
         if ($user->teacher && ! $user->teacher->relationLoaded('schedules')) {
             $schedulesQuery = $user->teacher->schedules();
             if ($activeYear) {
@@ -107,8 +97,7 @@ class AuthController
             'principal' => $user->principal,
         ];
 
-        // 2. Format 'grade_history' khusus untuk Role Siswa
-        // Menggabungkan data tahun ajaran dari kelas-kelas yang pernah diikuti
+        // Format 'grade_history' khusus untuk Role Siswa
         if ($user->role === 'student' && $user->student) {
             $gradeHistory = $user->student->classes->map(function ($schoolClass) {
                 return [
@@ -118,8 +107,8 @@ class AuthController
                     'semester' => $schoolClass->academicYear?->semester,
                 ];
             })
-            ->filter(fn($item) => $item['academic_year_id'] !== null) // Buang yang kosong
-            ->unique('academic_year_id') // Hindari duplikat jika 1 tahun ajaran ada beberapa data
+            ->filter(fn($item) => $item['academic_year_id'] !== null)
+            ->unique('academic_year_id')
             ->values()
             ->toArray();
 
@@ -129,25 +118,22 @@ class AuthController
         return $userData;
     }
 
-    // 2. PERBARUI FUNGSI INI
     protected function respondWithToken(string $token, User $user): JsonResponse
     {
         return response()->json([
             'success' => true,
             'access_token' => $token,
-            'token_type' => 'bearer',
-            'expires_in' => JWTAuth::factory()->getTTL() * 60,
-            // Panggil fungsi helper di sini
+            'token_type' => 'Bearer',
+            // Sanctum tidak punya JWTAuth::factory()->getTTL(), token bertahan sesuai config/sanctum.php (expiration)
             'user' => $this->formatUserData($user), 
         ]);
     }
 
-    // 3. PERBARUI FUNGSI INI
-    public function me()
+    public function me(Request $request): JsonResponse
     {
-        $user = Auth::guard('api')->user();
+        // Menggunakan $request->user() adalah cara standar Sanctum mengambil data user saat ini
+        $user = $request->user();
 
-        // Panggil fungsi helper di sini, lalu kirim dengan Headers Anti-Cache
         return response()->json(
             $this->formatUserData($user)
         )->withHeaders([
@@ -157,21 +143,18 @@ class AuthController
         ]);
     }
 
-    public function logout()
+    public function logout(Request $request): JsonResponse
     {
-        Auth::guard('api')->logout();
+        // Hapus token yang sedang digunakan untuk request ini
+        $request->user()->currentAccessToken()->delete();
 
         return response()->json(['message' => 'Berhasil logout.']);
     }
 
-    public function refresh()
-    {
-        $newToken = JWTAuth::refresh();
-        /** @var User $user */
-        $user = Auth::guard('api')->user();
-
-        return $this->respondWithToken($newToken, $user);
-    }
+    // Fungsi refresh() DIHAPUS. 
+    // Sanctum tidak memiliki mekanisme refresh token bawaan seperti JWT. 
+    // Token valid sampai kedaluwarsa sesuai config/sanctum.php (biasanya bertahun-tahun jika tidak diatur).
+    // Jika token habis, user harus login ulang.
 
     public function checkRequirements(Request $request): JsonResponse
     {
@@ -181,9 +164,6 @@ class AuthController
 
         $user = User::query()->where('email', $request->email)->first();
 
-        // Hanya kembalikan TRUE jika user ada DAN dia adalah admin.
-        // Jika user tidak ada atau bukan admin, kembalikan FALSE.
-        // Ini mencegah celah Email Enumeration.
         $requiresCaptcha = $user && $user->role === 'admin';
 
         return response()->json([
@@ -199,7 +179,7 @@ class AuthController
         ]);
 
         /** @var User $user */
-        $user = Auth::guard('api')->user();
+        $user = $request->user();
 
         if (! Hash::check($validated['current_password'], $user->password)) {
             return response()->json([

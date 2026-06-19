@@ -15,7 +15,14 @@ class ScheduleController
 
     public function index(Request $request): JsonResponse
     {
-        $query = Schedule::with(['schoolClass', 'subject', 'teacher.user', 'academicYear']);
+        // PERF FIX: add column constraints to reduce payload size (was 80KB+ for 100 schedules)
+        $query = Schedule::with([
+            'schoolClass:id,name',
+            'subject:id,name',
+            'teacher:user_id',
+            'teacher.user:id,name',
+            'academicYear:id,name,semester',
+        ]);
 
         // Filter dinamis (contoh: Admin ingin melihat jadwal kelas X-IPA-1 saja)
         if ($request->has('class_id')) {

@@ -7,6 +7,7 @@ use App\Models\AcademicYear;
 use App\Services\AcademicYearService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 class AcademicYearController
 {
@@ -14,7 +15,10 @@ class AcademicYearController
 
     public function index(Request $request): JsonResponse
     {
-        $query = AcademicYear::orderBy('id', 'desc');
+        // PERF FIX: cache as plain array (not Eloquent Collection) to avoid serialization issues
+        $academicYears = Cache::remember('admin_academic_years_list', 120, function () {
+            return AcademicYear::orderBy('id', 'desc')->get()->toArray();
+        });
 
         // PERF FIX: cap 'all' at 100 max to prevent unbounded responses
         if ($request->query('per_page') === 'all') {
@@ -23,14 +27,26 @@ class AcademicYearController
             $perPage = (int) $request->query('per_page', 100);
             $perPage = max(1, min($perPage, 100));
         }
-        $academicYears = $query->paginate($perPage);
 
-        return response()->json($academicYears);
+        // Paginate from plain array
+        $page = (int) $request->query('page', 1);
+        $total = count($academicYears);
+        $offset = ($page - 1) * $perPage;
+        $slice = array_slice($academicYears, $offset, $perPage);
+
+        return response()->json([
+            'data' => $slice,
+            'total' => $total,
+            'current_page' => $page,
+            'last_page' => (int) ceil($total / $perPage),
+            'per_page' => $perPage,
+        ]);
     }
 
     public function store(StoreAcademicYearRequest $request): JsonResponse
     {
         $academicYear = AcademicYear::create($request->validated());
+        Cache::forget('admin_academic_years_list'); // Invalidate cache
 
         return response()->json([
             'success' => true,
@@ -43,6 +59,7 @@ class AcademicYearController
     {
         $academicYear = AcademicYear::findOrFail($id);
         $academicYear->update($request->validated());
+        Cache::forget('admin_academic_years_list');
 
         return response()->json([
             'success' => true,
@@ -57,6 +74,7 @@ class AcademicYearController
 
         try {
             $updatedAcademicYear = $this->academicYearService->setActive($academicYear);
+            Cache::forget('admin_academic_years_list');
 
             return response()->json([
                 'success' => true,
@@ -82,6 +100,7 @@ class AcademicYearController
         }
 
         $academicYear->delete();
+        Cache::forget('admin_academic_years_list');
 
         return response()->json([
             'success' => true,

@@ -255,11 +255,7 @@ const fetchMasterData = async () => {
       dropdowns.ensureTeacherOptions(),
     ]);
 
-    // Default to active year
-    const activeYear = dropdowns.activeAcademicYear;
-    if (activeYear && !selectedAcademicYearId.value) {
-      selectedAcademicYearId.value = activeYear.id;
-    }
+    // Do NOT auto-select year — default to all years shown (no selection)
   } catch (error) {
     toastStore.error('Gagal memuat data pendukung (Kelas/Mapel/Guru/Tahun Ajaran).');
   }
@@ -368,7 +364,26 @@ onMounted(() => {
 });
 
 // Refresh schedule data when component is re-activated from keep-alive cache
-onActivated(() => {
+// Only re-fetches if data was actually mutated elsewhere (dirty flag check)
+onActivated(async () => {
+  const yearsDirty = dropdowns.consumeDirtyFlag('academicYears');
+  const classesDirty = dropdowns.consumeDirtyFlag('classes');
+  const subjectsDirty = dropdowns.consumeDirtyFlag('subjects');
+  const teachersDirty = dropdowns.consumeDirtyFlag('teachers');
+
+  // If nothing was mutated externally, skip all re-fetching — keep-alive cache is valid
+  if (!yearsDirty && !classesDirty && !subjectsDirty && !teachersDirty) return;
+
+  // Only refresh dropdowns that were actually mutated
+  const refreshPromises = [];
+  if (yearsDirty) refreshPromises.push(dropdowns.refreshAcademicYears());
+  if (classesDirty) refreshPromises.push(dropdowns.refreshClasses());
+  if (subjectsDirty) refreshPromises.push(dropdowns.refreshSubjects());
+  if (teachersDirty) refreshPromises.push(dropdowns.refreshTeacherOptions());
+
+  await Promise.all(refreshPromises);
+
+  // Re-fetch schedules only when dropdown data changed
   fetchSchedules(paginationMeta.current_page);
 });
 

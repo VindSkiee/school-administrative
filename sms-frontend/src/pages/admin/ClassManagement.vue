@@ -774,7 +774,8 @@ const tableColumns = [
 
 // --- STATE ---
 const classes = ref([]);
-const allClasses = ref([]);
+// PERF FIX: derive allClasses from global store instead of separate fetch (eliminates 1 redundant API call)
+const allClasses = computed(() => dropdowns.classesRaw);
 const paginationMeta = reactive({
   total: 0,
   current_page: 1,
@@ -788,7 +789,6 @@ const availableStudents = computed(() => dropdowns.studentOptionsRaw);
 
 const classGradeFilter = ref("");
 const academicYearFilter = ref("");
-const lastActiveYearId = ref(null);
 const classGradeOptions = [
   { value: "7", label: "Kelas 7" },
   { value: "8", label: "Kelas 8" },
@@ -996,21 +996,13 @@ const fetchInitialData = async () => {
       dropdowns.ensureAcademicYears(),
       dropdowns.ensureTeacherOptions(),
       dropdowns.ensureStudentOptions(),
+      dropdowns.ensureClasses(), // PERF FIX: use store cache instead of separate fetchAllClasses
     ]);
 
-    // Default filter to active year (only on first load)
-    const activeYear = dropdowns.activeAcademicYear;
-    if (activeYear && !academicYearFilter.value) {
-      academicYearFilter.value = activeYear.id;
-    }
-    lastActiveYearId.value = activeYear?.id || null;
+    // Do NOT auto-select year — let user choose (default: all years shown)
 
-    // fetch classes AFTER year is set — single fetch, no watcher duplicate
+    // fetch classes (no year filter unless user has selected one)
     await fetchClasses(1);
-
-    // Fetch all classes for internal logic (migration, etc.)
-    const resAllClasses = await classService.getAll({ per_page: 200 });
-    allClasses.value = resAllClasses.data.data || resAllClasses.data;
   } catch (error) {
     toastStore.error("Gagal memuat data referensi sistem.");
     console.error(error);
@@ -1022,16 +1014,13 @@ const fetchInitialData = async () => {
 
 const refreshClasses = async () => {
   await fetchClasses(paginationMeta.current_page);
-  await fetchAllClasses();
+  // PERF FIX: refresh store classes (replaces separate fetchAllClasses call)
+  await dropdowns.refreshClasses();
 };
 
 const fetchAllClasses = async () => {
-  try {
-    const resAllClasses = await classService.getAll({ per_page: "all" });
-    allClasses.value = resAllClasses.data.data || resAllClasses.data;
-  } catch (error) {
-    toastStore.error("Gagal memuat data kelas.");
-  }
+  // PERF FIX: replaced with dropdowns.refreshClasses() in refreshClasses()
+  // This function is kept as a no-op for backward compatibility
 };
 
 const fetchClasses = async (page = 1) => {
@@ -1236,7 +1225,7 @@ const saveClass = async () => {
       toastStore.success("Kelas baru berhasil dibuat.");
     }
     isClassModalOpen.value = false;
-    dropdowns.invalidateAll(); // Classes changed — invalidate global cache
+    await dropdowns.refreshClasses(); // Refresh store + clear dirty flag
     refreshClasses();
   } catch (error) {
     toastStore.error(error.response?.data?.message || "Gagal menyimpan kelas.");
@@ -1256,7 +1245,7 @@ const executeDeleteClass = async () => {
   try {
     await classService.delete(confirmModal.targetId);
     toastStore.success("Kelas berhasil dihapus.");
-    dropdowns.invalidateAll(); // Classes changed — invalidate global cache
+    await dropdowns.refreshClasses(); // Refresh store + clear dirty flag
     refreshClasses();
   } catch (error) {
     // Tangkap error 403 dari controller jika kelas masih ada siswanya
@@ -1423,8 +1412,11 @@ const executeClassMigration = async () => {
     toastStore.success(response.data.message || "Migrasi kelas berhasil!");
     isClassMigrationModalOpen.value = false;
 
-    // Invalidate all cached dropdowns (years, classes changed)
-    dropdowns.invalidateAll();
+    // Refresh store for classes + years (migration creates new classes and activates new year)
+    await Promise.all([
+      dropdowns.refreshClasses(),
+      dropdowns.refreshAcademicYears(),
+    ]);
     await fetchInitialData();
   } catch (error) {
     toastStore.error(error.response?.data?.message || "Gagal melakukan migrasi kelas.");
@@ -1444,7 +1436,11 @@ const executeMigration = async () => {
     const response = await classService.migrateSemester(migrateForm);
     toastStore.success(response.data.message || "Migrasi semester berhasil!");
     isMigrateModalOpen.value = false;
-    dropdowns.invalidateAll(); // Years + classes changed
+    // Refresh store for classes + years (semester migration changes both)
+    await Promise.all([
+      dropdowns.refreshClasses(),
+      dropdowns.refreshAcademicYears(),
+    ]);
     await fetchInitialData();
   } catch (error) {
     toastStore.error(error.response?.data?.message || "Gagal melakukan migrasi semester.");
@@ -1458,19 +1454,26 @@ onMounted(() => {
 });
 
 // Refresh class data when component is re-activated from keep-alive cache
+// Only re-fetches if data was actually mutated elsewhere (dirty flag check)
 onActivated(async () => {
-  // 1. Invalidate and re-fetch academic years to get latest active year
-  dropdowns.invalidateAcademicYears();
-  await dropdowns.ensureAcademicYears();
+  const yearsDirty = dropdowns.consumeDirtyFlag('academicYears');
+  const teachersDirty = dropdowns.consumeDirtyFlag('teachers');
+  const studentsDirty = dropdowns.consumeDirtyFlag('students');
+  const classesDirty = dropdowns.consumeDirtyFlag('classes');
 
-  // 2. Auto-update filter to new active year if user hasn't manually changed it
-  const newActiveYear = dropdowns.activeAcademicYear;
-  if (newActiveYear && academicYearFilter.value === lastActiveYearId.value) {
-    academicYearFilter.value = newActiveYear.id;
-  }
-  lastActiveYearId.value = newActiveYear?.id || null;
+  // If nothing was mutated externally, skip all re-fetching — keep-alive cache is valid
+  if (!yearsDirty && !teachersDirty && !studentsDirty && !classesDirty) return;
 
-  // 3. Fetch classes with (possibly updated) filter
+  // Only refresh dropdowns that were actually mutated
+  const refreshPromises = [];
+  if (yearsDirty) refreshPromises.push(dropdowns.refreshAcademicYears());
+  if (teachersDirty) refreshPromises.push(dropdowns.refreshTeacherOptions());
+  if (studentsDirty) refreshPromises.push(dropdowns.refreshStudentOptions());
+  if (classesDirty) refreshPromises.push(dropdowns.refreshClasses()); // PERF FIX: refresh store classes too
+
+  await Promise.all(refreshPromises);
+
+  // Re-fetch classes only when something changed
   await refreshClasses();
 });
 </script>

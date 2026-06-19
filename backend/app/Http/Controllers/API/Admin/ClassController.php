@@ -17,14 +17,58 @@ class ClassController
 {
     public function __construct(protected ClassService $classService) {}
 
-    // READ (Daftar Kelas dengan relasi Tahun Ajaran & Wali Kelas)
+    /** Flush all class option cache keys (all years + specific years) */
+    private function flushClassOptionsCache(): void
+    {
+        \Illuminate\Support\Facades\Cache::forget('admin_class_options_all');
+        // Flush year-specific keys for known years
+        $yearIds = \Illuminate\Support\Facades\DB::table('academic_years')->pluck('id');
+        foreach ($yearIds as $yearId) {
+            \Illuminate\Support\Facades\Cache::forget('admin_class_options_year_' . $yearId);
+        }
+    }
+
+    // PERF FIX: lightweight dropdown endpoint + 120s cache
+    public function options(Request $request): JsonResponse
+    {
+        $cacheKey = 'admin_class_options' . ($request->filled('academic_year_id') ? '_year_' . $request->academic_year_id : '_all');
+
+        $classes = \Illuminate\Support\Facades\Cache::remember($cacheKey, 120, function () use ($request) {
+            $query = \Illuminate\Support\Facades\DB::table('classes')
+                ->select('classes.id', 'classes.name', 'classes.academic_year_id');
+
+            if ($request->filled('academic_year_id')) {
+                $query->where('classes.academic_year_id', $request->academic_year_id);
+            }
+
+            return $query->orderBy('classes.name')->get()->toArray();
+        });
+
+        return response()->json(['data' => $classes]);
+    }
+
+    // PERF FIX: single raw SQL with LEFT JOINs replaces 4 Eloquent queries (N+1 elimination)
     public function index(Request $request): JsonResponse
     {
-        $query = SchoolClass::with(['academicYear', 'homeroomTeacher.user'])
-            ->withCount('students'); // Otomatis menghitung jumlah siswa di dalam kelas
+        $query = \Illuminate\Support\Facades\DB::table('classes as c')
+            ->leftJoin('academic_years as ay', 'ay.id', '=', 'c.academic_year_id')
+            ->leftJoin('teachers as ht', 'ht.user_id', '=', 'c.homeroom_teacher_id')
+            ->leftJoin('users as hu', 'hu.id', '=', 'ht.user_id')
+            ->select(
+                'c.id',
+                'c.name',
+                'c.academic_year_id',
+                'c.homeroom_teacher_id',
+                'ay.name as academic_year_name',
+                'ay.semester as academic_year_semester',
+                'ay.is_active as academic_year_is_active',
+                'hu.id as homeroom_teacher_user_id',
+                'hu.name as homeroom_teacher_name',
+                \Illuminate\Support\Facades\DB::raw('(SELECT COUNT(*) FROM class_student cs WHERE cs.class_id = c.id) as students_count')
+            );
 
         if ($request->filled('academic_year_id')) {
-            $query->where('academic_year_id', $request->academic_year_id);
+            $query->where('c.academic_year_id', $request->academic_year_id);
         }
 
         if ($request->filled('grade')) {
@@ -33,29 +77,60 @@ class ClassController
 
             if (isset($romanMap[$grade])) {
                 $roman = $romanMap[$grade];
-                
-                // REFACTOR: Gunakan Eloquent biasa, jangan gunakan DB::raw() atau UPPER()
-                // karena MySQL secara default sudah case-insensitive (utf8_general_ci / utf8mb4_unicode_ci)
                 $query->where(function ($subQuery) use ($grade, $roman) {
-                    $subQuery->where('name', 'like', $grade . '%')
-                             ->orWhere('name', 'like', 'KELAS ' . $grade . '%')
-                             ->orWhere('name', 'like', $roman . '%')
-                             ->orWhere('name', 'like', 'KELAS ' . $roman . '%');
+                    $subQuery->where('c.name', 'like', $grade . '%')
+                             ->orWhere('c.name', 'like', 'KELAS ' . $grade . '%')
+                             ->orWhere('c.name', 'like', $roman . '%')
+                             ->orWhere('c.name', 'like', 'KELAS ' . $roman . '%');
                 });
             }
         }
 
         // PERF FIX: removed per_page=all branch, capped max at 200
         $perPage = min((int) $request->query('per_page', 20), 200);
-        $classes = $query->paginate($perPage);
+        $page = (int) $request->query('page', 1);
+        $total = $query->count();
+        $classes = $query->orderBy('c.name')
+            ->offset(($page - 1) * $perPage)
+            ->limit($perPage)
+            ->get()
+            ->map(function ($row) {
+                return [
+                    'id' => $row->id,
+                    'name' => $row->name,
+                    'academic_year_id' => $row->academic_year_id,
+                    'homeroom_teacher_id' => $row->homeroom_teacher_id,
+                    'academic_year' => $row->academic_year_id ? [
+                        'id' => $row->academic_year_id,
+                        'name' => $row->academic_year_name,
+                        'semester' => $row->academic_year_semester,
+                        'is_active' => (bool) $row->academic_year_is_active,
+                    ] : null,
+                    'homeroom_teacher' => $row->homeroom_teacher_user_id ? [
+                        'user_id' => $row->homeroom_teacher_user_id,
+                        'user' => [
+                            'id' => $row->homeroom_teacher_user_id,
+                            'name' => $row->homeroom_teacher_name,
+                        ],
+                    ] : null,
+                    'students_count' => (int) $row->students_count,
+                ];
+            });
 
-        return response()->json($classes);
+        return response()->json([
+            'data' => $classes,
+            'total' => $total,
+            'current_page' => $page,
+            'last_page' => (int) ceil($total / $perPage),
+            'per_page' => $perPage,
+        ]);
     }
 
     // CREATE
     public function store(StoreClassRequest $request): JsonResponse
     {
         $class = SchoolClass::create($request->validated());
+        $this->flushClassOptionsCache();
 
         return response()->json([
             'success' => true,
@@ -91,6 +166,7 @@ class ClassController
     {
         $class = SchoolClass::findOrFail($id);
         $class->update($request->validated());
+        $this->flushClassOptionsCache();
 
         return response()->json([
             'success' => true,
@@ -145,6 +221,7 @@ class ClassController
         }
 
         $class->delete();
+        $this->flushClassOptionsCache();
 
         return response()->json([
             'success' => true,

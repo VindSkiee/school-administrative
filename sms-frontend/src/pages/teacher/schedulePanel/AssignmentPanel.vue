@@ -234,7 +234,7 @@ const currentAssignments = computed(() => assignments.value.filter(a => a.date =
 const pastAssignments = computed(() => assignments.value.filter(a => a.date !== props.selectedDate));
 
 const getStorageUrl = (path) => {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api';
   return `${baseUrl}/storage/${path}`;
 };
 

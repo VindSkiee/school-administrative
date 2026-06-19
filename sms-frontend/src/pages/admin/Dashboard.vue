@@ -340,12 +340,19 @@ const computedStats = computed(() => [
   },
 ]);
 
+// PERF FIX: prevent double-fetch on initial mount (keep-alive fires both onMounted and onActivated)
+const isFirstActivation = ref(true);
+
 onMounted(() => {
   fetchDashboardData();
 });
 
-// Refresh dashboard stats when re-activated from keep-alive cache
+// Refresh dashboard stats when re-activated from keep-alive cache (skip first activation)
 onActivated(() => {
+  if (isFirstActivation.value) {
+    isFirstActivation.value = false;
+    return;
+  }
   fetchDashboardData();
 });
 </script>

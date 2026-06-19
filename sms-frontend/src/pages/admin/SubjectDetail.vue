@@ -109,22 +109,22 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, reactive } from 'vue';
+import { ref, computed, onMounted, onActivated, reactive } from 'vue';
 import { useRoute } from 'vue-router';
 import { subjectService } from '../../services/modules/admin/subjectService';
 import { useToastStore } from '../../stores/toast';
+import { useGlobalDropdownsStore } from '../../stores/globalDropdowns';
 import BaseSelect from '../../components/BaseSelect.vue';
-import api from '../../services/api';
 
 const route = useRoute();
 const toastStore = useToastStore();
+const dropdowns = useGlobalDropdownsStore();
 const subjectId = route.params.id;
 
 const isLoading = ref(true);
 const isSaving = ref(false);
 const subject = ref(null);
 const teachers = ref([]);
-const academicYears = ref([]);
 const selectedAcademicYearId = ref('');
 
 const competencyLevels = [
@@ -169,20 +169,15 @@ const form = reactive({
   sangat_kurang_text: 'Perlu bimbingan intensif untuk mencapai ketuntasan belajar.',
 });
 
-const academicYearOptions = computed(() =>
-  academicYears.value.map(ay => ({
-    value: ay.id,
-    label: `${ay.name} — ${ay.semester === 'odd' ? 'Ganjil' : 'Genap'}${ay.is_active ? ' (Aktif)' : ''}`,
-  }))
-);
+const academicYearOptions = computed(() => dropdowns.academicYearOptions);
 
+// PERF FIX: use store for academic years instead of separate API call
 const fetchAcademicYears = async () => {
   try {
-    const res = await api.get('/v1/admin/academic-years');
-    const data = res.data.data || res.data;
-    academicYears.value = data;
+    await dropdowns.ensureAcademicYears();
+    const data = dropdowns.academicYearsRaw;
     const active = data.find(y => y.is_active);
-    if (active) selectedAcademicYearId.value = active.id;
+    if (active && !selectedAcademicYearId.value) selectedAcademicYearId.value = active.id;
   } catch {
     toastStore.error('Gagal memuat tahun ajaran.');
   }
@@ -242,6 +237,14 @@ onMounted(async () => {
     await fetchDetail();
   } else {
     isLoading.value = false;
+  }
+});
+
+// Refresh years + detail when re-activated from keep-alive cache
+onActivated(async () => {
+  await fetchAcademicYears();
+  if (selectedAcademicYearId.value) {
+    await fetchDetail();
   }
 });
 </script>

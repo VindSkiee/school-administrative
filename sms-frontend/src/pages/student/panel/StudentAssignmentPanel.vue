@@ -658,7 +658,7 @@ const resetFilters = () => {
 // Preview Lampiran dari Guru ATAU Jawaban dari Siswa
 const previewAttachment = (filePath) => {
   if (!filePath) return;
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api';
   window.open(`${baseUrl}/storage/${filePath}`, "_blank");
 };
 

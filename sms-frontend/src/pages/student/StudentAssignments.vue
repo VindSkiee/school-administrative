@@ -357,7 +357,7 @@ const goToMaterial = (scheduleId) => {
 };
 
 // MODAL UPLOAD ACTIONS
-const previewAttachment = (filePath) => window.open(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/storage/${filePath}`, '_blank');
+const previewAttachment = (filePath) => window.open(`${import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api'}/storage/${filePath}`, '_blank');
 const openModal = (task) => { activeTask.value = task; selectedFile.value = null; showModal.value = true; };
 const closeModal = () => { showModal.value = false; activeTask.value = null; selectedFile.value = null; };
 
