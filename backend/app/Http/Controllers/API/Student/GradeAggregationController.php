@@ -4,17 +4,28 @@ namespace App\Http\Controllers\Api\Student;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Models\AcademicYear;
 use App\Models\Subject;
 
 class GradeAggregationController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         $user = auth('api')->user();
         /** @var \App\Models\User $user */
         $student = $user->student()->with('classes')->first();
-        $activeClass = $student->classes->first();
+
+        // Accept optional academic_year_id — defaults to active year
+        $yearId = $request->query('academic_year_id');
+        $year = $yearId
+            ? AcademicYear::find($yearId)
+            : AcademicYear::where('is_active', true)->first();
+
+        $activeClass = $year
+            ? $student->classes->firstWhere('academic_year_id', $year->id)
+            : $student->classes->first();
 
         if (!$activeClass) {
             return response()->json(['error' => 'Anda tidak memiliki kelas aktif.'], 403);

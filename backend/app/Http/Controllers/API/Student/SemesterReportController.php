@@ -6,6 +6,7 @@ use App\Models\AcademicYear;
 use App\Services\StudentReportService;
 use App\Services\ReportValidationService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use App\Services\ReportPdfService;
 use App\Services\AdminSemesterReportService;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -20,20 +21,38 @@ class SemesterReportController
     ) {}
 
     /**
-     * GET /reports/report-status
-     * Lightweight check if the active year report is published.
+     * GET /reports/academic-years
+     * List academic years the student has classes in (for dropdown)
      */
-    public function reportStatus(): JsonResponse
+    public function academicYears(Request $request): JsonResponse
     {
-        $activeYear = AcademicYear::where('is_active', true)->first();
+        $student = auth('api')->user()->student;
+        if (!$student) {
+            return response()->json(['data' => []]);
+        }
+
+        $yearIds = $student->classes()->pluck('classes.academic_year_id')->unique();
+        $years = AcademicYear::whereIn('id', $yearIds)
+            ->orderBy('id', 'desc')
+            ->get(['id', 'name', 'semester', 'is_active', 'is_report_published']);
+
+        return response()->json(['data' => $years]);
+    }
+
+    public function reportStatus(Request $request): JsonResponse
+    {
+        $yearId = $request->query('academic_year_id');
+        $year = $yearId
+            ? AcademicYear::find($yearId)
+            : AcademicYear::where('is_active', true)->first();
 
         return response()->json([
-            'is_report_published' => $activeYear?->is_report_published ?? false,
-            'published_at' => $activeYear?->is_report_published ? $activeYear->updated_at : null,
+            'is_report_published' => $year?->is_report_published ?? false,
+            'published_at' => $year?->is_report_published ? $year->updated_at : null,
         ]);
     }
 
-    public function show(): JsonResponse
+    public function show(Request $request): JsonResponse
     {
         $student = auth('api')->user()->student;
 
@@ -41,12 +60,20 @@ class SemesterReportController
             return response()->json(['error' => 'Anda tidak memiliki kelas aktif.'], 403);
         }
 
-        // Get student's active class via pivot
-        $activeYear = AcademicYear::where('is_active', true)->first();
-        $class = $activeYear ? $student->classes()->where('classes.academic_year_id', $activeYear->id)->first() : null;
+        // Accept optional academic_year_id — defaults to active year
+        $yearId = $request->query('academic_year_id');
+        $year = $yearId
+            ? AcademicYear::find($yearId)
+            : AcademicYear::where('is_active', true)->first();
+
+        if (!$year) {
+            return response()->json(['error' => 'Tahun ajaran tidak ditemukan.'], 404);
+        }
+
+        $class = $student->classes()->where('classes.academic_year_id', $year->id)->first();
 
         if (!$class) {
-            return response()->json(['error' => 'Anda belum terdaftar di kelas pada tahun ajaran aktif.'], 403);
+            return response()->json(['error' => 'Anda belum terdaftar di kelas pada tahun ajaran ini.'], 403);
         }
 
         try {
@@ -61,7 +88,7 @@ class SemesterReportController
         }
     }
 
-    public function downloadPdf()
+    public function downloadPdf(Request $request)
     {
         $user = auth('api')->user();
         $student = $user->student;
@@ -71,28 +98,34 @@ class SemesterReportController
         }
 
         try {
-            // 1. Get active academic year
-            $activeYear = AcademicYear::where('is_active', true)->first();
-            if (! $activeYear) {
-                return response()->json(['error' => 'Tidak ada tahun ajaran aktif.'], 400);
+            // Accept optional academic_year_id — defaults to active year
+            $yearId = $request->query('academic_year_id');
+            $year = $yearId
+                ? AcademicYear::find($yearId)
+                : AcademicYear::where('is_active', true)->first();
+
+            if (! $year) {
+                return response()->json(['error' => 'Tahun ajaran tidak ditemukan.'], 400);
             }
 
-            // 2. Get student's class for this academic year
+            // Check if the selected year's report is published
+            if (! $year->is_report_published) {
+                return response()->json(['error' => 'Rapor untuk tahun ajaran ini belum diterbitkan.'], 403);
+            }
+
+            // Get student's class for this academic year
             $class = $student->classes()
-                ->where('classes.academic_year_id', $activeYear->id)
+                ->where('classes.academic_year_id', $year->id)
                 ->first();
 
             if (! $class) {
-                return response()->json(['error' => 'Anda belum terdaftar di kelas pada tahun ajaran aktif.'], 403);
+                return response()->json(['error' => 'Anda belum terdaftar di kelas pada tahun ajaran ini.'], 403);
             }
 
-            // 3. Run 3 strict validations
-            $this->validationService->checkEligibility($student, $activeYear, $class);
+            // Build report data using the admin service (reuses existing logic)
+            $reportData = $this->adminReportService->buildReportDataPublic($year, $student, $class);
 
-            // 4. Build report data using the admin service (reuses existing logic)
-            $reportData = $this->adminReportService->buildReportDataPublic($activeYear, $student, $class);
-
-            // 5. Generate PDF
+            // Generate PDF
             return $this->pdfService->generateSemesterReportPdf($reportData, $user->name);
 
         } catch (HttpException $e) {

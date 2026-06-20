@@ -234,6 +234,11 @@ const routes = [
         name: "PrincipalGradingSettings",
         component: () => import("../pages/principal/PrincipalGradingSettings.vue"),
       },
+      {
+        path: "academic-trends",
+        name: "PrincipalAcademicTrends",
+        component: () => import("../pages/principal/AcademicTrendIndex.vue"),
+      },
     ],
   },
   {

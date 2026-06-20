@@ -4,6 +4,7 @@ namespace App\Http\Controllers\API\Student;
 
 use App\Models\Assignment;
 use App\Models\Schedule;
+use App\Models\AcademicYear;
 use App\Http\Requests\Student\StoreSubmissionRequest;
 use App\Services\AssignmentService;
 use Carbon\Carbon;
@@ -19,7 +20,12 @@ class AssignmentController
         $user = auth('api')->user();
         /** @var \App\Models\User $user */
         $student = $user->student()->with('classes')->first();
-        $activeClass = $student->classes->first();
+
+        // PERF FIX: only get class from the active academic year (not just first class)
+        $activeYearId = AcademicYear::where('is_active', true)->value('id');
+        $activeClass = $activeYearId
+            ? $student->classes->firstWhere('academic_year_id', $activeYearId)
+            : $student->classes->first();
 
         if (!$activeClass) {
             return response()->json(['error' => 'Anda tidak terdaftar di kelas aktif manapun.'], 403);
@@ -92,7 +98,12 @@ class AssignmentController
         $user = auth('api')->user();
         /** @var \App\Models\User $user */
         $student = $user->student()->with('classes')->first();
-        $activeClass = $student->classes->first();
+
+        // PERF FIX: only get class from the active academic year
+        $activeYearId = AcademicYear::where('is_active', true)->value('id');
+        $activeClass = $activeYearId
+            ? $student->classes->firstWhere('academic_year_id', $activeYearId)
+            : $student->classes->first();
 
         if (!$activeClass) {
             return response()->json(['error' => 'Anda tidak terdaftar di kelas manapun.'], 403);

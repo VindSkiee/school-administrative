@@ -270,9 +270,11 @@ const fetchGlobalAssignments = async () => {
   isLoading.value = true;
   try {
     const res = await assignmentService.getAllAssignments();
-    assignments.value = res.data;
+    // PERF FIX: paginated response wraps data in { data: [...], total: ..., ... }
+    assignments.value = res.data.data || res.data || [];
   } catch (error) {
     toastStore.error("Gagal memuat daftar tugas global.");
+    assignments.value = [];
   } finally {
     isLoading.value = false;
   }

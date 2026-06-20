@@ -350,6 +350,7 @@ import {
   CellStyleModule, 
   ColumnAutoSizeModule, 
   RowSelectionModule,
+  NumberEditorModule,
 } from 'ag-grid-community';
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
@@ -364,6 +365,7 @@ ModuleRegistry.registerModules([
   CellStyleModule, 
   ColumnAutoSizeModule, 
   RowSelectionModule,
+  NumberEditorModule,
 ]);
 
 const toastStore = useToastStore();

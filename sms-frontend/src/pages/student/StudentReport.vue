@@ -17,6 +17,16 @@
 
       <div class="relative z-10 w-full md:w-auto shrink-0 bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/20 flex flex-col sm:flex-row md:flex-col items-center justify-between gap-4">
         <div>
+          <p class="text-[10px] text-red-100 font-bold uppercase tracking-wider mb-1">Tahun Ajaran</p>
+          <BaseSelect
+            v-model="selectedAcademicYearId"
+            :options="academicYearOptions"
+            placeholder="Pilih Tahun Ajaran"
+            @update:modelValue="onAcademicYearChange"
+          />
+        </div>
+
+        <div>
           <p class="text-[10px] text-red-100 font-bold uppercase tracking-wider mb-1">Status Dokumen Rapor</p>
           <span 
             class="px-2.5 py-1 rounded-md text-xs font-bold inline-flex items-center gap-1"
@@ -149,18 +159,30 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { studentReportService } from '../../services/modules/student/reportService';
 import { useToastStore } from '../../stores/toast';
 import BasePopoverInfo from '../../components/BasePopoverInfo.vue';
+import BaseSelect from '../../components/BaseSelect.vue';
 
 const toastStore = useToastStore();
 
 const aggregates = ref([]);
-const expandedRows = ref([]); // Menyimpan array ID mapel yang sedang di-expand dropdown-nya
+const expandedRows = ref([]);
 const isLoading = ref(true);
 const isPublished = ref(false);
 const isDownloading = ref(false);
+
+// Academic year dropdown state
+const academicYears = ref([]);
+const selectedAcademicYearId = ref('');
+
+const academicYearOptions = computed(() => {
+  return academicYears.value.map(ay => ({
+    value: ay.id,
+    label: `${ay.name || ''} — ${ay.semester === 'odd' ? 'Ganjil' : 'Genap'}${ay.is_active ? ' (Aktif)' : ''}${ay.is_report_published ? ' (Rapor Terbit)' : ''}`,
+  }));
+});
 
 const getPredicate = (score) => {
   if (score >= 85) return 'Sangat Baik';
@@ -196,27 +218,46 @@ const toggleRow = (subjectId) => {
   }
 };
 
+const loadAcademicYears = async () => {
+  try {
+    const res = await studentReportService.getAcademicYears();
+    academicYears.value = res.data?.data || res.data || [];
+    // Auto-select active year, or first available
+    const active = academicYears.value.find(ay => ay.is_active);
+    selectedAcademicYearId.value = active ? active.id : (academicYears.value[0]?.id || '');
+  } catch (error) {
+    toastStore.error('Gagal memuat daftar tahun ajaran.');
+  }
+};
+
+const onAcademicYearChange = () => {
+  loadPageData();
+};
+
 const loadPageData = async () => {
   isLoading.value = true;
+  expandedRows.value = [];
   try {
-    // PERF FIX: parallel fetch — these two requests are independent, saves ~1 RTT latency
+    const yearId = selectedAcademicYearId.value || undefined;
     const [resAggregate, statusResult] = await Promise.allSettled([
-      studentReportService.getGradesAggregate(),
-      studentReportService.getSemesterReportStatus(),
+      studentReportService.getGradesAggregate(yearId),
+      studentReportService.getSemesterReportStatus(yearId),
     ]);
 
     // Process grades aggregate
     if (resAggregate.status === 'fulfilled') {
       aggregates.value = resAggregate.value.data.data || resAggregate.value.data;
     } else {
+      aggregates.value = [];
       toastStore.error('Gagal menyusun transkrip nilai semester.');
     }
 
     // Process report publish status
     if (statusResult.status === 'fulfilled') {
-      isPublished.value = true;
+      const statusData = statusResult.value.data;
+      isPublished.value = Boolean(statusData?.is_report_published);
     } else {
-      isPublished.value = statusResult.reason?.response?.status !== 403 ? false : false;
+      isPublished.value = false;
     }
   } finally {
     isLoading.value = false;
@@ -228,7 +269,8 @@ const downloadRapor = async () => {
   isDownloading.value = true;
   
   try {
-    const response = await studentReportService.downloadReportPdf();
+    const yearId = selectedAcademicYearId.value || undefined;
+    const response = await studentReportService.downloadReportPdf(yearId);
     const blob = new Blob([response.data], { type: 'application/pdf' });
     const url = window.URL.createObjectURL(blob);
     
@@ -260,7 +302,10 @@ const downloadRapor = async () => {
   }
 };
 
-onMounted(loadPageData);
+onMounted(async () => {
+  await loadAcademicYears();
+  await loadPageData();
+});
 </script>
 
 <style scoped>
