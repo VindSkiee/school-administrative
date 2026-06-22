@@ -2,6 +2,7 @@
   <div class="space-y-6">
     <div class="flex justify-start">
       <button
+        v-if="!locked"
         @click="showForm = !showForm"
         :class="
           showForm
@@ -299,6 +300,7 @@ import { useToastStore } from "../../../stores/toast";
 const props = defineProps({
   scheduleId: { type: [String, Number], required: true },
   selectedDate: { type: String, required: true },
+  locked: { type: Boolean, default: false },
 });
 
 const toastStore = useToastStore();
@@ -352,7 +354,7 @@ const removeFile = (index) => {
 
 // ----------------- HELPER -----------------
 const getStorageUrl = (path) => {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api';
   return `${baseUrl}/storage/${path}`;
 };
 
@@ -429,6 +431,16 @@ const deleteMaterial = async (id) => {
     toastStore.error("Gagal menghapus materi.");
   }
 };
+
+// FIX: Watch scheduleId — re-fetch saat schedule berubah (A → B)
+watch(
+  () => props.scheduleId,
+  (newId, oldId) => {
+    if (newId && String(newId) !== String(oldId)) {
+      fetchMaterials();
+    }
+  },
+);
 
 watch(
   () => props.selectedDate,

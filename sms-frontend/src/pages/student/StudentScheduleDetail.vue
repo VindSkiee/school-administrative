@@ -9,7 +9,7 @@
       <div class="bg-white p-5 md:p-8 rounded-3xl shadow-sm border border-gray-200 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
         
         <div class="flex items-start gap-4 w-full lg:w-auto">
-          <button @click="$router.push('/student/dashboard')" class="mt-1 text-gray-400 hover:text-brand-red transition-colors flex-shrink-0 bg-gray-50 hover:bg-red-50 p-2 rounded-full">
+          <button @click="goBack" class="mt-1 text-gray-400 hover:text-brand-red transition-colors flex-shrink-0 bg-gray-50 hover:bg-red-50 p-2 rounded-full">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
           </button>
 
@@ -136,6 +136,12 @@ const displayDate = computed(() => {
 const formatTime = (timeString) => {
   if (!timeString) return '';
   return timeString.substring(0, 5);
+};
+
+// Navigate back to schedule list with the same day pre-selected
+const goBack = () => {
+  const day = scheduleInfo.value?.day_of_week?.toLowerCase() || '';
+  router.push({ path: '/student/schedules', query: day ? { day } : {} });
 };
 
 onMounted(async () => {

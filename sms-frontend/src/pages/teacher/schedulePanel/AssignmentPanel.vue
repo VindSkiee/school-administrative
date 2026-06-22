@@ -3,6 +3,7 @@
     
     <div class="flex justify-start">
       <button
+        v-if="!locked"
         @click="showForm = !showForm"
         :class="showForm ? 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300' : 'bg-brand-red text-white hover:bg-brand-orange shadow-sm'"
         class="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all"
@@ -40,6 +41,30 @@
             <div>
               <label class="block text-sm font-semibold text-gray-700 mb-1">Tenggat Waktu (Deadline) <span class="text-red-500">*</span></label>
               <input v-model="form.due_date" type="datetime-local" required class="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-red/20 outline-none text-sm" />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-2">Jenis Penugasan <span class="text-red-500">*</span></label>
+            <div class="flex flex-wrap gap-3">
+              <label class="flex-1 min-w-[120px] cursor-pointer">
+                <input type="radio" v-model="form.type" value="task" class="peer sr-only" required>
+                <div class="p-3 border-2 border-gray-200 rounded-xl text-center text-sm font-bold text-gray-500 peer-checked:border-blue-500 peer-checked:text-blue-600 peer-checked:bg-blue-50 transition-all">
+                  Tugas Harian
+                </div>
+              </label>
+              <label class="flex-1 min-w-[120px] cursor-pointer">
+                <input type="radio" v-model="form.type" value="uts" class="peer sr-only" required>
+                <div class="p-3 border-2 border-gray-200 rounded-xl text-center text-sm font-bold text-gray-500 peer-checked:border-brand-orange peer-checked:text-brand-orange peer-checked:bg-orange-50 transition-all">
+                  UTS
+                </div>
+              </label>
+              <label class="flex-1 min-w-[120px] cursor-pointer">
+                <input type="radio" v-model="form.type" value="uas" class="peer sr-only" required>
+                <div class="p-3 border-2 border-gray-200 rounded-xl text-center text-sm font-bold text-gray-500 peer-checked:border-brand-red peer-checked:text-brand-red peer-checked:bg-red-50 transition-all">
+                  UAS
+                </div>
+              </label>
             </div>
           </div>
 
@@ -103,14 +128,15 @@
     </div>
       
       <div v-else>
-        <h3 class="text-lg font-bold text-gray-800 mb-3 border-b pb-2">Tugas Pertemuan Ini ({{ selectedDate }})</h3>
+        <h3 class="text-lg font-bold text-gray-800 mb-3 border-b pb-2">Tugas Pertemuan Ini</h3>
         <div v-if="currentAssignments.length === 0" class="bg-gray-50 p-4 rounded-xl text-center text-sm text-gray-500 border border-gray-200 mb-6">Tidak ada tugas yang ditambahkan pada pertemuan ini.</div>
         
         <div v-else class="space-y-3 mb-6">
           <div v-for="item in currentAssignments" :key="item.id" class="bg-white border border-gray-200 p-4 sm:p-5 rounded-2xl shadow-sm hover:shadow-md transition-shadow flex flex-col sm:flex-row justify-between gap-4">
             <div class="w-full">
               <div class="flex items-center gap-2 mb-1">
-                <span class="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded">Tenggat: {{ new Date(item.due_date).toLocaleString() }}</span>
+                <span class="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded">Tenggat: {{ formatDateTime(item.due_date) }}</span>
+                <span class="px-2 py-0.5 text-xs font-bold rounded" :class="getTypeBadge(item.type).classes">{{ getTypeBadge(item.type).label }}</span>
               </div>
               <h4 class="text-lg font-bold text-gray-800">{{ item.title }}</h4>
               <p class="text-sm text-gray-600 mt-1 mb-3">{{ item.description }}</p>
@@ -139,7 +165,8 @@
           <div v-for="item in pastAssignments" :key="item.id" class="bg-white border border-gray-200 p-4 sm:p-5 rounded-2xl shadow-sm hover:shadow-md transition-shadow flex flex-col sm:flex-row justify-between gap-4">
             <div class="w-full">
               <div class="flex items-center gap-2 mb-1">
-                <span class="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded">Tenggat: {{ new Date(item.due_date).toLocaleString() }}</span>
+                <span class="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded">Tenggat: {{ formatDateTime(item.due_date) }}</span>
+                <span class="px-2 py-0.5 text-xs font-bold rounded" :class="getTypeBadge(item.type).classes">{{ getTypeBadge(item.type).label }}</span>
                 <span class="text-xs text-gray-500 font-medium">Tgl Dibuat: {{ item.date }}</span>
               </div>
               <h4 class="text-lg font-bold text-gray-800">{{ item.title }}</h4>
@@ -175,7 +202,8 @@ import { useToastStore } from '../../../stores/toast';
 
 const props = defineProps({
   scheduleId: { type: [String, Number], required: true },
-  selectedDate: { type: String, required: true }
+  selectedDate: { type: String, required: true },
+  locked: { type: Boolean, default: false },
 });
 
 const router = useRouter();
@@ -186,19 +214,36 @@ const showForm = ref(false);
 const assignments = ref([]);
 const isLoading = ref(false);
 const isSubmitting = ref(false);
-const form = ref({ title: '', description: '', due_date: '' });
+const form = ref({ title: '', description: '', due_date: '', type: 'task' });
 const selectedFiles = ref([]);
 
 // STATE DRAG & DROP (Ini yang sebelumnya memicu error)
 const isDragging = ref(false);
+
+// Badge helper for assignment type
+const getTypeBadge = (type) => {
+  switch (type) {
+    case 'uts': return { label: 'UTS', classes: 'bg-brand-orange/10 text-brand-orange' };
+    case 'uas': return { label: 'UAS', classes: 'bg-brand-red/10 text-brand-red' };
+    default: return { label: 'Tugas Harian', classes: 'bg-blue-50 text-blue-700' };
+  }
+};
 
 // Memisahkan data berdasarkan tanggal terpilih
 const currentAssignments = computed(() => assignments.value.filter(a => a.date === props.selectedDate));
 const pastAssignments = computed(() => assignments.value.filter(a => a.date !== props.selectedDate));
 
 const getStorageUrl = (path) => {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api';
   return `${baseUrl}/storage/${path}`;
+};
+
+const formatDateTime = (dateString) => {
+  if (!dateString) return '-';
+  return new Intl.DateTimeFormat('id-ID', {
+    day: 'numeric', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  }).format(new Date(dateString));
 };
 
 // ----------------- FUNGSI UPLOAD & DRAG DROP -----------------
@@ -258,6 +303,7 @@ const submitAssignment = async () => {
     const formData = new FormData();
     formData.append("schedule_id", props.scheduleId);
     formData.append("date", props.selectedDate);
+    formData.append("type", form.value.type);
     formData.append("title", form.value.title);
     formData.append("description", form.value.description);
 
@@ -269,7 +315,7 @@ const submitAssignment = async () => {
     await assignmentService.createAssignment(formData);
     toastStore.success("Tugas berhasil disebarkan!");
 
-    form.value = { title: "", description: "", due_date: "" };
+    form.value = { title: "", description: "", due_date: "", type: "task" };
     selectedFiles.value = [];
     fetchAssignments();
   } catch (error) {
@@ -296,6 +342,13 @@ const goToDetail = (assignmentId) => {
 };
 
 onMounted(() => fetchAssignments());
+
+// FIX: Watch scheduleId — re-fetch saat schedule berubah (A → B)
+watch(() => props.scheduleId, (newId, oldId) => {
+  if (newId && String(newId) !== String(oldId)) {
+    fetchAssignments();
+  }
+});
 
 watch(() => props.selectedDate, () => {
   // Tidak perlu fetch ulang karena computed property menangani filter otomatis

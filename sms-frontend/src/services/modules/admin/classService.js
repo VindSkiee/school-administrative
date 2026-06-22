@@ -28,5 +28,9 @@ export const classService = {
     migrateSemester(payload) {
         // payload = { from_academic_year_id, to_academic_year_id }
         return api.post('/v1/admin/classes/migrate-semester', payload);
+    },
+    migrateClass(payload) {
+        // payload = { to_academic_year_id }
+        return api.post('/v1/admin/classes/migrate-class', payload);
     }
 };

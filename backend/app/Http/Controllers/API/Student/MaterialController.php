@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Student;
 
 use App\Http\Controllers\Controller;
 use App\Models\Material;
+use App\Models\Schedule;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -32,8 +33,9 @@ class MaterialController extends Controller
                 $q->where('class_id', $activeClass->id); // Ganti ke ID dari tabel pivot
             });
 
-        // Fitur FILTER PENCARIAN (Judul / Deskripsi)
-        if ($request->filled('search')) {
+        // PERF FIX: only apply wildcard search when query has >= 3 chars
+        // Single/double char searches with % prefix cause full table scan
+        if ($request->filled('search') && mb_strlen($request->search) >= 3) {
             $search = $request->search;
             $query->where(function($q) use ($search) {
                 $q->where('title', 'like', "%{$search}%")
@@ -41,8 +43,24 @@ class MaterialController extends Controller
             });
         }
 
+        // Filter by subject: when schedule_id is given, show materials for the same
+        // subject across ALL schedules in this class (not just one schedule slot).
+        // This ensures students see all materials even when a subject has multiple time slots.
         if ($request->filled('schedule_id')) {
-            $query->where('schedule_id', $request->schedule_id);
+            $schedule = Schedule::where('id', $request->schedule_id)
+                ->where('class_id', $activeClass->id)
+                ->first();
+
+            if ($schedule) {
+                $subjectScheduleIds = Schedule::where('class_id', $activeClass->id)
+                    ->where('subject_id', $schedule->subject_id)
+                    ->pluck('id');
+
+                $query->whereIn('schedule_id', $subjectScheduleIds);
+            } else {
+                // Fallback: if schedule not found in student's class, filter by the exact ID
+                $query->where('schedule_id', $request->schedule_id);
+            }
         }
 
         $materials = $query->orderBy('created_at', 'desc')->paginate(15);

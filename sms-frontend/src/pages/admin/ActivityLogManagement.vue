@@ -14,7 +14,7 @@
 
         <div class="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
           <div class="w-full sm:w-64">
-            <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+            <label class="block text-xs font-semibold tracking-wide text-gray-600 mb-1.5">
               Cari Aktivitas
             </label>
             <div class="relative">
@@ -31,8 +31,8 @@
           </div>
 
           <div class="w-full sm:w-56">
-            <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-500">
-              Filter Entitas
+            <label class="block text-xs font-semibold tracking-wide text-gray-600 mb-1.5">
+              Pilih Entitas
             </label>
             <BaseSelect
               v-model="selectedModelType"

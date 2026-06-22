@@ -97,7 +97,7 @@
       <template #cell(role)="{ item }">
         <span
           :class="roleBadgeColor(item.role)"
-          class="px-3 py-1 rounded-full text-xs font-semibold capitalize border"
+          class="px-2 py-0.5 text-xs font-semibold capitalize border"
         >
           {{ formatRoleName(item.role) }}
         </span>
@@ -494,6 +494,11 @@ watch(searchQuery, () => {
     // Jalankan pencarian dan kembalikan ke halaman 1
     fetchUsers(1); 
   }, 500); // Tunggu 500ms (setengah detik)
+});
+
+// Refetch saat filter role berubah
+watch(roleFilter, () => {
+  fetchUsers(1);
 });
 
 const saveUser = async () => {

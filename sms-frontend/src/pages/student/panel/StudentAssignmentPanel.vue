@@ -170,6 +170,9 @@
                 }}</span>
               </div>
               <h3 class="text-xl font-bold text-gray-800">{{ task.title }}</h3>
+              <span class="inline-flex items-center mt-1 px-2.5 py-0.5 text-[10px] font-bold rounded-lg" :class="getTypeBadge(task.type).classes">
+                {{ getTypeBadge(task.type).label }}
+              </span>
             </div>
 
             <div
@@ -189,8 +192,15 @@
                   d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                 ></path>
               </svg>
-              Tenggat: {{ formatDateTime(task.due_date) }}
+              {{ isReportPublished ? 'Dikunci saat rapor' : 'Tenggat' }}: {{ formatDateTime(effectiveDeadline(task.due_date)) }}
             </div>
+          </div>
+
+          <div v-if="isExamType(task.type)" class="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2">
+            <svg class="w-5 h-5 text-brand-red shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"></path></svg>
+            <p class="text-xs text-brand-red font-medium">
+              <strong>Perhatian:</strong> Ini adalah <strong>{{ examTypeLabel(task.type) }}</strong>. Pastikan Anda memeriksa kembali jawaban Anda sebelum mengumpulkan. Nilai ini memiliki bobot besar terhadap rapor Anda.
+            </p>
           </div>
 
           <p
@@ -338,7 +348,7 @@
               disabled
               class="w-full py-2.5 bg-gray-200 text-gray-400 rounded-xl text-sm font-bold cursor-not-allowed"
             >
-              Akses Ditutup
+              {{ isReportPublished ? 'Rapor Diterbitkan' : 'Akses Ditutup' }}
             </button>
           </div>
         </div>
@@ -499,6 +509,7 @@ import { ref, onMounted } from "vue";
 import { studentAssignmentService } from "../../../services/modules/student/assignmentService";
 import { useToastStore } from "../../../stores/toast";
 import BasePopoverInfo from "../../../components/BasePopoverInfo.vue";
+import { useReportStatus } from '../../../composables/useReportStatus';
 
 // PROPS INI WAJIB SAMA SEPERTI MATERIAL
 const props = defineProps({
@@ -507,6 +518,7 @@ const props = defineProps({
 });
 
 const toastStore = useToastStore();
+const { isReportPublished, publishedAt } = useReportStatus('student');
 const assignments = ref([]);
 const isLoading = ref(true);
 
@@ -540,7 +552,14 @@ const formatDateTime = (dateString) => {
 };
 
 const isPastDeadline = (dueDate) => {
+  if (isReportPublished.value) return true;
   return new Date() > new Date(dueDate);
+};
+
+// Effective deadline: show published date as cutoff when report is published
+const effectiveDeadline = (dueDate) => {
+  if (isReportPublished.value && publishedAt.value) return publishedAt.value;
+  return dueDate;
 };
 
 // Logika dinamis untuk warna indikator status Tugas
@@ -584,9 +603,21 @@ const getDeadlineClass = (dueDate) => {
 };
 
 const canSubmit = (task) => {
+  if (isReportPublished.value) return false;
   const hasGrade = task.submission && task.submission.grade;
   return !hasGrade && !isPastDeadline(task.due_date);
 };
+
+const getTypeBadge = (type) => {
+  switch (type) {
+    case 'uts': return { label: 'UTS', classes: 'bg-brand-orange/10 text-brand-orange' };
+    case 'uas': return { label: 'UAS', classes: 'bg-brand-red/10 text-brand-red' };
+    default: return { label: 'Tugas Harian', classes: 'bg-blue-50 text-blue-700' };
+  }
+};
+
+const isExamType = (type) => type === 'uts' || type === 'uas';
+const examTypeLabel = (type) => type === 'uts' ? 'UTS' : 'UAS';
 
 // FITUR FILTER SEARCH DEBOUNCE & DATE
 const fetchAssignments = async () => {
@@ -627,7 +658,7 @@ const resetFilters = () => {
 // Preview Lampiran dari Guru ATAU Jawaban dari Siswa
 const previewAttachment = (filePath) => {
   if (!filePath) return;
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api';
   window.open(`${baseUrl}/storage/${filePath}`, "_blank");
 };
 

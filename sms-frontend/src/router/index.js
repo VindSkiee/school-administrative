@@ -1,15 +1,14 @@
 import { createRouter, createWebHistory } from "vue-router";
 import { useAuthStore } from "../stores/auth";
 
-// Komponen Halaman
-import Login from "../pages/Login.vue";
+// MainLayout is statically imported — it wraps all authenticated routes
 import MainLayout from "../layouts/MainLayout.vue";
 
 const routes = [
   {
     path: "/login",
     name: "Login",
-    component: Login,
+    component: () => import("../pages/Login.vue"),
     meta: { requiresGuest: true },
   },
   {
@@ -91,6 +90,11 @@ const routes = [
         component: () => import("../pages/admin/SubjectManagement.vue"),
       },
       {
+        path: "subjects/:id",
+        name: "AdminSubjectDetail",
+        component: () => import("../pages/admin/SubjectDetail.vue"),
+      },
+      {
         path: "schedules",
         name: "Manajemen Jadwal",
         component: () => import("../pages/admin/ScheduleManagement.vue"),
@@ -149,6 +153,11 @@ const routes = [
         path: "/teacher/assignments/:id",
         name: "TeacherAssignmentDetail",
         component: () => import("../pages/teacher/TeacherAssignmentDetail.vue"),
+      },
+      {
+        path: "gradebook",
+        name: "TeacherGradebook",
+        component: () => import("../pages/teacher/TeacherGradebook.vue"),
       },
     ],
   },
@@ -213,7 +222,22 @@ const routes = [
       {
         path: "dashboard",
         name: "PrincipalDashboard",
-        component: () => import("../pages/principal/Dashboard.vue"),
+        component: () => import("../pages/principal/PrincipalDashboard.vue"),
+      },
+      {
+        path: "staff",
+        name: "PrincipalStaffDirectory",
+        component: () => import("../pages/principal/PrincipalStaffDirectory.vue"),
+      },
+      {
+        path: "settings/grading",
+        name: "PrincipalGradingSettings",
+        component: () => import("../pages/principal/PrincipalGradingSettings.vue"),
+      },
+      {
+        path: "academic-trends",
+        name: "PrincipalAcademicTrends",
+        component: () => import("../pages/principal/AcademicTrendIndex.vue"),
       },
     ],
   },

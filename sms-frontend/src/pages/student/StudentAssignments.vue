@@ -53,6 +53,17 @@
 
     <div class="flex overflow-x-auto hide-scrollbar gap-2 pb-2">
       <button 
+        v-for="tf in typeFilters" :key="tf.id"
+        @click="filterType = tf.id"
+        class="px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border"
+        :class="filterType === tf.id ? 'bg-brand-red border-brand-red text-white shadow-sm' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'"
+      >
+        {{ tf.label }}
+      </button>
+    </div>
+
+    <div class="flex overflow-x-auto hide-scrollbar gap-2 pb-2">
+      <button 
         v-for="tab in tabs" :key="tab.id"
         @click="activeTab = tab.id"
         class="px-5 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all shadow-sm border"
@@ -83,7 +94,7 @@
     <div v-else class="space-y-5">
       <div v-for="task in filteredAssignments" :key="task.id" class="bg-white border border-gray-200 rounded-2xl p-5 md:p-6 shadow-sm flex flex-col lg:flex-row gap-6 relative overflow-hidden transition-all hover:shadow-md">
         
-        <div class="absolute left-0 top-0 bottom-0 w-1.5 transition-colors" :class="getStatus(task).barColor"></div>
+        <div class="absolute left-0 top-0 bottom-0 w-1.5 transition-colors" :class="taskStatusMap.get(task.id)?.barColor"></div>
 
         <div class="flex-1 pl-2 w-full">
           <div class="flex flex-wrap items-start justify-between gap-3 mb-3">
@@ -92,6 +103,9 @@
                 <span class="px-2.5 py-1 bg-red-50 text-brand-red text-[10px] font-bold rounded-lg uppercase tracking-wider">
                   {{ task.schedule?.subject?.name || 'Mata Pelajaran' }}
                 </span>
+                <span class="px-2 py-0.5 text-[10px] font-bold rounded-lg" :class="getTypeBadge(task.type).classes">
+                  {{ getTypeBadge(task.type).label }}
+                </span>
                 <span class="text-xs font-semibold text-gray-500">Diunggah: {{ formatDate(task.created_at) }}</span>
               </div>
               <h3 class="text-xl font-bold text-gray-800">{{ task.title }}</h3>
@@ -99,7 +113,7 @@
             
             <div class="px-3 py-1.5 rounded-lg border flex items-center gap-1.5 text-xs font-bold shrink-0" :class="getDeadlineClass(task.due_date)">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-              Tenggat: {{ formatDateTime(task.due_date) }}
+              {{ isReportPublished ? 'Dikunci saat rapor' : 'Tenggat' }}: {{ formatDateTime(effectiveDeadline(task.due_date)) }}
             </div>
           </div>
 
@@ -121,9 +135,9 @@
         <div class="w-full lg:w-64 shrink-0 flex flex-col justify-between bg-gray-50 rounded-xl p-4 border border-gray-100">
           <div class="mb-4">
             <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">Status</p>
-            <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold" :class="getStatus(task).badgeClass">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="getStatus(task).icon"></path></svg>
-              {{ getStatus(task).text }}
+            <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold" :class="taskStatusMap.get(task.id)?.badgeClass">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="taskStatusMap.get(task.id)?.icon"></path></svg>
+              {{ taskStatusMap.get(task.id)?.text }}
             </div>
           </div>
 
@@ -145,7 +159,7 @@
               {{ task.submission ? 'Edit Jawaban' : 'Kerjakan' }}
             </button>
             <button v-else disabled class="w-full py-2.5 bg-gray-200 text-gray-400 rounded-xl text-sm font-bold cursor-not-allowed">
-              Akses Ditutup
+              {{ isReportPublished ? 'Rapor Diterbitkan' : 'Akses Ditutup' }}
             </button>
           </div>
         </div>
@@ -188,14 +202,17 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { studentAssignmentService } from '../../services/modules/student/assignmentService';
 import { useToastStore } from '../../stores/toast';
 import BaseSelect from '../../components/BaseSelect.vue';
 import BasePopoverInfo from '../../components/BasePopoverInfo.vue';
+import { useReportStatus } from '../../composables/useReportStatus';
 
 const router = useRouter();
+const route = useRoute();
 const toastStore = useToastStore();
+const { isReportPublished, publishedAt } = useReportStatus('student');
 
 // STATE UTAMA
 const allAssignments = ref([]); // Data mentah dari API
@@ -205,17 +222,34 @@ const isLoading = ref(true);
 const searchQuery = ref('');
 const filterDate = ref('');
 const filterSubject = ref('');
+const filterType = ref('all');
 const subjectOptions = ref([]); // Diekstrak dinamis dari data
 let searchTimeout = null;
 
 // TABS STATE
-const activeTab = ref('all');
+const activeTab = ref(route.query.tab || 'all');
 const tabs = [
   { id: 'all', label: 'Semua Tugas', activeClass: 'bg-gray-800 border-gray-800 text-white' },
   { id: 'pending', label: 'Belum Dikerjakan', activeClass: 'bg-brand-orange border-brand-orange text-white' },
   { id: 'submitted', label: 'Menunggu Nilai', activeClass: 'bg-blue-600 border-blue-600 text-white' },
   { id: 'graded', label: 'Sudah Dinilai', activeClass: 'bg-green-600 border-green-600 text-white' },
 ];
+
+// Type filter options
+const typeFilters = [
+  { id: 'all', label: 'Semua' },
+  { id: 'task', label: 'Tugas Harian' },
+  { id: 'uts', label: 'UTS' },
+  { id: 'uas', label: 'UAS' },
+];
+
+const getTypeBadge = (type) => {
+  switch (type) {
+    case 'uts': return { label: 'UTS', classes: 'bg-brand-orange/10 text-brand-orange' };
+    case 'uas': return { label: 'UAS', classes: 'bg-brand-red/10 text-brand-red' };
+    default: return { label: 'Tugas Harian', classes: 'bg-blue-50 text-blue-700' };
+  }
+};
 
 // MODAL STATE
 const showModal = ref(false);
@@ -226,38 +260,38 @@ const selectedFile = ref(null);
 // LOGIKA UX & TANGGAL
 const formatDate = (d) => new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(d));
 const formatDateTime = (d) => new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(d));
-const isPastDeadline = (d) => new Date() > new Date(d);
+const isPastDeadline = (d) => {
+  if (isReportPublished.value) return true;
+  return new Date() > new Date(d);
+};
 
-const getStatus = (task) => {
-  if (task.submission?.grade) return { text: 'Sudah Dinilai', badgeClass: 'bg-green-100 text-green-700', barColor: 'bg-green-500', icon: 'M5 13l4 4L19 7', code: 'graded' };
-  if (task.submission) return { text: 'Menunggu Nilai', badgeClass: 'bg-blue-100 text-blue-700', barColor: 'bg-blue-500', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z', code: 'submitted' };
-  if (isPastDeadline(task.due_date)) return { text: 'Terlewat', badgeClass: 'bg-red-100 text-brand-red', barColor: 'bg-brand-red', icon: 'M6 18L18 6M6 6l12 12', code: 'pending' };
-  return { text: 'Belum Dikerjakan', badgeClass: 'bg-orange-100 text-brand-orange', barColor: 'bg-brand-orange', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z', code: 'pending' };
+// Effective deadline: show published date as cutoff when report is published
+const effectiveDeadline = (d) => {
+  if (isReportPublished.value && publishedAt.value) return publishedAt.value;
+  return d;
 };
 
 const getDeadlineClass = (d) => isPastDeadline(d) ? 'border-red-200 text-brand-red bg-red-50' : 'border-gray-200 text-gray-600 bg-gray-50';
-const canSubmit = (task) => !task.submission?.grade && !isPastDeadline(task.due_date);
+const canSubmit = (task) => !isReportPublished.value && !task.submission?.grade && !isPastDeadline(task.due_date);
 
-// DATA FETCHING & FILTERING
+// DATA FETCHING
 const fetchAssignments = async () => {
   isLoading.value = true;
   try {
     const params = {
       search: searchQuery.value || undefined,
-      date: filterDate.value || undefined
+      date: filterDate.value || undefined,
     };
     const res = await studentAssignmentService.getAssignments(params);
     allAssignments.value = res.data.data || res.data;
 
-    // Ekstrak mata pelajaran unik dari data untuk BaseSelect dropdown
     const subjects = new Map();
     allAssignments.value.forEach(t => {
       if (t.schedule?.subject) subjects.set(t.schedule.subject.id, t.schedule.subject.name);
     });
     subjectOptions.value = [{ value: '', label: 'Semua Mapel' }, ...Array.from(subjects, ([value, label]) => ({ value, label }))];
-
   } catch (error) {
-    toastStore.error("Gagal memuat daftar tugas global.");
+    toastStore.error('Gagal memuat daftar tugas global.');
   } finally {
     isLoading.value = false;
   }
@@ -265,26 +299,56 @@ const fetchAssignments = async () => {
 
 const onSearchInput = () => { clearTimeout(searchTimeout); searchTimeout = setTimeout(fetchAssignments, 500); };
 const clearDate = () => { filterDate.value = ''; fetchAssignments(); };
-const resetFilters = () => { searchQuery.value = ''; filterDate.value = ''; filterSubject.value = ''; fetchAssignments(); };
-const applyLocalFilter = () => { /* Select sudah terhubung ke computed filteredAssignments */ };
+const resetFilters = () => { searchQuery.value = ''; filterDate.value = ''; filterSubject.value = ''; filterType.value = 'all'; fetchAssignments(); };
+const applyLocalFilter = () => { /* Select terhubung ke computed filteredAssignments */ };
 
-// KOMPUTASI UNTUK TABS & SELECT MAPEL
+// PERF FIX: cached status map — computed once per assignments change, not per render
+const taskStatusMap = computed(() => {
+  const map = new Map();
+  allAssignments.value.forEach(task => {
+    let status;
+    if (task.submission?.grade) {
+      status = { text: 'Sudah Dinilai', badgeClass: 'bg-green-100 text-green-700', barColor: 'bg-green-500', icon: 'M5 13l4 4L19 7', code: 'graded' };
+    } else if (task.submission) {
+      status = { text: 'Menunggu Nilai', badgeClass: 'bg-blue-100 text-blue-700', barColor: 'bg-blue-500', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z', code: 'submitted' };
+    } else if (isPastDeadline(task.due_date)) {
+      status = { text: 'Terlewat', badgeClass: 'bg-red-100 text-brand-red', barColor: 'bg-brand-red', icon: 'M6 18L18 6M6 6l12 12', code: 'pending' };
+    } else {
+      status = { text: 'Belum Dikerjakan', badgeClass: 'bg-orange-100 text-brand-orange', barColor: 'bg-brand-orange', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z', code: 'pending' };
+    }
+    map.set(task.id, status);
+  });
+  return map;
+});
+
+// PERF FIX: combined filter + count in single computed — avoids redundant iterations
+const processedAssignments = computed(() => {
+  const groups = { all: [], pending: [], submitted: [], graded: [] };
+
+  allAssignments.value.forEach(task => {
+    const status = taskStatusMap.value.get(task.id);
+    if (!status) return;
+    groups.all.push(task);
+    if (groups[status.code]) groups[status.code].push(task);
+  });
+
+  return groups;
+});
+
+// PERF FIX: filtered list derives from processed groups + subject/type filters
 const filteredAssignments = computed(() => {
-  return allAssignments.value.filter(task => {
-    // Filter by Tab
-    const code = getStatus(task).code;
-    const passTab = activeTab.value === 'all' || code === activeTab.value;
-    
-    // Filter by Subject (Local Filter)
-    const passSubject = filterSubject.value === '' || task.schedule?.subject?.id === filterSubject.value;
+  const base = processedAssignments.value[activeTab.value] || [];
 
-    return passTab && passSubject;
+  return base.filter(task => {
+    const passSubject = filterSubject.value === '' || task.schedule?.subject?.id === filterSubject.value;
+    const passType = filterType.value === 'all' || task.type === filterType.value;
+    return passSubject && passType;
   });
 });
 
+// PERF FIX: counts derived from processed groups — no separate filter pass
 const getFilteredCount = (tabId) => {
-  if (tabId === 'all') return allAssignments.value.length;
-  return allAssignments.value.filter(t => getStatus(t).code === tabId).length;
+  return (processedAssignments.value[tabId] || []).length;
 };
 
 // ACTION ROUTING
@@ -293,7 +357,7 @@ const goToMaterial = (scheduleId) => {
 };
 
 // MODAL UPLOAD ACTIONS
-const previewAttachment = (filePath) => window.open(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/storage/${filePath}`, '_blank');
+const previewAttachment = (filePath) => window.open(`${import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api'}/storage/${filePath}`, '_blank');
 const openModal = (task) => { activeTask.value = task; selectedFile.value = null; showModal.value = true; };
 const closeModal = () => { showModal.value = false; activeTask.value = null; selectedFile.value = null; };
 

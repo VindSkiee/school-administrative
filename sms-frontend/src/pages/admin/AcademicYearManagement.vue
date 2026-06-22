@@ -256,8 +256,9 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from "vue";
+import { ref, reactive, computed, onMounted, onActivated } from "vue";
 import { useToastStore } from "../../stores/toast";
+import { useGlobalDropdownsStore } from "../../stores/globalDropdowns";
 import { academicYearService } from "../../services/modules/admin/academicYearService";
 
 import BaseSelect from "../../components/BaseSelect.vue";
@@ -266,6 +267,7 @@ import BaseModal from "../../components/BaseModal.vue";
 import ConfirmModal from "../../components/ConfirmModal.vue";
 
 const toastStore = useToastStore();
+const dropdowns = useGlobalDropdownsStore();
 
 const tableColumns = [
   { key: "name", label: "Tahun Ajaran" },
@@ -332,6 +334,7 @@ const saveAcademicYear = async () => {
       toastStore.success("Tahun ajaran berhasil dibuat.");
     }
     closeModal();
+    await dropdowns.refreshAcademicYears(); // Refresh store + clear dirty flag
     fetchAcademicYears(paginationMeta.current_page);
   } catch (error) {
     toastStore.error(error.response?.data?.message || "Gagal menyimpan data.");
@@ -369,6 +372,8 @@ const executeConfirmAction = async () => {
       await academicYearService.delete(confirmModal.targetId);
       toastStore.success("Tahun ajaran berhasil dihapus.");
     }
+    // Refresh global cache (clears dirty flag after fetch → no redundant re-fetch on re-activate)
+    await dropdowns.refreshAcademicYears();
     fetchAcademicYears(paginationMeta.current_page);
   } catch (error) {
     toastStore.error(
@@ -393,4 +398,13 @@ const openModal = (item = null) => {
 const closeModal = () => (isModalOpen.value = false);
 
 onMounted(fetchAcademicYears);
+
+// Refresh list when re-activated from keep-alive cache
+// Only re-fetches if academic years were actually mutated elsewhere
+onActivated(() => {
+  const dirty = dropdowns.consumeDirtyFlag('academicYears');
+  if (dirty) {
+    fetchAcademicYears(paginationMeta.current_page);
+  }
+});
 </script>

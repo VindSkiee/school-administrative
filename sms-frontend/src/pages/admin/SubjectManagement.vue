@@ -39,7 +39,12 @@
       </template>
 
       <template #cell(name)="{ item }">
-        <span class="font-bold text-gray-800">{{ item.name }}</span>
+        <button
+          @click="router.push({ name: 'AdminSubjectDetail', params: { id: item.id } })"
+          class="font-bold text-brand-red hover:text-brand-orange hover:underline cursor-pointer transition-colors text-left"
+        >
+          {{ item.name }}
+        </button>
       </template>
 
       <template #cell(actions)="{ item }">
@@ -130,6 +135,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { useToastStore } from '../../stores/toast';
 import { subjectService } from '../../services/modules/admin/subjectService';
@@ -139,6 +145,7 @@ import BaseModal from '../../components/BaseModal.vue';
 import ConfirmModal from '../../components/ConfirmModal.vue';
 
 const toastStore = useToastStore();
+const router = useRouter();
 
 // --- KONFIGURASI TABEL ---
 const tableColumns = [

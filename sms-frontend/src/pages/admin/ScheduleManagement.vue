@@ -10,8 +10,21 @@
         </p>
       </div>
 
-      <div class="flex flex-col sm:flex-row w-full sm:w-auto gap-3">
-        <div class="w-full sm:w-64">
+      <div class="flex flex-col items-end sm:flex-row w-full sm:w-auto gap-3">
+        <div class="w-full sm:w-56">
+          <label class="block text-xs font-semibold tracking-wide text-gray-600 mb-1.5">
+            Pilih Tahun Ajaran
+          </label>
+          <BaseSelect
+            v-model="selectedAcademicYearId"
+            :options="academicYearOptions"
+            placeholder="Pilih Tahun Ajaran"
+          />
+        </div>
+        <div class="w-full sm:w-56">
+          <label class="block text-xs font-semibold tracking-wide text-gray-600 mb-1.5">
+            Pilih Kelas
+          </label>
           <BaseSelect
             v-model="selectedClassFilter"
             :options="classOptions"
@@ -22,7 +35,7 @@
 
         <button
           @click="openModal()"
-          class="bg-brand-red hover:bg-brand-orange text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-md transition-colors flex items-center justify-center whitespace-nowrap"
+          class="bg-brand-red h-10 w-full sm:w-auto hover:bg-brand-orange text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-md transition-colors flex items-center justify-center whitespace-nowrap"
         >
           <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
@@ -54,7 +67,7 @@
 
       <template #cell(class_subject)="{ item }">
         <div class="flex flex-col">
-          <span class="font-bold text-brand-red">{{ item.subject?.name }}</span>
+          <span class="font-bold text-black">{{ item.subject?.name }}</span>
           <span class="text-xs font-semibold text-gray-500 mt-0.5 bg-gray-100 px-2 py-0.5 rounded w-max">
             Kelas {{ item.school_class?.name }}
           </span>
@@ -168,11 +181,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, watch } from 'vue';
+import { ref, reactive, computed, onMounted, onActivated, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useToastStore } from '../../stores/toast';
+import { useGlobalDropdownsStore } from '../../stores/globalDropdowns';
 import { scheduleService } from '../../services/modules/admin/scheduleService';
-import api from '../../services/api.js'; // Untuk fetch dropdown data pendukung
 
 import BaseTable from '../../components/BaseTable.vue';
 import BaseSelect from '../../components/BaseSelect.vue';
@@ -180,6 +193,7 @@ import BaseModal from '../../components/BaseModal.vue';
 import ConfirmModal from '../../components/ConfirmModal.vue';
 
 const toastStore = useToastStore();
+const dropdowns = useGlobalDropdownsStore();
 
 const tableColumns = [
   { key: 'day_time', label: 'Hari & Waktu' },
@@ -194,26 +208,13 @@ const isLoading = ref(true);
 const isSaving = ref(false);
 
 const selectedClassFilter = ref(''); // Filter untuk List Table
+const selectedAcademicYearId = ref(''); // Tahun Ajaran terpilih (default: aktif)
 
-// Data Master untuk Dropdown
-const classes = ref([]);
-const subjects = ref([]);
-const teachers = ref([]);
-
-const classOptions = computed(() =>
-  classes.value.map((cls) => ({ value: cls.id, label: `Kelas ${cls.name}` })),
-);
-
-const subjectOptions = computed(() =>
-  subjects.value.map((sub) => ({ value: sub.id, label: sub.name })),
-);
-
-const teacherOptions = computed(() =>
-  teachers.value.map((teacher) => ({
-    value: teacher.id,
-    label: teacher.name,
-  })),
-);
+// Data Master for Dropdown — sourced from global cache store
+const academicYearOptions = computed(() => dropdowns.academicYearOptions);
+const classOptions = computed(() => dropdowns.classDropdownOptions);
+const subjectOptions = computed(() => dropdowns.subjectDropdownOptions);
+const teacherOptions = computed(() => dropdowns.teacherDropdownOptions);
 
 const dayOptions = [
   { value: 'monday', label: 'Senin' },
@@ -246,22 +247,17 @@ const formatTime = (time) => {
 // --- API CALLS ---
 const fetchMasterData = async () => {
   try {
-    // Kita panggil endpoint master secara paralel agar lebih cepat
-    const [resClass, resSubject, resTeacher] = await Promise.all([
-      api.get('/v1/admin/classes?per_page=100'), // Asumsi kita melonggarkan per_page untuk dropdown
-      api.get('/v1/admin/subjects?per_page=100'),
-      api.get('/v1/admin/users?role=teacher&per_page=all')
+    // Use global dropdown store — fetches only if cache is empty
+    await Promise.all([
+      dropdowns.ensureAcademicYears(),
+      dropdowns.ensureClasses(),
+      dropdowns.ensureSubjects(),
+      dropdowns.ensureTeacherOptions(),
     ]);
-    
-    classes.value = resClass.data.data || resClass.data;
-    subjects.value = resSubject.data.data || resSubject.data;
-    const teacherData = resTeacher.data.data || resTeacher.data;
-    teachers.value = teacherData.map((teacher) => ({
-      id: teacher.id,
-      name: teacher.name,
-    }));
+
+    // Do NOT auto-select year — default to all years shown (no selection)
   } catch (error) {
-    toastStore.error('Gagal memuat data pendukung (Kelas/Mapel/Guru).');
+    toastStore.error('Gagal memuat data pendukung (Kelas/Mapel/Guru/Tahun Ajaran).');
   }
 };
 
@@ -271,6 +267,9 @@ const fetchSchedules = async (page = 1) => {
     const params = { page: page, per_page: paginationMeta.per_page };
     if (selectedClassFilter.value) {
       params.class_id = selectedClassFilter.value;
+    }
+    if (selectedAcademicYearId.value) {
+      params.academic_year_id = selectedAcademicYearId.value;
     }
 
     const response = await scheduleService.getAll(params);
@@ -325,7 +324,8 @@ const saveSchedule = async () => {
       await scheduleService.update(selectedId.value, form);
       toastStore.success('Jadwal diperbarui.');
     } else {
-      await scheduleService.create(form);
+      const payload = { ...form, academic_year_id: selectedAcademicYearId.value };
+      await scheduleService.create(payload);
       toastStore.success('Jadwal baru ditambahkan.');
     }
     isModalOpen.value = false;
@@ -363,7 +363,35 @@ onMounted(() => {
   fetchSchedules();
 });
 
+// Refresh schedule data when component is re-activated from keep-alive cache
+// Only re-fetches if data was actually mutated elsewhere (dirty flag check)
+onActivated(async () => {
+  const yearsDirty = dropdowns.consumeDirtyFlag('academicYears');
+  const classesDirty = dropdowns.consumeDirtyFlag('classes');
+  const subjectsDirty = dropdowns.consumeDirtyFlag('subjects');
+  const teachersDirty = dropdowns.consumeDirtyFlag('teachers');
+
+  // If nothing was mutated externally, skip all re-fetching — keep-alive cache is valid
+  if (!yearsDirty && !classesDirty && !subjectsDirty && !teachersDirty) return;
+
+  // Only refresh dropdowns that were actually mutated
+  const refreshPromises = [];
+  if (yearsDirty) refreshPromises.push(dropdowns.refreshAcademicYears());
+  if (classesDirty) refreshPromises.push(dropdowns.refreshClasses());
+  if (subjectsDirty) refreshPromises.push(dropdowns.refreshSubjects());
+  if (teachersDirty) refreshPromises.push(dropdowns.refreshTeacherOptions());
+
+  await Promise.all(refreshPromises);
+
+  // Re-fetch schedules only when dropdown data changed
+  fetchSchedules(paginationMeta.current_page);
+});
+
 watch(selectedClassFilter, () => {
+  fetchSchedules(1);
+});
+
+watch(selectedAcademicYearId, () => {
   fetchSchedules(1);
 });
 </script>

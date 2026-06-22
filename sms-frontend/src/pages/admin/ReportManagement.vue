@@ -14,7 +14,7 @@
 
       <div class="w-full lg:w-[320px]">
         <label class="block text-xs font-semibold tracking-wide text-gray-600 mb-1.5">
-          Tahun Ajaran
+          Pilih Tahun Ajaran
         </label>
         <BaseSelect
           v-model="selectedAcademicYearId"
@@ -61,6 +61,23 @@
     </section>
 
     <template v-else>
+      <!-- No year selected: show prompt to select year -->
+      <section
+        v-if="!selectedAcademicYearId"
+        class="rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50 p-10 text-center"
+      >
+        <div class="w-16 h-16 bg-gray-100 text-gray-400 rounded-full flex items-center justify-center mx-auto mb-4">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+        </div>
+        <h3 class="text-lg font-bold text-gray-800 mb-2">Pilih Tahun Ajaran</h3>
+        <p class="text-sm text-gray-500 max-w-md mx-auto">
+          Silakan pilih tahun ajaran terlebih dahulu pada dropdown di atas untuk menampilkan data laporan dan distribusi rapor.
+        </p>
+      </section>
+
+      <template v-else>
       <section v-if="activeTab === 'attendance'" class="space-y-4">
         <div
           v-if="isLoadingReports"
@@ -178,11 +195,65 @@
       </section>
 
       <section v-if="activeTab === 'distribution'" class="space-y-6">
+        <!-- DANGER ZONE: Only visible when NOT yet published -->
+        <div v-if="!selectedAcademicYear?.is_report_published" class="rounded-2xl border-2 border-red-300 bg-red-50 p-5 space-y-4">
+          <div>
+            <h3 class="text-lg font-bold text-red-700">Danger Zone: Publikasi Semester</h3>
+            <p class="text-sm text-red-600 mt-1">
+              Setelah dipublikasikan, semester akan dikunci dan rapor dianggap final.
+            </p>
+          </div>
+
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div class="text-sm text-red-700">
+              Status saat ini:
+              <span class="font-bold">Belum Dipublikasikan</span>
+            </div>
+
+            <button
+              @click="handlePublishReports"
+              :disabled="isPublishing || !selectedAcademicYearId || !isAllStudentsReady"
+              class="inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              <svg
+                v-if="isPublishing"
+                class="animate-spin h-4 w-4 mr-2"
+                viewBox="0 0 24 24"
+                fill="none"
+              >
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              {{ isPublishing ? 'Memproses...' : 'Publikasikan Rapor & Kunci Semester' }}
+            </button>
+          </div>
+
+          <p v-if="!isAllStudentsReady" class="text-sm font-medium text-red-600">
+            Tombol Publikasi dikunci. Harap lengkapi semua nilai & kehadiran siswa terlebih dahulu.
+          </p>
+        </div>
+
+        <!-- LOCKED STATE: Visible when already published -->
+        <div v-else class="rounded-2xl border-2 border-green-300 bg-green-50 p-5 space-y-3">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-green-100 text-green-600 rounded-xl flex items-center justify-center shrink-0">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+            </div>
+            <div>
+              <h3 class="text-lg font-bold text-green-800">Rapor Sudah Dipublikasikan & Semester Terkunci</h3>
+              <p class="text-sm text-green-600 mt-0.5">
+                Nilai telah difinalisasi. Siswa sekarang dapat mengunduh rapor PDF mereka. Tidak ada perubahan yang dapat dilakukan.
+              </p>
+            </div>
+          </div>
+        </div>
         <div class="bg-white rounded-2xl border border-gray-200 overflow-hidden">
           <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
             <h2 class="font-semibold text-gray-800">Distribusi Rapor Siswa</h2>
             <span class="text-xs text-gray-500">{{ filteredDistributionStudents.length }} siswa</span>
           </div>
+
+          
 
           <div class="p-4 border-b border-gray-100 bg-gray-50">
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
@@ -319,58 +390,35 @@
           </div>
         </div>
 
-        <div class="rounded-2xl border-2 border-red-300 bg-red-50 p-5 space-y-4">
-          <div>
-            <h3 class="text-lg font-bold text-red-700">Danger Zone: Publikasi Semester</h3>
-            <p class="text-sm text-red-600 mt-1">
-              Setelah dipublikasikan, semester akan dikunci dan rapor dianggap final.
-            </p>
-          </div>
-
-          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div class="text-sm text-red-700">
-              Status saat ini:
-              <span class="font-bold">
-                {{ selectedAcademicYear?.is_report_published ? 'Sudah Dipublikasikan' : 'Belum Dipublikasikan' }}
-              </span>
-            </div>
-
-            <button
-              @click="handlePublishReports"
-              :disabled="isPublishing || !selectedAcademicYearId || selectedAcademicYear?.is_report_published || !isAllStudentsReady"
-              class="inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
-            >
-              <svg
-                v-if="isPublishing"
-                class="animate-spin h-4 w-4 mr-2"
-                viewBox="0 0 24 24"
-                fill="none"
-              >
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              {{ isPublishing ? 'Memproses...' : 'Publikasikan Rapor & Kunci Semester' }}
-            </button>
-          </div>
-
-          <p v-if="!isAllStudentsReady" class="text-sm font-medium text-red-600">
-            Tombol Publikasi dikunci. Harap lengkapi semua nilai & kehadiran siswa terlebih dahulu.
-          </p>
-        </div>
+        
       </section>
+      </template>
     </template>
+
+    <ConfirmModal
+      :isOpen="publishConfirmModal.isOpen"
+      :isLoading="publishConfirmModal.isLoading"
+      title="Publikasikan Rapor & Kunci Semester"
+      message="Tindakan ini akan mengunci pengeditan nilai dan mengizinkan siswa mengunduh rapor PDF. Lanjutkan?"
+      confirmText="Ya, Publikasikan!"
+      @confirm="executePublishReports"
+      @cancel="publishConfirmModal.isOpen = false"
+    />
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, onActivated, reactive, ref, watch } from 'vue';
 import BaseSelect from '../../components/BaseSelect.vue';
+import ConfirmModal from '../../components/ConfirmModal.vue';
 import { useToastStore } from '../../stores/toast';
+import { useGlobalDropdownsStore } from '../../stores/globalDropdowns';
 import { academicYearService } from '../../services/modules/admin/academicYearService';
-import { classService } from '../../services/modules/admin/classService';
 import { reportService } from '../../services/modules/admin/reportService';
+import api from '../../services/api'; // PERF FIX: direct api for lightweight /classes/options
 
 const toastStore = useToastStore();
+const dropdowns = useGlobalDropdownsStore();
 
 const tabs = [
   { key: 'attendance', label: 'Ringkasan Kehadiran' },
@@ -404,16 +452,13 @@ const isPublishing = ref(false);
 
 const downloadLoadingMap = reactive({});
 
+const publishConfirmModal = reactive({ isOpen: false, isLoading: false });
+
 const selectedAcademicYear = computed(() =>
   academicYears.value.find((item) => String(item.id) === String(selectedAcademicYearId.value)) || null
 );
 
-const academicYearOptions = computed(() =>
-  academicYears.value.map((item) => ({
-    value: String(item.id),
-    label: `${item.name} - ${item.semester === 'odd' ? 'Ganjil' : 'Genap'}${item.is_active ? ' (Aktif)' : ''}`
-  }))
-);
+const academicYearOptions = computed(() => dropdowns.academicYearOptions);
 
 const toNumber = (value) => {
   const parsed = Number(value);
@@ -572,18 +617,12 @@ const academicCards = computed(() => {
   ];
 });
 
-// Ambil daftar Tahun Ajaran dan set default ke yang aktif.
+// Ambil daftar Tahun Ajaran — does NOT auto-select (user must choose explicitly)
 const fetchAcademicYears = async () => {
   isLoadingYears.value = true;
   try {
-    const response = await academicYearService.getAll({ per_page: 'all' });
-    const list = unwrapArrayPayload(response);
-    academicYears.value = list;
-
-    if (!selectedAcademicYearId.value && list.length) {
-      const activeYear = list.find((item) => item.is_active);
-      selectedAcademicYearId.value = String((activeYear || list[0]).id);
-    }
+    await dropdowns.ensureAcademicYears();
+    academicYears.value = dropdowns.academicYearsRaw;
   } catch (error) {
     toastStore.error('Gagal memuat Tahun Ajaran.');
   } finally {
@@ -639,7 +678,7 @@ const fetchDistributionStudents = async () => {
   }
 };
 
-// Ambil opsi kelas untuk filter distribusi rapor berdasarkan Tahun Ajaran terpilih.
+// Ambil opsi kelas untuk filter distribusi rapor — uses lightweight /classes/options endpoint
 const fetchDistributionClasses = async () => {
   if (!selectedAcademicYearId.value) {
     distributionClassOptions.value = [];
@@ -649,12 +688,12 @@ const fetchDistributionClasses = async () => {
 
   isLoadingDistributionClasses.value = true;
   try {
-    const response = await classService.getAll({
-      per_page: 'all',
-      academic_year_id: selectedAcademicYearId.value
+    // PERF FIX: use lightweight options endpoint instead of full classService.getAll
+    const response = await api.get('/v1/admin/classes/options', {
+      params: { academic_year_id: selectedAcademicYearId.value }
     });
 
-    const classes = unwrapArrayPayload(response);
+    const classes = response.data.data || response.data || [];
     distributionClassOptions.value = classes.map((item) => ({
       value: String(item.id),
       label: item.name
@@ -699,7 +738,7 @@ const handleDownloadPdf = async (student) => {
   }
 };
 
-const handlePublishReports = async () => {
+const handlePublishReports = () => {
   if (!selectedAcademicYearId.value) {
     toastStore.error('Pilih Tahun Ajaran terlebih dahulu.');
     return;
@@ -710,28 +749,29 @@ const handlePublishReports = async () => {
     return;
   }
 
-  const isConfirmed = window.confirm(
-    'Tindakan ini permanen. Rapor akan dibagikan ke siswa dan semester akan dikunci!'
-  );
+  publishConfirmModal.isOpen = true;
+};
 
-  if (!isConfirmed) {
-    return;
-  }
-
+const executePublishReports = async () => {
+  publishConfirmModal.isLoading = true;
   isPublishing.value = true;
   try {
     await reportService.publishReports(selectedAcademicYearId.value);
     toastStore.success('Rapor berhasil dipublikasikan dan semester terkunci.');
+    publishConfirmModal.isOpen = false;
+    await dropdowns.refreshAcademicYears(); // Publishing changes is_report_published flag
     await fetchAcademicYears();
   } catch (error) {
     toastStore.error(error.response?.data?.error || 'Gagal mempublikasikan rapor.');
   } finally {
+    publishConfirmModal.isLoading = false;
     isPublishing.value = false;
   }
 };
 
+// PERF FIX: skip watcher during initial load to prevent duplicate requests
 watch(selectedAcademicYearId, async (newValue, oldValue) => {
-  if (!newValue || newValue === oldValue) {
+  if (isInitialLoad.value || !newValue || newValue === oldValue) {
     return;
   }
 
@@ -751,13 +791,35 @@ watch(filteredDistributionStudents, () => {
   }
 });
 
+// PERF FIX: single-pass initial load — watcher is suppressed via isInitialLoad flag
+const isInitialLoad = ref(true);
+
 onMounted(async () => {
   isLoadingInitial.value = true;
+  isInitialLoad.value = true;
   try {
     await fetchAcademicYears();
-    await Promise.all([fetchReportSummaries(), fetchDistributionStudents(), fetchDistributionClasses()]);
+    // Do NOT auto-fetch reports — wait for user to select a year
   } finally {
+    isInitialLoad.value = false;
     isLoadingInitial.value = false;
   }
+});
+
+// Refresh report data when re-activated from keep-alive cache
+// Only re-fetches if academic years were mutated externally (dirty flag only, no TTL)
+onActivated(async () => {
+  const yearsDirty = dropdowns.consumeDirtyFlag('academicYears');
+
+  if (yearsDirty) {
+    await dropdowns.refreshAcademicYears();
+    academicYears.value = dropdowns.academicYearsRaw;
+
+    // Only re-fetch report data if a year is currently selected
+    if (selectedAcademicYearId.value) {
+      await Promise.all([fetchReportSummaries(), fetchDistributionStudents(), fetchDistributionClasses()]);
+    }
+  }
+  // If not dirty, keep-alive cached data is preserved — no refetch
 });
 </script>

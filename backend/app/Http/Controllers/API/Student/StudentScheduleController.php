@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Student;
 use App\Http\Controllers\Controller;
 use App\Models\Student;
 use App\Models\Schedule;
+use App\Models\AcademicYear;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -29,8 +30,11 @@ class StudentScheduleController extends Controller
         }
 
         // 3. Ambil ID kelas-kelas di mana siswa ini terdaftar
-        // Kita menggunakan pluck('classes.id') karena relasinya belongsToMany
-        $classIds = $student->classes()->pluck('classes.id');
+        // PERF FIX: only fetch classes from the active academic year
+        $activeYearId = AcademicYear::where('is_active', true)->value('id');
+        $classIds = $student->classes()
+            ->when($activeYearId, fn ($q) => $q->where('classes.academic_year_id', $activeYearId))
+            ->pluck('classes.id');
 
         if ($classIds->isEmpty()) {
             return response()->json([

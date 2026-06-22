@@ -11,6 +11,7 @@ class StoreAssignmentRequest extends FormRequest
     {
         return [
             'schedule_id' => ['required', 'exists:schedules,id'],
+            'type' => ['required', 'string', 'in:task,uts,uas'],
             'date' => ['required', 'date', 'date_format:Y-m-d'],
             'title' => ['required', 'string', 'max:255'],
             'description' => ['required', 'string'],

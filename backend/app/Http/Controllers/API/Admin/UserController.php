@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\API\Admin;
 
 use App\Http\Requests\Admin\StoreUserRequest;
+use App\Models\AcademicYear;
 use App\Models\Grade;
+use App\Models\Schedule;
 use App\Models\User;
 use App\Services\UserService;
 use Illuminate\Http\JsonResponse;
@@ -13,10 +15,46 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Illuminate\Support\Facades\Storage;
+use App\Models\Student;
 
 class UserController
 {
     public function __construct(protected UserService $userService) {}
+
+    // PERF FIX: single raw query with JOIN + 120s cache (plain array to avoid serialization issues)
+    public function teacherOptions(): JsonResponse
+    {
+        $options = \Illuminate\Support\Facades\Cache::remember('admin_teacher_options', 120, function () {
+            return \Illuminate\Support\Facades\DB::table('teachers')
+                ->join('users', 'users.id', '=', 'teachers.user_id')
+                ->select('teachers.user_id AS id', 'users.name')
+                ->orderBy('users.name')
+                ->get()
+                ->map(fn ($t) => ['id' => $t->id, 'name' => $t->name ?? '-'])
+                ->values()
+                ->toArray();
+        });
+
+        return response()->json(['data' => $options]);
+    }
+
+    // PERF FIX: single raw query with JOIN + 120s cache (plain array to avoid serialization issues)
+    public function studentOptions(): JsonResponse
+    {
+        $options = \Illuminate\Support\Facades\Cache::remember('admin_student_options', 120, function () {
+            return \Illuminate\Support\Facades\DB::table('students')
+                ->join('users', 'users.id', '=', 'students.user_id')
+                ->select('students.user_id AS id', 'users.name', 'students.nis')
+                ->where('students.status', 'active')
+                ->orderBy('users.name')
+                ->get()
+                ->map(fn ($s) => ['id' => $s->id, 'name' => $s->name ?? '-', 'nis' => $s->nis ?? '-'])
+                ->values()
+                ->toArray();
+        });
+
+        return response()->json(['data' => $options]);
+    }
 
     // READ (Daftar semua user dengan pagination & filter role)
     public function index(Request $request): JsonResponse
@@ -42,15 +80,8 @@ class UserController
             $query->with(['student', 'teacher', 'admin', 'principal']);
         }
 
-        // TANGKAP PERMINTAAN 'ALL' UNTUK KEBUTUHAN DROPDOWN FRONTEND
-        if ($request->query('per_page') === 'all') {
-            return response()->json([
-                'data' => $query->get(), // Dibungkus 'data' agar format response sama dengan paginate
-            ]);
-        }
-
-        $perPage = (int) $request->query('per_page', 100);
-        $perPage = max(1, min($perPage, 100));
+        // PERF FIX: removed per_page=all branch, capped max at 200
+        $perPage = min((int) $request->query('per_page', 20), 200);
         $users = $query->paginate($perPage);
 
         return response()->json($users);
@@ -61,6 +92,11 @@ class UserController
     {
         try {
             $user = $this->userService->createUser($request->validated());
+
+            // Invalidate options cache based on role
+            $role = $request->input('role');
+            if ($role === 'teacher') \Illuminate\Support\Facades\Cache::forget('admin_teacher_options');
+            if ($role === 'student') \Illuminate\Support\Facades\Cache::forget('admin_student_options');
 
             return response()->json([
                 'success' => true,
@@ -87,6 +123,7 @@ class UserController
             ]);
 
             if (Schema::hasTable('grades')) {
+                // PERF FIX: Added limit to prevent unbounded query loading all grades ever
                 $gradeHistory = Grade::query()
                     ->whereHas('submission', function ($query) use ($user) {
                         $query->where('student_id', $user->id);
@@ -97,6 +134,7 @@ class UserController
                         'submission.assignment.schedule.academicYear',
                     ])
                     ->latest('id')
+                    ->limit(50)
                     ->get()
                     ->map(static function (Grade $grade): array {
                         $schedule = $grade->submission?->assignment?->schedule;
@@ -123,6 +161,39 @@ class UserController
                     ->values();
 
                 $user->setAttribute('grade_history', $gradeHistory);
+            }
+
+            // Load student's schedules for the active academic year
+            $activeYear = AcademicYear::where('is_active', true)->first();
+            if ($activeYear && $user->student) {
+                $classIds = $user->student->classes()
+                    ->where('classes.academic_year_id', $activeYear->id)
+                    ->pluck('classes.id');
+
+                // PERF FIX: removed orderByRaw CASE (forces filesort), sort in PHP instead
+                // The result set is small (filtered by class+year), so PHP sort is efficient
+                $dayOrder = ['monday' => 1, 'tuesday' => 2, 'wednesday' => 3, 'thursday' => 4, 'friday' => 5, 'saturday' => 6, 'sunday' => 7];
+
+                $studentSchedules = Schedule::with(['subject', 'teacher.user', 'schoolClass'])
+                    ->where('academic_year_id', $activeYear->id)
+                    ->whereIn('class_id', $classIds)
+                    ->get()
+                    ->sortBy(fn ($s) => [$dayOrder[$s->day_of_week] ?? 8, $s->start_time])
+                    ->values()
+                    ->map(static function (Schedule $schedule): array {
+                        return [
+                            'id' => $schedule->id,
+                            'day_of_week' => $schedule->day_of_week,
+                            'start_time' => $schedule->start_time,
+                            'end_time' => $schedule->end_time,
+                            'subject_name' => $schedule->subject?->name,
+                            'teacher_name' => $schedule->teacher?->user?->name,
+                            'teacher_id' => $schedule->teacher?->user_id,
+                            'class_name' => $schedule->schoolClass?->name,
+                        ];
+                    });
+
+                $user->setAttribute('student_schedules', $studentSchedules);
             }
         }
 
@@ -239,6 +310,10 @@ class UserController
             }
         }
 
+        // Invalidate options cache for the user's role
+        if ($role === 'teacher') \Illuminate\Support\Facades\Cache::forget('admin_teacher_options');
+        if ($role === 'student') \Illuminate\Support\Facades\Cache::forget('admin_student_options');
+
         return response()->json([
             'success' => true,
             'message' => 'Data user berhasil diperbarui',
@@ -256,8 +331,13 @@ class UserController
             return response()->json(['error' => 'Anda tidak bisa menghapus akun Anda sendiri.'], 403);
         }
 
+        $role = $user->role;
         $user->update(['is_active' => false]);
         $user->delete(); // Memicu SoftDelete
+
+        // Invalidate options cache
+        if ($role === 'teacher') \Illuminate\Support\Facades\Cache::forget('admin_teacher_options');
+        if ($role === 'student') \Illuminate\Support\Facades\Cache::forget('admin_student_options');
 
         return response()->json([
             'success' => true,

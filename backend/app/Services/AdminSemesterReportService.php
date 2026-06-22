@@ -6,6 +6,7 @@ use App\Models\AcademicYear;
 use App\Models\Principal;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use Illuminate\Support\Facades\Cache;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class AdminSemesterReportService
@@ -44,31 +45,105 @@ class AdminSemesterReportService
      *
      * @return array{is_all_ready:bool,data:array<int, array{student_id:int,nis:string,name:string,class_name:string,is_ready:bool,missing_info:string}>}
      */
+    // PERF FIX: replaced massive eager load with raw SQL computation at DB level
     public function getAcademicYearReadiness(int $academicYearId): array
     {
-        $classes = SchoolClass::query()
-            ->where('academic_year_id', $academicYearId)
-            ->with([
-                'students.user',
-                'schedules.subject',
-                'schedules.attendances',
-                'schedules.assignments.submissions.grade',
-            ])
-            ->orderBy('name')
-            ->get();
+        return Cache::remember("report_distribution_{$academicYearId}", 300, function () use ($academicYearId) {
+            // PERF FIX: Single raw SQL that computes everything at DB level
+            // instead of loading all eager relations into memory
+            $rows = \Illuminate\Support\Facades\DB::select("
+                SELECT
+                    u.id AS user_id,
+                    s.nis,
+                    s.nisn,
+                    u.name,
+                    sc.id AS class_id,
+                    sc.name AS class_name,
+                    -- Check if student has attendance for ALL schedules in their class
+                    CASE WHEN (
+                        SELECT COUNT(DISTINCT sch2.id)
+                        FROM schedules sch2
+                        WHERE sch2.class_id = sc.id
+                        AND sch2.academic_year_id = ?
+                    ) = 0 THEN 1
+                    WHEN (
+                        SELECT COUNT(DISTINCT a.id)
+                        FROM attendances a
+                        INNER JOIN schedules sch3 ON sch3.id = a.schedule_id
+                        WHERE sch3.class_id = sc.id
+                        AND sch3.academic_year_id = ?
+                        AND a.student_id = u.id
+                    ) >= (
+                        SELECT COUNT(DISTINCT sch4.id)
+                        FROM schedules sch4
+                        WHERE sch4.class_id = sc.id
+                        AND sch4.academic_year_id = ?
+                    ) THEN 1
+                    ELSE 0
+                    END AS attendance_ready,
+                    -- Check if all assignments are graded
+                    CASE WHEN (
+                        SELECT COUNT(DISTINCT a2.id)
+                        FROM assignments a2
+                        INNER JOIN schedules sch5 ON sch5.id = a2.schedule_id
+                        WHERE sch5.class_id = sc.id
+                        AND sch5.academic_year_id = ?
+                    ) = 0 THEN 1
+                    WHEN (
+                        SELECT COUNT(DISTINCT g.id)
+                        FROM grades g
+                        INNER JOIN submissions sub ON sub.id = g.submission_id
+                        INNER JOIN assignments a3 ON a3.id = sub.assignment_id
+                        INNER JOIN schedules sch6 ON sch6.id = a3.schedule_id
+                        WHERE sch6.class_id = sc.id
+                        AND sch6.academic_year_id = ?
+                        AND sub.student_id = u.id
+                    ) >= (
+                        SELECT COUNT(DISTINCT a4.id)
+                        FROM assignments a4
+                        INNER JOIN schedules sch7 ON sch7.id = a4.schedule_id
+                        WHERE sch7.class_id = sc.id
+                        AND sch7.academic_year_id = ?
+                    ) THEN 1
+                    ELSE 0
+                    END AS grades_ready
+                FROM students s
+                INNER JOIN users u ON u.id = s.user_id
+                INNER JOIN class_student cs ON cs.student_id = u.id
+                INNER JOIN classes sc ON sc.id = cs.class_id
+                WHERE sc.academic_year_id = ?
+                ORDER BY sc.name, u.name
+            ", [$academicYearId, $academicYearId, $academicYearId, $academicYearId, $academicYearId, $academicYearId, $academicYearId]);
 
-        $data = [];
+            $data = [];
+            foreach ($rows as $row) {
+                $isReady = (bool) $row->attendance_ready && (bool) $row->grades_ready;
+                $missingParts = [];
 
-        foreach ($classes as $schoolClass) {
-            foreach ($schoolClass->students as $student) {
-                $data[] = $this->buildStudentReadinessPayload($schoolClass, $student);
+                if (! $row->attendance_ready) {
+                    $missingParts[] = 'Kehadiran belum direkap';
+                }
+                if (! $row->grades_ready) {
+                    $missingParts[] = 'Nilai belum diisi';
+                }
+
+                $data[] = [
+                    'student_id' => $row->user_id,
+                    'nis' => $row->nis ?? '-',
+                    'nisn' => $row->nisn ?? '-',
+                    'name' => $row->name ?? '-',
+                    'class_id' => $row->class_id,
+                    'class_name' => $row->class_name,
+                    'is_ready' => $isReady,
+                    'missing_info' => implode('; ', $missingParts),
+                ];
             }
-        }
 
-        return [
-            'is_all_ready' => collect($data)->every(fn (array $studentReadiness): bool => $studentReadiness['is_ready']),
-            'data' => $data,
-        ];
+            return [
+                'is_all_ready' => empty($data) || collect($data)->every(fn (array $studentReadiness): bool => $studentReadiness['is_ready']),
+                'data' => $data,
+            ];
+        });
     }
 
     public function publishReport(int $academicYearId): AcademicYear
@@ -106,7 +181,7 @@ class AdminSemesterReportService
     private function findStudentClassForAcademicYear(AcademicYear $academicYear, Student $student): ?SchoolClass
     {
         return $student->classes()
-            ->where('academic_year_id', $academicYear->id)
+            ->where('classes.academic_year_id', $academicYear->id)
             ->with([
                 'academicYear',
                 'homeroomTeacher.user',
@@ -176,6 +251,14 @@ class AdminSemesterReportService
     }
 
     /**
+     * Public wrapper for building report data (used by StudentReportController).
+     */
+    public function buildReportDataPublic(AcademicYear $academicYear, Student $student, SchoolClass $schoolClass): array
+    {
+        return $this->buildReportData($academicYear, $student, $schoolClass);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function buildReportData(AcademicYear $academicYear, Student $student, SchoolClass $schoolClass): array
@@ -183,8 +266,8 @@ class AdminSemesterReportService
         $principal = Principal::query()->with('user')->first();
 
         return [
-            'school_name' => config('app.school_name', ucwords(str_replace(['-', '_'], ' ', (string) config('app.name', 'Nama Sekolah')))),
-            'school_address' => config('app.school_address', 'Alamat sekolah belum diatur'),
+            'school_name' => config('app.school_name', 'SMP NEGERI 5 PURWAKARTA'),
+            'school_address' => config('app.school_address', 'Jl. Kolonel Singawinata No. 97 Purwakarta'),
             'academic_year' => $academicYear->name,
             'semester' => $academicYear->semester,
             'semester_label' => $academicYear->semester === 'odd' ? 'Ganjil' : 'Genap',
@@ -198,7 +281,7 @@ class AdminSemesterReportService
             'principal_nip' => $principal?->nip ?? '-',
             'generated_at' => now()->format('d-m-Y'),
             'homeroom_note' => '-',
-            'results' => $this->buildSubjectResults($schoolClass, $student),
+            'results' => $this->buildSubjectResults($schoolClass, $student, $academicYear),
             'attendance' => $this->buildAttendanceSummary($schoolClass, $student),
         ];
     }
@@ -206,10 +289,15 @@ class AdminSemesterReportService
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function buildSubjectResults(SchoolClass $schoolClass, Student $student): array
+    private function buildSubjectResults(SchoolClass $schoolClass, Student $student, AcademicYear $academicYear): array
     {
+        // Preload all competency settings for this academic year
+        $competencySettings = \App\Models\SubjectCompetencySetting::where('academic_year_id', $academicYear->id)
+            ->get()
+            ->keyBy('subject_id');
+
         return $schoolClass->schedules
-            ->map(function ($schedule) use ($student): array {
+            ->map(function ($schedule) use ($student, $competencySettings): array {
                 $scores = collect();
 
                 foreach ($schedule->assignments as $assignment) {
@@ -221,15 +309,23 @@ class AdminSemesterReportService
                 }
 
                 $finalScore = $scores->isNotEmpty() ? round($scores->avg(), 2) : null;
-                [$predicate, $description] = $this->resolvePredicate($finalScore);
+
+                // Resolve competency text from DB settings or fallback
+                $subjectId = $schedule->subject?->id;
+                $setting = $subjectId ? ($competencySettings[$subjectId] ?? null) : null;
+
+                if ($setting) {
+                    $capaian = $setting->resolveForScore($finalScore);
+                } else {
+                    $capaian = $this->generateCapaianKompetensi($finalScore, $schedule->subject?->name ?? 'pembelajaran');
+                }
 
                 return [
                     'subject_code' => $schedule->subject?->code ?? '-',
                     'subject_name' => $schedule->subject?->name ?? '-',
                     'teacher_name' => $schedule->teacher?->user?->name ?? '-',
                     'final_grade' => $finalScore,
-                    'predicate' => $predicate,
-                    'description' => $description,
+                    'capaian_kompetensi' => $capaian,
                 ];
             })
             ->values()
@@ -267,6 +363,26 @@ class AdminSemesterReportService
             $finalScore >= 70 => ['C', 'Cukup, perlu meningkatkan konsistensi pemahaman materi.'],
             default => ['D', 'Perlu bimbingan intensif untuk mencapai ketuntasan belajar.'],
         };
+    }
+
+    /**
+     * Generate dynamic "Capaian Kompetensi" text for Kurikulum Merdeka report cards.
+     */
+    private function generateCapaianKompetensi(?float $finalScore, string $subjectName): string
+    {
+        if ($finalScore === null) {
+            return 'Belum ada data penilaian.';
+        }
+
+        if ($finalScore >= 85) {
+            return "Mencapai Kompetensi dengan sangat baik dalam memahami materi pembelajaran {$subjectName}.";
+        }
+
+        if ($finalScore >= 75) {
+            return "Mencapai kompetensi dengan baik dalam memahami materi pembelajaran {$subjectName}.";
+        }
+
+        return "Perlu peningkatan dalam hal memahami materi pembelajaran {$subjectName}.";
     }
 
     private function throwIncompleteReportException(array $missingData): never

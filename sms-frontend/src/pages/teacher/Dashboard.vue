@@ -1,6 +1,6 @@
 <template>
   <div class="space-y-6">
-    <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
         <h1 class="text-[23px] lg:text-3xl font-bold text-gray-800 font-serif">
           Selamat datang, {{ authStore.user?.name || "Guru" }}!
@@ -8,6 +8,24 @@
         <p class="text-xs lg:text-sm text-gray-500 mt-1">
           Pantau jadwal mengajar harian dan aktivitas akademik Anda di sini.
         </p>
+      </div>
+      <div
+        class="mt-4 sm:mt-0 px-4 py-2 bg-brand-orange/10 text-brand-orange rounded-lg font-semibold text-sm flex items-center"
+      >
+        <svg
+          class="w-4 h-4 mr-2"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+          ></path>
+        </svg>
+        T.A: {{ dashboardData.academicYear }}
       </div>
     </div>
 
@@ -106,7 +124,7 @@
 
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        <section class="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm flex flex-col">
+        <section class="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm flex flex-col h-[calc(68vh-120px)]">
           <div class="flex items-center justify-between mb-6">
             <h3 class="text-lg font-bold text-gray-800">Jadwal Terdekat Hari Ini</h3>
             <button @click="goToSchedule" class="text-sm text-brand-red font-semibold hover:underline cursor-pointer">
@@ -164,7 +182,7 @@
           </div>
         </section>
 
-        <section class="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm">
+        <section class="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm h-[calc(68vh-120px)] flex flex-col">
           <div class="flex items-center justify-between mb-6">
             <h3 class="text-lg font-bold text-gray-800">Menunggu Penilaian</h3>
           </div>
@@ -228,6 +246,7 @@ const currentTimeStr = computed(() => {
 
 // ================= DATA DASHBOARD =================
 const dashboardData = ref({
+  academicYear: null,
   homeroomClass: null,
   stats: { schedules_today: 0, pending_grading: 0, total_students_taught: 0 },
   todaySchedules: [],
@@ -312,6 +331,7 @@ const fetchTeacherDashboard = async () => {
     const payload = response.data;
 
     dashboardData.value = {
+      academicYear: payload.academic_year || null,
       homeroomClass: payload.homeroom_class || null,
       stats: {
         schedules_today: payload.stats?.schedules_today || 0,

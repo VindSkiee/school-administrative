@@ -1,6 +1,6 @@
 <template>
   <div class="space-y-6">
-    <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
         <h1 class="text-[23px] lg:text-3xl font-bold text-gray-800 font-serif">
           Halo, {{ authStore.user?.name || "Siswa" }}! 👋
@@ -8,6 +8,24 @@
         <p class="text-xs lg:text-sm text-gray-500 mt-1">
           Siap untuk belajar hal baru hari ini? Cek jadwal dan tugasmu.
         </p>
+      </div>
+      <div
+        class="mt-4 sm:mt-0 px-4 py-2 bg-brand-orange/10 text-brand-orange rounded-lg font-semibold text-sm flex items-center"
+      >
+        <svg
+          class="w-4 h-4 mr-2"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+          ></path>
+        </svg>
+        T.A: {{ dashboardData.academicYear }}
       </div>
     </div>
 
@@ -62,7 +80,7 @@
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
           
           <div class="space-y-6">
-            <section class="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm flex flex-col h-full">
+            <section class="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm flex flex-col h-90">
               <div class="flex items-center justify-between mb-5">
                 <h3 class="text-lg font-bold text-gray-800">Jadwal Terdekat Hari Ini</h3>
                 <button @click="$router.push('/student/schedules')" class="text-sm text-brand-red font-semibold hover:underline">Lihat Semua</button>
@@ -95,7 +113,7 @@
             <section class="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm">
               <div class="flex items-center justify-between mb-5">
                 <h3 class="text-lg font-bold text-gray-800">Baru Saja Dinilai</h3>
-                <button @click="$router.push('/student/grades')" class="text-sm text-brand-orange font-semibold hover:underline">Rekap Nilai</button>
+                <button @click="$router.push({ name: 'StudentReport' })" class="text-sm text-brand-orange font-semibold hover:underline">Rekap Nilai</button>
               </div>
 
               <div v-if="recentGrades.length === 0" class="text-center py-6 text-sm text-gray-500 bg-gray-50 rounded-2xl border border-gray-100">
@@ -110,7 +128,7 @@
                     <h4 class="text-sm font-bold text-gray-800 line-clamp-1 group-hover:text-brand-orange transition-colors">{{ sub.assignment_title }}</h4>
                     <p class="text-xs text-gray-500 mt-1">{{ sub.subject_name }}</p>
                   </div>
-                  <div class="shrink-0 flex items-center justify-center w-12 h-12 bg-white rounded-full border shadow-sm font-black text-lg"
+                  <div class="shrink-0 flex items-center justify-center w-12 h-12 bg-transparent font-black text-lg"
                        :class="getScoreColor(sub.grade?.score)">
                     {{ sub.grade?.score }}
                   </div>
@@ -120,7 +138,7 @@
           </div>
 
           <div class="space-y-6">
-            <section class="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm h-full flex flex-col">
+            <section class="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm h-90 flex flex-col">
               <div class="flex items-center justify-between mb-5">
                 <h3 class="text-lg font-bold text-gray-800">Tenggat Waktu Terdekat</h3>
                 <span class="px-2.5 py-1 bg-brand-orange/10 text-brand-orange text-xs font-bold rounded-lg">{{ deadlineAssignments.length }} Tugas</span>
@@ -188,7 +206,7 @@ const className = ref('Kelas Kamu');
 const timer = ref(null);
 const currentDateTime = ref(new Date());
 
-const dashboardData = ref({ homeroomClass: null });
+const dashboardData = ref({ academicYear: null, homeroomClass: null });
 const schedulesToday = ref([]);
 const deadlineAssignments = ref([]);
 const recentGrades = ref([]);
@@ -214,8 +232,8 @@ const upcomingSchedules = computed(() => {
 const formatTime = (timeStr) => timeStr ? timeStr.slice(0, 5) : '';
 
 const getScoreColor = (score) => {
-  if (!score) return 'text-gray-400 border-gray-200';
-  return score >= 70 ? 'text-green-600 border-green-200' : 'text-red-500 border-red-200';
+  if (!score) return 'text-gray-400';
+  return score >= 70 ? 'text-green-600' : 'text-red-500';
 };
 
 const formatTimeDistance = (dueDate) => {
@@ -240,7 +258,7 @@ const getUrgencyClass = (dueDate) => {
 };
 
 const goToAssignment = (id) => {
-  router.push({ name: 'StudentAssignmentDetail', params: { id } });
+  router.push({ name: 'StudentAssignmentsList', query: { tab: 'graded' } });
 };
 
 const fetchDashboardData = async () => {
@@ -252,6 +270,7 @@ const fetchDashboardData = async () => {
     const payload = response.data.data;
 
     // Masukkan data dari backend ke state Vue
+    dashboardData.value.academicYear = payload.academic_year || null;
     dashboardData.value.homeroomClass = payload.homeroom_class;
     className.value = payload.homeroom_class?.name || 'Kelas Kamu';
     schedulesToday.value = payload.today_schedules || [];
