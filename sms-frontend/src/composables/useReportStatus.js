@@ -1,13 +1,9 @@
 import { ref } from 'vue';
 import api from '../services/api';
 
-// Module-level cache — shared across all component instances
-let cachedData = null; // { isReportPublished, publishedAt }
-let fetchPromise = null;
-
 /**
- * Composable to check if the active academic year's report is published.
- * Fetches once and caches the result for the entire app session.
+ * Composable to check if the active academic year's report is published (per-class).
+ * Fetches from backend and returns per-class publish status.
  *
  * Usage:
  *   const { isReportPublished, publishedAt, isReportLoading } = useReportStatus(role);
@@ -23,46 +19,17 @@ export function useReportStatus(role = 'teacher') {
     ? '/v1/student/reports/report-status'
     : '/v1/teacher/report-status';
 
-  const applyCache = (data) => {
-    isReportPublished.value = data.isReportPublished;
-    publishedAt.value = data.publishedAt;
-    isReportLoading.value = false;
-  };
-
   const fetchStatus = async () => {
-    // Return cached result if available
-    if (cachedData !== null) {
-      applyCache(cachedData);
-      return;
+    try {
+      const res = await api.get(endpoint);
+      isReportPublished.value = res.data?.is_report_published ?? false;
+      publishedAt.value = res.data?.published_at ?? null;
+    } catch {
+      isReportPublished.value = false;
+      publishedAt.value = null;
+    } finally {
+      isReportLoading.value = false;
     }
-
-    // Deduplicate concurrent requests
-    if (fetchPromise) {
-      const data = await fetchPromise;
-      applyCache(data);
-      return;
-    }
-
-    fetchPromise = (async () => {
-      try {
-        const res = await api.get(endpoint);
-        const data = {
-          isReportPublished: res.data?.is_report_published ?? false,
-          publishedAt: res.data?.published_at ?? null,
-        };
-        cachedData = data;
-        return data;
-      } catch {
-        const fallback = { isReportPublished: false, publishedAt: null };
-        cachedData = fallback;
-        return fallback;
-      } finally {
-        fetchPromise = null;
-      }
-    })();
-
-    const data = await fetchPromise;
-    applyCache(data);
   };
 
   fetchStatus();

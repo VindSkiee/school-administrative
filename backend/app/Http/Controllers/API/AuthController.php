@@ -2,9 +2,10 @@
 
 namespace App\Http\Controllers\API;
 
-use App\Models\User;
 use App\Models\AcademicYear;
+use App\Models\User;
 use App\Rules\RecaptchaV2;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -14,25 +15,27 @@ class AuthController
 {
     public function login(Request $request): JsonResponse
     {
-        // 1. Validasi Input Dasar
+        // 1. Validasi Input Dasar — 'email' field menerima email, NIP, NIS, atau NISN
         $request->validate([
-            'email' => 'required|email',
+            'email' => 'required|string',
             'password' => 'required|string',
+            'remember' => 'sometimes|boolean',
         ]);
 
-        // 2. Cari User
-        $user = User::query()->where('email', $request->email)->where('is_active', true)->first();
+        $credential = $request->input('email');
+
+        // 2. Cari User berdasarkan email, NISN, NIS, atau NIP (silang ke semua tabel profile)
+        $user = $this->resolveUserFromCredential($credential);
 
         // Verifikasi keberadaan user dan kecocokan password secara manual (karena Sanctum API)
         if (! $user || ! Hash::check($request->password, $user->password)) {
-            // Gunakan ValidationException agar response error otomatis diseragamkan oleh Laravel
             throw ValidationException::withMessages([
                 'email' => ['Kredensial tidak valid.'],
             ]);
         }
 
-        // 3. THE GATEKEEPER: Cek reCAPTCHA HANYA JIKA role adalah admin
-        if ($user->role === 'admin') {
+        // 3. THE GATEKEEPER: Cek reCAPTCHA HANYA JIKA role adalah admin atau kepala sekolah
+        if ($user->role === 'admin' || $user->role === 'principal') {
             if (! $request->filled('g-recaptcha-response')) {
                 return response()->json([
                     'error' => 'Verifikasi keamanan reCAPTCHA wajib untuk Admin.',
@@ -48,13 +51,49 @@ class AuthController
         }
 
         // 4. Generate Sanctum Token
-        // Hapus semua token lama agar satu akun hanya aktif di satu perangkat (opsional, hapus baris ini jika ingin multi-device)
-        $user->tokens()->delete(); 
+        $user->tokens()->delete();
 
-        $token = $user->createToken('auth_token')->plainTextToken;
+        $remember = $request->boolean('remember', false);
+        $expiresAt = $remember ? Carbon::now()->addDays(30) : Carbon::now()->addHours(24);
+
+        $token = $user->createToken('auth_token', ['*'], $expiresAt)->plainTextToken;
 
         // 5. Sukses Login
-        return $this->respondWithToken($token, $user);
+        return $this->respondWithToken($token, $user, $expiresAt);
+    }
+
+    /**
+     * Resolve user dari credential (email, NISN, NIS, atau NIP).
+     */
+    private function resolveUserFromCredential(string $credential): ?User
+    {
+        // Coba cari berdasarkan email dulu (paling cepat, ada index)
+        $user = User::where('email', $credential)->where('is_active', true)->first();
+        if ($user) {
+            return $user;
+        }
+
+        // Cari berdasarkan NISN (tabel students)
+        $user = User::whereHas('student', fn ($q) => $q->where('nisn', $credential))
+            ->where('is_active', true)->first();
+        if ($user) {
+            return $user;
+        }
+
+        // Cari berdasarkan NIS (tabel students)
+        $user = User::whereHas('student', fn ($q) => $q->where('nis', $credential))
+            ->where('is_active', true)->first();
+        if ($user) {
+            return $user;
+        }
+
+        // Cari berdasarkan NIP (tabel teachers, admins, principals)
+        $user = User::where(fn ($q) => $q->whereHas('teacher', fn ($t) => $t->where('nip', $credential))
+            ->orWhereHas('admin', fn ($a) => $a->where('nip', $credential))
+            ->orWhereHas('principal', fn ($p) => $p->where('nip', $credential)))
+            ->where('is_active', true)->first();
+
+        return $user;
     }
 
     private function formatUserData(User $user): array
@@ -84,7 +123,7 @@ class AuthController
             'avatar_url' => $user->avatar_url,
             'must_change_password' => $user->must_change_password,
             'is_active' => $user->is_active,
-            
+
             // Flat Data Identitas
             'nip' => $user->teacher?->nip ?? $user->admin?->nip ?? $user->principal?->nip,
             'nis' => $user->student?->nis,
@@ -107,10 +146,10 @@ class AuthController
                     'semester' => $schoolClass->academicYear?->semester,
                 ];
             })
-            ->filter(fn($item) => $item['academic_year_id'] !== null)
-            ->unique('academic_year_id')
-            ->values()
-            ->toArray();
+                ->filter(fn ($item) => $item['academic_year_id'] !== null)
+                ->unique('academic_year_id')
+                ->values()
+                ->toArray();
 
             $userData['grade_history'] = $gradeHistory;
         }
@@ -118,14 +157,14 @@ class AuthController
         return $userData;
     }
 
-    protected function respondWithToken(string $token, User $user): JsonResponse
+    protected function respondWithToken(string $token, User $user, Carbon $expiresAt): JsonResponse
     {
         return response()->json([
             'success' => true,
             'access_token' => $token,
             'token_type' => 'Bearer',
-            // Sanctum tidak punya JWTAuth::factory()->getTTL(), token bertahan sesuai config/sanctum.php (expiration)
-            'user' => $this->formatUserData($user), 
+            'expires_at' => $expiresAt->toISOString(),
+            'user' => $this->formatUserData($user),
         ]);
     }
 
@@ -151,20 +190,20 @@ class AuthController
         return response()->json(['message' => 'Berhasil logout.']);
     }
 
-    // Fungsi refresh() DIHAPUS. 
-    // Sanctum tidak memiliki mekanisme refresh token bawaan seperti JWT. 
+    // Fungsi refresh() DIHAPUS.
+    // Sanctum tidak memiliki mekanisme refresh token bawaan seperti JWT.
     // Token valid sampai kedaluwarsa sesuai config/sanctum.php (biasanya bertahun-tahun jika tidak diatur).
     // Jika token habis, user harus login ulang.
 
     public function checkRequirements(Request $request): JsonResponse
     {
         $request->validate([
-            'email' => 'required|email',
+            'email' => 'required|string',
         ]);
 
-        $user = User::query()->where('email', $request->email)->first();
+        $user = $this->resolveUserFromCredential($request->input('email'));
 
-        $requiresCaptcha = $user && $user->role === 'admin';
+        $requiresCaptcha = $user && in_array($user->role, ['admin', 'principal']);
 
         return response()->json([
             'requires_captcha' => $requiresCaptcha,

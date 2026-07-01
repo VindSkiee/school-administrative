@@ -4,7 +4,11 @@ namespace App\Http\Controllers\API\Admin;
 
 use App\Http\Requests\Admin\StoreAcademicYearRequest;
 use App\Models\AcademicYear;
+use App\Models\MeetingSession;
+use App\Models\Schedule;
+use App\Models\SchoolClass;
 use App\Services\AcademicYearService;
+use App\Services\ScheduleService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -15,12 +19,10 @@ class AcademicYearController
 
     public function index(Request $request): JsonResponse
     {
-        // PERF FIX: cache as plain array (not Eloquent Collection) to avoid serialization issues
         $academicYears = Cache::remember('admin_academic_years_list', 120, function () {
             return AcademicYear::orderBy('id', 'desc')->get()->toArray();
         });
 
-        // PERF FIX: cap 'all' at 100 max to prevent unbounded responses
         if ($request->query('per_page') === 'all') {
             $perPage = 100;
         } else {
@@ -28,7 +30,6 @@ class AcademicYearController
             $perPage = max(1, min($perPage, 100));
         }
 
-        // Paginate from plain array
         $page = (int) $request->query('page', 1);
         $total = count($academicYears);
         $offset = ($page - 1) * $perPage;
@@ -46,7 +47,7 @@ class AcademicYearController
     public function store(StoreAcademicYearRequest $request): JsonResponse
     {
         $academicYear = AcademicYear::create($request->validated());
-        Cache::forget('admin_academic_years_list'); // Invalidate cache
+        Cache::forget('admin_academic_years_list');
 
         return response()->json([
             'success' => true,
@@ -58,7 +59,17 @@ class AcademicYearController
     public function update(StoreAcademicYearRequest $request, string $id): JsonResponse
     {
         $academicYear = AcademicYear::findOrFail($id);
+        $oldEndDate = $academicYear->end_date?->toDateString();
+
         $academicYear->update($request->validated());
+
+        $newEndDate = $academicYear->end_date?->toDateString();
+
+        // Jika end_date berubah, regenerate sessions untuk kelas yang belum published
+        if ($newEndDate && $newEndDate !== $oldEndDate) {
+            $this->regenerateUnpublishedSessions($academicYear);
+        }
+
         Cache::forget('admin_academic_years_list');
 
         return response()->json([
@@ -94,7 +105,6 @@ class AcademicYearController
             return response()->json(['error' => 'Tidak dapat menghapus tahun ajaran yang sedang aktif.'], 403);
         }
 
-        // Cek apakah ada kelas yang terhubung
         if ($academicYear->classes()->exists()) {
             return response()->json(['error' => 'Tidak dapat menghapus tahun ajaran karena masih memiliki kelas yang terdaftar.'], 403);
         }
@@ -106,5 +116,34 @@ class AcademicYearController
             'success' => true,
             'message' => 'Tahun ajaran berhasil dihapus.',
         ]);
+    }
+
+    /**
+     * Regenerate meeting sessions for all schedules in unpublished classes.
+     */
+    private function regenerateUnpublishedSessions(AcademicYear $academicYear): void
+    {
+        $unpublishedClassIds = SchoolClass::where('academic_year_id', $academicYear->id)
+            ->where('is_published', false)
+            ->pluck('id');
+
+        if ($unpublishedClassIds->isEmpty()) {
+            return;
+        }
+
+        $schedules = Schedule::whereIn('class_id', $unpublishedClassIds)
+            ->where('academic_year_id', $academicYear->id)
+            ->get();
+
+        $scheduleService = app(ScheduleService::class);
+
+        foreach ($schedules as $schedule) {
+            // Delete uncompleted sessions (no attendance), then regenerate
+            MeetingSession::where('schedule_id', $schedule->id)
+                ->whereDoesntHave('attendances')
+                ->delete();
+
+            $scheduleService->generateMeetingSessions($schedule);
+        }
     }
 }

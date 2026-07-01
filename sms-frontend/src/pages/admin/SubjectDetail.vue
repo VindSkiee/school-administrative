@@ -92,14 +92,14 @@
           <div class="flex justify-end pt-2">
             <button
               type="submit"
-              :disabled="isSaving"
-              class="px-6 py-2.5 bg-brand-red hover:bg-brand-orange text-white rounded-xl text-sm font-bold shadow-md transition-colors disabled:opacity-50 flex items-center gap-2"
+              :disabled="isSaving || !hasChanges"
+              class="px-6 py-2.5 bg-brand-red hover:bg-brand-orange text-white rounded-xl text-sm font-bold shadow-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               <svg v-if="isSaving" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
               </svg>
-              {{ isSaving ? 'Menyimpan...' : 'Simpan Pengaturan' }}
+              {{ isSaving ? 'Menyimpan...' : (hasChanges ? 'Simpan Pengaturan' : 'Tidak Ada Perubahan') }}
             </button>
           </div>
         </form>
@@ -126,6 +126,7 @@ const isSaving = ref(false);
 const subject = ref(null);
 const teachers = ref([]);
 const selectedAcademicYearId = ref('');
+const formSnapshot = ref(null);
 
 const competencyLevels = [
   {
@@ -171,6 +172,21 @@ const form = reactive({
 
 const academicYearOptions = computed(() => dropdowns.academicYearOptions);
 
+const hasChanges = computed(() => {
+  if (!formSnapshot.value) return false;
+  const snap = formSnapshot.value;
+  return (
+    form.sangat_baik_min !== snap.sangat_baik_min ||
+    form.sangat_baik_text !== snap.sangat_baik_text ||
+    form.baik_min !== snap.baik_min ||
+    form.baik_text !== snap.baik_text ||
+    form.kurang_min !== snap.kurang_min ||
+    form.kurang_text !== snap.kurang_text ||
+    form.sangat_kurang_min !== snap.sangat_kurang_min ||
+    form.sangat_kurang_text !== snap.sangat_kurang_text
+  );
+});
+
 // PERF FIX: use store for academic years instead of separate API call
 const fetchAcademicYears = async () => {
   try {
@@ -201,7 +217,18 @@ const fetchDetail = async () => {
       form.kurang_text = data.competency.kurang_text;
       form.sangat_kurang_min = data.competency.sangat_kurang_min;
       form.sangat_kurang_text = data.competency.sangat_kurang_text;
+    } else {
+      form.sangat_baik_min = 85;
+      form.sangat_baik_text = 'Mencapai kompetensi dengan sangat baik dalam memahami materi pembelajaran.';
+      form.baik_min = 75;
+      form.baik_text = 'Mencapai kompetensi dengan baik dalam memahami materi pembelajaran.';
+      form.kurang_min = 60;
+      form.kurang_text = 'Perlu peningkatan dalam hal memahami materi pembelajaran.';
+      form.sangat_kurang_min = 0;
+      form.sangat_kurang_text = 'Perlu bimbingan intensif untuk mencapai ketuntasan belajar.';
     }
+
+    formSnapshot.value = { ...form };
   } catch {
     toastStore.error('Gagal memuat detail mata pelajaran.');
   } finally {
@@ -224,6 +251,8 @@ const saveCompetency = async () => {
       sangat_kurang_text: form.sangat_kurang_text,
     });
     toastStore.success('Pengaturan capaian kompetensi berhasil disimpan.');
+    formSnapshot.value = { ...form };
+    dropdowns.invalidateCompetencies();
   } catch (error) {
     toastStore.error(error.response?.data?.message || 'Gagal menyimpan pengaturan.');
   } finally {

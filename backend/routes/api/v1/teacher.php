@@ -1,15 +1,17 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\API\Teacher\AttendanceController;
-use App\Http\Controllers\API\Teacher\AttendanceRequestController as TeacherReqController;
-use App\Http\Controllers\API\Teacher\MaterialController as TeacherMaterialController;
 use App\Http\Controllers\API\Teacher\AssignmentController as TeacherAssignController;
-use App\Http\Controllers\API\Teacher\GradeController as TeacherGradeController;
+use App\Http\Controllers\API\Teacher\AttendanceController;
+use App\Http\Controllers\API\Teacher\AttendanceRecapController;
+use App\Http\Controllers\API\Teacher\AttendanceRequestController as TeacherReqController;
 use App\Http\Controllers\API\Teacher\GradeAggregationController as TeacherAggregate;
+use App\Http\Controllers\API\Teacher\GradeController as TeacherGradeController;
+use App\Http\Controllers\API\Teacher\MaterialController as TeacherMaterialController;
 use App\Http\Controllers\API\Teacher\TeacherDashboardController;
-use App\Http\Controllers\API\Teacher\TeacherHomeroomController;
 use App\Http\Controllers\API\Teacher\TeacherGradebookController;
+use App\Http\Controllers\API\Teacher\TeacherHomeroomController;
+use App\Http\Controllers\Api\Teacher\TeacherStudentController;
+use Illuminate\Support\Facades\Route;
 
 Route::get('schedules/today', [AttendanceController::class, 'getTodaySchedules']);
 Route::get('schedules/{schedule_id}/students', [AttendanceController::class, 'getStudentsForAttendance']);
@@ -32,7 +34,7 @@ Route::get('dashboard/stats', [TeacherDashboardController::class, 'index']);
 // Rute khusus detail kelas perwalian
 Route::get('homeroom-class', [TeacherHomeroomController::class, 'show']);
 Route::get('schedules/{schedule_id}', [AttendanceController::class, 'show']);
-Route::get('students/{id}', [\App\Http\Controllers\Api\Teacher\TeacherStudentController::class, 'showProfile']);
+Route::get('students/{id}', [TeacherStudentController::class, 'showProfile']);
 
 // === Gradebook (Buku Nilai) ===
 Route::get('report-status', [TeacherGradebookController::class, 'reportStatus']);
@@ -41,3 +43,6 @@ Route::get('gradebook/schedules', [TeacherGradebookController::class, 'schedules
 Route::get('gradebook', [TeacherGradebookController::class, 'index']);
 Route::post('gradebook/inline-save', [TeacherGradebookController::class, 'inlineSave']);
 Route::get('homeroom/gradebook-recap', [TeacherGradebookController::class, 'homeroomRecap']);
+
+// === Attendance Recap ===
+Route::get('attendance-recap', [AttendanceRecapController::class, 'index']);

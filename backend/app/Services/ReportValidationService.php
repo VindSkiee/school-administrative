@@ -3,9 +3,9 @@
 namespace App\Services;
 
 use App\Models\AcademicYear;
+use App\Models\Schedule;
 use App\Models\SchoolClass;
 use App\Models\Student;
-use App\Models\Schedule;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -18,18 +18,18 @@ class ReportValidationService
      */
     public function checkEligibility(Student $student, AcademicYear $academicYear, SchoolClass $class): void
     {
-        $this->checkPublishStatus($academicYear);
+        $this->checkPublishStatus($class);
         $this->checkAttendanceWeeks($student, $academicYear);
         $this->checkSubjectCompletion($student, $class, $academicYear);
     }
 
     /**
-     * 1. Publish Status Check
+     * 1. Publish Status Check — per-class
      */
-    private function checkPublishStatus(AcademicYear $academicYear): void
+    private function checkPublishStatus(SchoolClass $class): void
     {
-        if (! $academicYear->is_report_published) {
-            throw new HttpException(403, 'Rapor belum dipublikasikan oleh Admin.');
+        if (! $class->is_published) {
+            throw new HttpException(403, 'Kelas ini belum dipublikasikan oleh Admin.');
         }
     }
 
@@ -63,11 +63,11 @@ class ReportValidationService
     {
         // PERF FIX: replaced N+1 with eager-loaded collections — single query for all schedules + assignments + submissions + grades
         $schedules = Schedule::with(['subject', 'assignments' => function ($q) use ($student) {
-                $q->with(['submissions' => function ($q2) use ($student) {
-                    $q2->where('student_id', $student->user_id)
-                       ->with('grade');
-                }]);
-            }])
+            $q->with(['submissions' => function ($q2) use ($student) {
+                $q2->where('student_id', $student->user_id)
+                    ->with('grade');
+            }]);
+        }])
             ->where('class_id', $class->id)
             ->where('academic_year_id', $academicYear->id)
             ->get();

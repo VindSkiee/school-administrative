@@ -83,10 +83,31 @@ export const reportService = {
     },
 
     /**
-     * Publish rapor dan kunci semester.
+     * Mendapatkan status kesiapan semua kelas dalam tahun ajaran.
      */
-    publishReports(academicYearId) {
-        return api.patch(`/v1/admin/academic-years/${academicYearId}/publish-reports`);
+    getClassesReadiness(academicYearId) {
+        return api.get(`/v1/admin/academic-years/${academicYearId}/classes-readiness`);
+    },
+
+    /**
+     * Mendapatkan detail kesiapan satu kelas — per mapel, per tipe penilaian.
+     */
+    getClassReadinessDetail(academicYearId, classId) {
+        return api.get(`/v1/admin/academic-years/${academicYearId}/classes/${classId}/readiness-detail`);
+    },
+
+    /**
+     * Publish satu kelas.
+     */
+    publishClass(academicYearId, classId) {
+        return api.patch(`/v1/admin/academic-years/${academicYearId}/classes/${classId}/publish`);
+    },
+
+    /**
+     * Publish semua kelas yang siap sekaligus.
+     */
+    publishAllClasses(academicYearId) {
+        return api.patch(`/v1/admin/academic-years/${academicYearId}/publish-all-classes`);
     },
 
     /**

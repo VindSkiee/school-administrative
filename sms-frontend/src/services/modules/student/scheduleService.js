@@ -5,8 +5,10 @@ export const studentScheduleService = {
     return api.get(`/v1/student/schedules`, { params: { day } });
   },
   // TAMBAHKAN FUNGSI INI 👇
-  getScheduleDetail(id) {
-    return api.get(`/v1/student/schedules/${id}`);
+  getScheduleDetail(id, date = null) {
+    return api.get(`/v1/student/schedules/${id}`, {
+      params: date ? { date } : {},
+    });
   },
   // --- TAMBAHAN UNTUK ABSENSI & PERIZINAN ---
   submitAttendanceRequest(data) {

@@ -7,6 +7,8 @@ use App\Models\Assignment;
 use App\Models\Attendance;
 use App\Models\Grade;
 use App\Models\GradingSetting;
+use App\Models\Holiday;
+use App\Models\MeetingSession;
 use App\Models\Schedule;
 use App\Models\SchoolClass;
 use App\Models\Student;
@@ -16,6 +18,7 @@ use App\Models\Teacher;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
@@ -24,8 +27,7 @@ class ReportCardScenarioSeeder extends Seeder
 {
     private const DEFAULT_PASSWORD = 'password123';
 
-    /** Override in child class to control is_report_published flag */
-    protected bool $reportPublished = true;
+    protected bool $reportPublished = false;
 
     private const SUBJECTS = [
         ['code' => 'PAI', 'name' => 'Pendidikan Agama Islam dan Budi Pekerti'],
@@ -61,89 +63,61 @@ class ReportCardScenarioSeeder extends Seeder
 
     private const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
 
-    /**
-     * Explicit time-slot map for 11 subjects across 5 days.
-     * Each entry: [day, start_hour]. Guaranteed no class-day-time conflicts.
-     * Layout per day: up to 3 subjects with 1.5h gap between slots.
-     */
     private const TIME_SLOTS = [
-        ['day' => 'monday',    'start' => '07:00'], // 0: PAI
-        ['day' => 'monday',    'start' => '08:30'], // 1: PPKn
-        ['day' => 'monday',    'start' => '10:00'], // 2: B.IND
-        ['day' => 'tuesday',   'start' => '07:00'], // 3: MTK
-        ['day' => 'tuesday',   'start' => '08:30'], // 4: IPA
-        ['day' => 'tuesday',   'start' => '10:00'], // 5: IPS
-        ['day' => 'wednesday', 'start' => '07:00'], // 6: B.ING
-        ['day' => 'wednesday', 'start' => '08:30'], // 7: PJOK
-        ['day' => 'wednesday', 'start' => '10:00'], // 8: SBdP
-        ['day' => 'thursday',  'start' => '07:00'], // 9: MULOK
-        ['day' => 'thursday',  'start' => '08:30'], // 10: INF
+        ['day' => 'monday',    'start' => '07:00'],
+        ['day' => 'monday',    'start' => '08:30'],
+        ['day' => 'monday',    'start' => '10:00'],
+        ['day' => 'tuesday',   'start' => '07:00'],
+        ['day' => 'tuesday',   'start' => '08:30'],
+        ['day' => 'tuesday',   'start' => '10:00'],
+        ['day' => 'wednesday', 'start' => '07:00'],
+        ['day' => 'wednesday', 'start' => '08:30'],
+        ['day' => 'wednesday', 'start' => '10:00'],
+        ['day' => 'thursday',  'start' => '07:00'],
+        ['day' => 'thursday',  'start' => '08:30'],
     ];
 
     public function run(): void
     {
-        $this->command->warn('⚠️  Memulai ReportCardScenarioSeeder — data lama akan dihapus...');
+        $this->command->warn('⚠️  Memulai ReportCardScenarioSeeder — SEMUA pertemuan selesai, semester pendek.');
 
-        // ── 0. Clear existing data ──
         $this->clearData();
 
-        // ── 1. Academic Year & Grading Setting ──
         $academicYear = $this->createAcademicYear();
         $this->createGradingSetting($academicYear);
 
-        // ── 2. Subjects ──
         $subjects = $this->createSubjects();
-
-        // ── 3. Classes ──
         $classes = $this->createClasses($academicYear);
 
-        // ── 4. Teachers & Homerooms ──
         $teachers = $this->createTeachers();
         $this->assignHomerooms($teachers, $classes);
 
-        // ── 5. Students (20 per class) ──
         $studentsByClass = $this->createStudents($classes, $academicYear);
 
-        // ── 6. Schedules & Assignments ──
         $schedulesByClass = $this->createSchedulesAndAssignments($classes, $subjects, $teachers, $academicYear);
 
-        // ── 7. Submissions & Grades ──
+        $this->createMeetingSessions($schedulesByClass, $academicYear);
+
+        $this->createHolidays($academicYear);
+
         $this->createSubmissionsAndGrades($studentsByClass, $schedulesByClass, $teachers);
 
-        // ── 8. Attendance (12 weeks) ──
         $this->createAttendanceRecords($studentsByClass, $schedulesByClass);
 
-        $teacherCount = count(self::TEACHERS);
-        $subjectCount = count(self::SUBJECTS);
-        $scheduleCount = $subjectCount * count(self::CLASS_NAMES); // 11 × 3 = 33
-        $submissionTotal = 60 * $subjectCount * 3; // 60 students × 11 subjects × 3 types = 1980
-        $attendanceCount = 60 * $subjectCount * 12; // 60 students × 11 schedules × 12 weeks
-
-        $this->command->info('✅ ReportCardScenarioSeeder selesai!');
-        $this->command->info('   • 1 Tahun Ajaran (aktif + published)');
-        $this->command->info('   • 3 Kelas (7A, 8A, 9A)');
-        $this->command->info("   • {$teacherCount} Guru (3 Wali Kelas)");
-        $this->command->info('   • 60 Siswa (20 per kelas)');
-        $this->command->info("   • {$scheduleCount} Jadwal ({$subjectCount} mapel × 3 kelas) × 3 Assignment (task/uts/uas)");
-        $this->command->info("   • 60 Siswa × {$subjectCount} Mapel × 3 Tipe = {$submissionTotal} Submission + Grade");
-        $this->command->info("   • 60 Siswa × {$subjectCount} Jadwal × 12 Minggu = {$attendanceCount} Attendance");
-        $this->command->newLine();
-        $this->command->info('Login guru: password123');
-        $this->command->info('Login siswa: password123');
+        $this->printSummary();
     }
 
-    // ────────────────────────────────────────────
-    // 0. CLEAR DATA
-    // ────────────────────────────────────────────
     private function clearData(): void
     {
         Schema::disableForeignKeyConstraints();
 
-        // Order matters: children first, then parents
         DB::table('grades')->truncate();
         DB::table('submissions')->truncate();
         DB::table('attendances')->truncate();
+        DB::table('attendance_requests')->truncate();
         DB::table('assignments')->truncate();
+        DB::table('meeting_sessions')->truncate();
+        DB::table('holidays')->truncate();
         DB::table('schedules')->truncate();
         DB::table('class_student')->truncate();
         DB::table('students')->truncate();
@@ -153,7 +127,6 @@ class ReportCardScenarioSeeder extends Seeder
         DB::table('grading_settings')->truncate();
         DB::table('academic_years')->truncate();
 
-        // Delete users by role (keep admin/principal)
         User::whereIn('role', ['teacher', 'student'])->forceDelete();
 
         Schema::enableForeignKeyConstraints();
@@ -161,20 +134,23 @@ class ReportCardScenarioSeeder extends Seeder
         $this->command->info('   Data lama dibersihkan.');
     }
 
-    // ────────────────────────────────────────────
-    // 1. ACADEMIC YEAR & GRADING SETTING
-    // ────────────────────────────────────────────
     private function createAcademicYear(): AcademicYear
     {
+        $today = Carbon::today();
+        $endOfWeek = $today->copy()->endOfWeek(Carbon::FRIDAY);
+
         $year = AcademicYear::create([
-            'name' => '2025/2026',
+            'name' => '2026/2027',
             'semester' => 'odd',
             'is_active' => true,
             'is_report_published' => $this->reportPublished,
+            'start_date' => '2026-06-01',
+            'end_date' => $endOfWeek->toDateString(),
         ]);
 
-        $statusLabel = $this->reportPublished ? 'published' : 'unpublished';
-        $this->command->info("   ✅ Tahun Ajaran: 2025/2026 Ganjil (aktif + {$statusLabel})");
+        $this->command->info('   ✅ Tahun Ajaran: 2026/2027 Ganjil');
+        $this->command->info("      Periode: 01 Jun 2026 — {$endOfWeek->format('d M Y')} (semester pendek)");
+        $this->command->info('      Status: is_report_published = '.($this->reportPublished ? 'true' : 'false'));
 
         return $year;
     }
@@ -189,13 +165,10 @@ class ReportCardScenarioSeeder extends Seeder
             'attendance_weight' => 10,
         ]);
 
-        $this->command->info('   ✅ GradingSetting: Task 40% + UTS 25% + UAS 25% + Kehadiran 10% = 100%');
+        $this->command->info('   ✅ GradingSetting: Task 40% + UTS 25% + UAS 25% + Kehadiran 10%');
     }
 
-    // ────────────────────────────────────────────
-    // 2. SUBJECTS
-    // ────────────────────────────────────────────
-    private function createSubjects(): \Illuminate\Support\Collection
+    private function createSubjects(): Collection
     {
         $subjects = collect();
 
@@ -203,16 +176,12 @@ class ReportCardScenarioSeeder extends Seeder
             $subjects->push(Subject::create($subjectData));
         }
 
-        $subjectCount = count(self::SUBJECTS);
-        $this->command->info("   ✅ {$subjectCount} Mata Pelajaran dibuat.");
+        $this->command->info('   ✅ '.count(self::SUBJECTS).' Mata Pelajaran dibuat.');
 
         return $subjects;
     }
 
-    // ────────────────────────────────────────────
-    // 3. CLASSES
-    // ────────────────────────────────────────────
-    private function createClasses(AcademicYear $year): \Illuminate\Support\Collection
+    private function createClasses(AcademicYear $year): Collection
     {
         $classes = collect();
 
@@ -228,15 +197,12 @@ class ReportCardScenarioSeeder extends Seeder
         return $classes;
     }
 
-    // ────────────────────────────────────────────
-    // 4. TEACHERS & HOMEROOMS
-    // ────────────────────────────────────────────
-    private function createTeachers(): \Illuminate\Support\Collection
+    private function createTeachers(): Collection
     {
         $teachers = collect();
         $password = Hash::make(self::DEFAULT_PASSWORD);
 
-        foreach (self::TEACHERS as $index => $data) {
+        foreach (self::TEACHERS as $data) {
             $user = User::create([
                 'name' => $data['name'],
                 'email' => $data['email'],
@@ -254,15 +220,13 @@ class ReportCardScenarioSeeder extends Seeder
             $teachers->push($teacher);
         }
 
-        $teacherCount = count(self::TEACHERS);
-        $this->command->info("   ✅ {$teacherCount} Guru dibuat.");
+        $this->command->info('   ✅ '.count(self::TEACHERS).' Guru dibuat.');
 
         return $teachers;
     }
 
-    private function assignHomerooms(\Illuminate\Support\Collection $teachers, \Illuminate\Support\Collection $classes): void
+    private function assignHomerooms(Collection $teachers, Collection $classes): void
     {
-        // Teacher 0 → 7A, Teacher 1 → 8A, Teacher 2 → 9A
         foreach ($classes as $index => $class) {
             $class->update([
                 'homeroom_teacher_id' => $teachers[$index]->user_id,
@@ -272,10 +236,7 @@ class ReportCardScenarioSeeder extends Seeder
         $this->command->info('   ✅ 3 Wali Kelas ditetapkan (Guru 1→7A, 2→8A, 3→9A).');
     }
 
-    // ────────────────────────────────────────────
-    // 5. STUDENTS
-    // ────────────────────────────────────────────
-    private function createStudents(\Illuminate\Support\Collection $classes, AcademicYear $year): array
+    private function createStudents(Collection $classes, AcademicYear $year): array
     {
         $password = Hash::make(self::DEFAULT_PASSWORD);
         $studentsByClass = [];
@@ -298,13 +259,12 @@ class ReportCardScenarioSeeder extends Seeder
 
                 $student = Student::create([
                     'user_id' => $user->id,
-                    'nisn' => '00' . str_pad($studentCounter, 8, '0', STR_PAD_LEFT),
+                    'nisn' => '00'.str_pad($studentCounter, 8, '0', STR_PAD_LEFT),
                     'nis' => str_pad($studentCounter, 5, '0', STR_PAD_LEFT),
                     'gender' => $i % 2 === 0 ? 'P' : 'L',
                     'status' => 'active',
                 ]);
 
-                // Attach to class via pivot
                 $student->classes()->attach($class->id, [
                     'academic_year_id' => $year->id,
                 ]);
@@ -315,18 +275,15 @@ class ReportCardScenarioSeeder extends Seeder
         }
 
         $totalStudents = array_sum(array_map('count', $studentsByClass));
-        $this->command->info("   ✅ {$totalStudents} Siswa dibuat (20 per kelas) dan didaftarkan ke kelas.");
+        $this->command->info("   ✅ {$totalStudents} Siswa dibuat (20 per kelas).");
 
         return $studentsByClass;
     }
 
-    // ────────────────────────────────────────────
-    // 6. SCHEDULES & ASSIGNMENTS
-    // ────────────────────────────────────────────
     private function createSchedulesAndAssignments(
-        \Illuminate\Support\Collection $classes,
-        \Illuminate\Support\Collection $subjects,
-        \Illuminate\Support\Collection $teachers,
+        Collection $classes,
+        Collection $subjects,
+        Collection $teachers,
         AcademicYear $year
     ): array {
         $schedulesByClass = [];
@@ -336,7 +293,6 @@ class ReportCardScenarioSeeder extends Seeder
             $schedulesByClass[$class->id] = [];
 
             foreach ($subjects as $subjectIndex => $subject) {
-                // Use explicit time-slot map to guarantee no class-day-time conflicts
                 $slot = self::TIME_SLOTS[$subjectIndex] ?? [
                     'day' => self::DAYS[$subjectIndex % count(self::DAYS)],
                     'start' => sprintf('%02d:00', 7 + $subjectIndex),
@@ -344,11 +300,13 @@ class ReportCardScenarioSeeder extends Seeder
 
                 $teacher = $teachers[$subjectIndex % $teachers->count()];
 
-                // Use updateOrCreate to prevent duplicates if seeder runs twice
-                $startTime = $slot['start'] . ':00';
+                $startTime = $slot['start'].':00';
                 $endHour = (int) substr($slot['start'], 0, 2);
                 $endMin = (int) substr($slot['start'], 3, 2) + 30;
-                if ($endMin >= 60) { $endHour++; $endMin -= 60; }
+                if ($endMin >= 60) {
+                    $endHour++;
+                    $endMin -= 60;
+                }
                 $endTime = sprintf('%02d:%02d:00', $endHour, $endMin);
 
                 $schedule = Schedule::updateOrCreate(
@@ -365,7 +323,6 @@ class ReportCardScenarioSeeder extends Seeder
                     ]
                 );
 
-                // Create 3 assignments per schedule: task, uts, uas
                 $types = [
                     ['type' => 'task', 'label' => 'Tugas Harian'],
                     ['type' => 'uts', 'label' => 'UTS'],
@@ -398,13 +355,57 @@ class ReportCardScenarioSeeder extends Seeder
         return $schedulesByClass;
     }
 
-    // ────────────────────────────────────────────
-    // 7. SUBMISSIONS & GRADES
-    // ────────────────────────────────────────────
+    private function createMeetingSessions(array $schedulesByClass, AcademicYear $year): void
+    {
+        $startDate = $year->start_date->copy()->startOfDay();
+        $endDate = $year->end_date->copy()->endOfDay();
+        $sessionCount = 0;
+
+        foreach ($schedulesByClass as $schedules) {
+            foreach ($schedules as $schedule) {
+                $dayOfWeek = $schedule->day_of_week;
+                $meetingNumber = 1;
+                $current = $startDate->copy()->modify("next {$dayOfWeek}");
+
+                if ($current->lt($startDate)) {
+                    $current->addWeek();
+                }
+
+                $sessionsToInsert = [];
+
+                while ($current->lte($endDate)) {
+                    $sessionsToInsert[] = [
+                        'schedule_id' => $schedule->id,
+                        'meeting_number' => $meetingNumber,
+                        'date' => $current->toDateString(),
+                        'status' => 'scheduled',
+                        'notes' => null,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ];
+                    $meetingNumber++;
+                    $current->addWeek();
+                }
+
+                if ($sessionsToInsert !== []) {
+                    DB::table('meeting_sessions')->insert($sessionsToInsert);
+                    $sessionCount += count($sessionsToInsert);
+                }
+            }
+        }
+
+        $this->command->info("   ✅ {$sessionCount} Meeting Sessions dibuat (SEMUA terjadwal dalam semester pendek).");
+    }
+
+    private function createHolidays(AcademicYear $year): void
+    {
+        $this->command->info('   ✅ Tidak ada hari libur (semester pendek).');
+    }
+
     private function createSubmissionsAndGrades(
         array $studentsByClass,
         array $schedulesByClass,
-        \Illuminate\Support\Collection $teachers
+        Collection $teachers
     ): void {
         $graderUserId = $teachers->first()->user_id;
         $submissionCount = 0;
@@ -441,9 +442,6 @@ class ReportCardScenarioSeeder extends Seeder
         $this->command->info("   ✅ {$submissionCount} Submission + {$gradeCount} Grade dibuat (nilai 75-98).");
     }
 
-    // ────────────────────────────────────────────
-    // 8. ATTENDANCE (12 DISTINCT WEEKS)
-    // ────────────────────────────────────────────
     private function createAttendanceRecords(
         array $studentsByClass,
         array $schedulesByClass
@@ -455,14 +453,17 @@ class ReportCardScenarioSeeder extends Seeder
 
             foreach ($students as $student) {
                 foreach ($schedules as $schedule) {
-                    // Create 1 attendance per week for 12 weeks
-                    for ($week = 1; $week <= 12; $week++) {
-                        $date = Carbon::now()->subWeeks($week)->toDateString();
+                    $sessions = MeetingSession::query()
+                        ->where('schedule_id', $schedule->id)
+                        ->orderBy('meeting_number')
+                        ->get();
 
+                    foreach ($sessions as $session) {
                         Attendance::create([
                             'schedule_id' => $schedule->id,
+                            'meeting_session_id' => $session->id,
                             'student_id' => $student->user_id,
-                            'date' => $date,
+                            'date' => $session->date,
                             'status' => 'present',
                         ]);
                         $attendanceCount++;
@@ -471,6 +472,33 @@ class ReportCardScenarioSeeder extends Seeder
             }
         }
 
-        $this->command->info("   ✅ {$attendanceCount} Attendance records dibuat (12 minggu × semua siswa × semua jadwal, status: present).");
+        $this->command->info("   ✅ {$attendanceCount} Attendance records dibuat (SEMUA pertemuan selesai, status: present).");
+    }
+
+    private function printSummary(): void
+    {
+        $teacherCount = count(self::TEACHERS);
+        $subjectCount = count(self::SUBJECTS);
+        $scheduleCount = $subjectCount * count(self::CLASS_NAMES);
+        $sessionCount = MeetingSession::count();
+        $holidayCount = Holiday::count();
+        $submissionTotal = 60 * $subjectCount * 3;
+        $attendanceCount = Attendance::count();
+
+        $this->command->newLine();
+        $this->command->info('✅ ReportCardScenarioSeeder selesai!');
+        $this->command->info('   Mode: SEMUA pertemuan selesai, semester pendek, is_report_published = false');
+        $this->command->info('   • 1 Tahun Ajaran 2026/2027 (01 Jun — '.Carbon::today()->endOfWeek(Carbon::FRIDAY)->format('d M Y').')');
+        $this->command->info('   • 3 Kelas (7A, 8A, 9A)');
+        $this->command->info("   • {$teacherCount} Guru (3 Wali Kelas)");
+        $this->command->info('   • 60 Siswa (20 per kelas)');
+        $this->command->info("   • {$scheduleCount} Jadwal ({$subjectCount} mapel × 3 kelas)");
+        $this->command->info("   • {$sessionCount} Meeting Sessions (SEMUA selesai)");
+        $this->command->info("   • {$holidayCount} Hari Libur");
+        $this->command->info("   • {$attendanceCount} Attendance (SEMUA present)");
+        $this->command->info("   • {$submissionTotal} Submission + Grade");
+        $this->command->newLine();
+        $this->command->info('Login guru: password123');
+        $this->command->info('Login siswa: password123');
     }
 }

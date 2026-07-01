@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Attendance;
+use App\Models\MeetingSession;
 use App\Models\Schedule;
 use App\Models\Student;
 use Illuminate\Support\Facades\DB;
@@ -12,11 +13,23 @@ class AttendanceService
 {
     public function storeBulkAttendance(int $teacherId, array $data): void
     {
-        // 1. Otorisasi Ketat (Teacher Scope Validation)
         $schedule = Schedule::query()->findOrFail($data['schedule_id']);
 
         if ($schedule->teacher_id !== $teacherId) {
             throw new HttpException(403, 'Akses ditolak: Anda tidak memiliki hak untuk mengisi absensi pada jadwal ini.');
+        }
+
+        $meetingSession = MeetingSession::query()
+            ->where('schedule_id', $data['schedule_id'])
+            ->where('date', $data['date'])
+            ->first();
+
+        if (! $meetingSession) {
+            throw new HttpException(422, 'Tidak ada sesi pertemuan untuk tanggal ini.');
+        }
+
+        if ($meetingSession->status === 'holiday') {
+            throw new HttpException(422, 'Tanggal ini adalah hari libur. Absensi tidak dapat diisi.');
         }
 
         $studentIds = collect($data['attendances'])
@@ -43,12 +56,12 @@ class AttendanceService
         DB::beginTransaction();
 
         try {
-            // PERF FIX: replaced N updateOrCreate calls with single upsert() — requires MySQL 8.0+ / Laravel 8+
             $now = now();
             $rows = [];
             foreach ($data['attendances'] as $item) {
                 $rows[] = [
                     'schedule_id' => $schedule->id,
+                    'meeting_session_id' => $meetingSession->id,
                     'student_id' => $item['student_id'],
                     'date' => $data['date'],
                     'status' => $item['status'],
@@ -57,11 +70,10 @@ class AttendanceService
                 ];
             }
 
-            // PERF FIX: single bulk upsert replaces N individual updateOrCreate calls
             Attendance::upsert(
                 $rows,
-                ['schedule_id', 'student_id', 'date'],  // unique key columns
-                ['status', 'updated_at']                 // columns to update on conflict
+                ['schedule_id', 'student_id', 'date'],
+                ['status', 'meeting_session_id', 'updated_at']
             );
 
             DB::commit();

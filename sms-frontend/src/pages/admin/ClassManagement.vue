@@ -176,6 +176,16 @@
           @click="openTeacherModal(item)"
         >
           <svg
+            v-if="loadingTeacherClassId === item.id"
+            class="animate-spin w-3.5 h-3.5 mr-1"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+          </svg>
+          <svg
+            v-else
             class="w-3.5 h-3.5 mr-1"
             fill="none"
             stroke="currentColor"
@@ -211,20 +221,40 @@
         <div class="inline-flex items-center gap-2">
           <!-- Wali Kelas -->
           <button
+            :disabled="loadingTeacherClassId === item.id"
             @click="openTeacherModal(item)"
-            class="p-2 bg-orange-50 hover:bg-orange-100 text-brand-orange rounded-lg transition-colors border border-orange-100"
+            class="p-2 bg-orange-50 hover:bg-orange-100 text-brand-orange rounded-lg transition-colors border border-orange-100 disabled:opacity-50 disabled:cursor-wait"
             title="Set Wali Kelas"
           >
-            <Icon icon="fontisto:person" class="w-4 h-4" />
+            <svg
+              v-if="loadingTeacherClassId === item.id"
+              class="animate-spin w-4 h-4"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+            <Icon v-else icon="fontisto:person" class="w-4 h-4" />
           </button>
 
           <!-- Kelola Siswa -->
           <button
+            :disabled="loadingStudentClassId === item.id"
             @click="openStudentModal(item)"
-            class="p-2 bg-green-50 hover:bg-green-100 text-green-600 rounded-lg transition-colors border border-green-100"
+            class="p-2 bg-green-50 hover:bg-green-100 text-green-600 rounded-lg transition-colors border border-green-100 disabled:opacity-50 disabled:cursor-wait"
             title="Kelola Siswa"
           >
-            <Icon icon="raphael:people" class="w-4 h-4" />
+            <svg
+              v-if="loadingStudentClassId === item.id"
+              class="animate-spin w-4 h-4"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+            <Icon v-else icon="raphael:people" class="w-4 h-4" />
           </button>
 
           <!-- Edit -->
@@ -239,8 +269,14 @@
           <!-- Hapus -->
           <button
             @click="promptDeleteClass(item)"
-            class="px-3 py-2 bg-brand-red hover:bg-brand-orange text-white font-semibold rounded-lg shadow-md transition-colors flex items-center"
-            title="Hapus Kelas"
+            :disabled="item.has_data"
+            :class="[
+              'px-3 py-2 font-semibold rounded-lg shadow-md transition-colors flex items-center',
+              item.has_data
+                ? 'bg-gray-100 border border-gray-200 text-gray-300 cursor-not-allowed'
+                : 'bg-brand-red hover:bg-brand-orange text-white',
+            ]"
+            :title="item.has_data ? 'Tidak bisa hapus: kelas masih memiliki siswa atau jadwal' : 'Hapus Kelas'"
           >
             <Icon icon="mdi:trash-can-outline" class="w-4 h-4" />
           </button>
@@ -267,11 +303,10 @@
             class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-brand-red outline-none transition-colors"
           />
         </div>
-        <div>
+        <div v-if="!isEditing">
           <label class="block text-sm font-semibold text-gray-700 mb-1.5"
             >Tahun Ajaran</label
           >
-          <!-- Pastikan backend ada route untuk mengambil list academic years -->
           <BaseSelect
             v-model="classForm.academic_year_id"
             :options="academicYearOptions"
@@ -281,18 +316,11 @@
         </div>
       </form>
       <template #footer>
-        <div class="flex justify-end gap-3">
-          <button
-            type="button"
-            @click="isClassModalOpen = false"
-            class="px-5 py-2 bg-white border hover:bg-gray-50 text-gray-700 font-semibold rounded-lg"
-          >
-            Batal
-          </button>
+        <div class="flex justify-end">
           <button
             type="submit"
             form="classForm"
-            :disabled="isSaving"
+            :disabled="isSaving || !isClassFormDirty"
             class="px-5 py-2 bg-brand-red hover:bg-brand-orange text-white font-semibold rounded-lg disabled:opacity-70"
           >
             {{ isSaving ? "Menyimpan..." : "Simpan" }}
@@ -430,18 +458,11 @@
         </div>
       </form>
       <template #footer>
-        <div class="flex justify-end gap-3">
-          <button
-            type="button"
-            @click="isTeacherModalOpen = false"
-            class="px-5 py-2 bg-white border hover:bg-gray-50 text-gray-700 font-semibold rounded-lg transition-colors"
-          >
-            Batal
-          </button>
+        <div class="flex justify-end">
           <button
             type="submit"
             form="teacherForm"
-            :disabled="isSaving || !teacherForm.teacher_id"
+            :disabled="isSaving || !isTeacherFormDirty"
             class="px-5 py-2 bg-brand-orange hover:bg-brand-red text-white font-semibold rounded-lg disabled:opacity-70 flex items-center transition-colors shadow-sm"
           >
             <svg
@@ -476,9 +497,9 @@
         class="space-y-4"
       >
         <p class="text-sm text-gray-600">
-          Pilih siswa aktif yang akan dimasukkan ke kelas
-          <strong class="text-gray-900">{{ selectedClass?.name }}</strong
-          >.
+          Kelola siswa untuk kelas
+          <strong class="text-gray-900">{{ selectedClass?.name }}</strong>.
+          Siswa yang sudah terdaftar di kelas lain tidak ditampilkan.
         </p>
 
         <!-- FITUR PENCARIAN & SMART FILTER (LIVE SEARCH) -->
@@ -500,7 +521,7 @@
             <input
               v-model="searchStudentQuery"
               type="text"
-              placeholder="Cari nama/email siswa..."
+              placeholder="Cari nama atau NIS siswa..."
               class="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-brand-red focus:border-brand-red outline-none text-sm transition-colors"
             />
           </div>
@@ -519,28 +540,15 @@
         <div
           class="border border-gray-200 rounded-lg bg-white overflow-hidden flex flex-col"
         >
-          <!-- Header List: Select All & Total Info -->
+          <!-- Header List: Total Info -->
           <div
-            class="flex justify-between items-center px-4 py-3 bg-gray-50 border-b border-gray-200"
+            class="flex items-center justify-end px-4 py-3 bg-gray-50 border-b border-gray-200"
           >
-            <div class="flex items-center">
-              <input
-                type="checkbox"
-                id="selectAll"
-                v-model="isAllSelected"
-                class="w-4 h-4 text-brand-red focus:ring-brand-red border-gray-300 rounded cursor-pointer"
-              />
-              <label
-                for="selectAll"
-                class="ml-3 text-sm font-bold text-gray-800 cursor-pointer select-none"
-              >
-                Pilih Semua
-              </label>
-            </div>
             <span
               class="text-xs font-semibold text-gray-500 bg-white px-2 py-1 rounded-md border border-gray-200 shadow-sm"
             >
-              Total Tersedia: {{ availableStudents.length }} Siswa
+              {{ studentFilterMode === 'unassigned' ? 'Tersedia' : 'Total' }}:
+              {{ filteredAvailableStudents.length }} Siswa
             </span>
           </div>
 
@@ -554,8 +562,8 @@
               <input
                 type="checkbox"
                 :id="'std-' + student.id"
-                :value="student.id"
-                v-model="studentForm.student_ids"
+                :checked="studentForm.student_ids.includes(student.id)"
+                @change="handleStudentCheckboxChange(student, $event)"
                 class="w-4 h-4 text-brand-red focus:ring-brand-red border-gray-300 rounded cursor-pointer"
               />
               <label
@@ -565,7 +573,7 @@
                 <span class="text-sm font-semibold text-gray-800">{{
                   student.name
                 }}</span>
-                <span class="text-xs text-gray-500">{{ student.email }}</span>
+                <span class="text-xs text-gray-500">{{ student.nis }}</span>
               </label>
             </div>
 
@@ -617,18 +625,11 @@
       </form>
 
       <template #footer>
-        <div class="flex justify-end gap-3">
-          <button
-            type="button"
-            @click="isStudentModalOpen = false"
-            class="px-5 py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold rounded-lg transition-colors"
-          >
-            Batal
-          </button>
+        <div class="flex justify-end">
           <button
             type="submit"
             form="studentForm"
-            :disabled="isSaving || studentForm.student_ids.length === 0"
+            :disabled="isSaving || !isStudentFormDirty"
             class="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-sm disabled:opacity-70 flex items-center transition-colors"
           >
             <svg
@@ -660,6 +661,28 @@
       @confirm="executeDeleteClass"
       @cancel="confirmModal.isOpen = false"
     />
+
+    <!-- CONFIRM MODAL: KELUARKAN SISWA DARI KELAS -->
+    <ConfirmModal
+      :isOpen="removeStudentConfirm.isOpen"
+      title="Keluarkan Siswa dari Kelas?"
+      :message="`Jika ${removeStudentConfirm.studentName} dikeluarkan dari kelas ini, data nilai dan submission siswa di kelas ini akan hilang. Apakah Anda yakin?`"
+      confirmText="Ya, Keluarkan"
+      @confirm="confirmRemoveStudent"
+      @cancel="cancelRemoveStudent"
+    />
+
+    <!-- CONFIRM MODAL: TETAPKAN WALI KELAS -->
+    <ConfirmModal
+      :isOpen="teacherConfirmModal.isOpen"
+      :isLoading="teacherConfirmModal.isLoading"
+      title="Tetapkan Wali Kelas?"
+      :message="`Tetapkan ${teacherConfirmModal.teacherName} sebagai Wali Kelas untuk ${selectedClass?.name}?`"
+      confirmText="Ya, Tetapkan"
+      @confirm="executeTeacherAssignment"
+      @cancel="teacherConfirmModal.isOpen = false"
+    />
+
     <!-- MODAL: MIGRASI SEMESTER (Ganjil → Genap) -->
     <BaseModal
       v-if="isActiveYearOdd"
@@ -699,9 +722,8 @@
         </div>
       </form>
       <template #footer>
-        <div class="flex justify-end gap-3">
-          <button type="button" @click="isMigrateModalOpen = false" class="px-5 py-2 bg-white border text-gray-700 font-semibold rounded-lg">Batal</button>
-          <button type="submit" form="migrateForm" :disabled="isSaving || (migrateForm.from_academic_year_id === migrateForm.to_academic_year_id)" class="px-5 py-2 bg-brand-orange hover:bg-brand-red text-white font-semibold rounded-lg disabled:opacity-70 flex items-center">
+        <div class="flex justify-end">
+          <button type="submit" form="migrateForm" :disabled="isSaving || !isMigrateFormDirty" class="px-5 py-2 bg-brand-orange hover:bg-brand-red text-white font-semibold rounded-lg disabled:opacity-70 flex items-center">
             Mulai Migrasi Massal
           </button>
         </div>
@@ -733,9 +755,8 @@
         </div>
       </form>
       <template #footer>
-        <div class="flex justify-end gap-3">
-          <button type="button" @click="isClassMigrationModalOpen = false" class="px-5 py-2 bg-white border text-gray-700 font-semibold rounded-lg">Batal</button>
-          <button type="submit" form="classMigrateForm" :disabled="isSaving || !classMigrateForm.to_academic_year_id" class="px-5 py-2 bg-brand-red hover:bg-brand-orange text-white font-semibold rounded-lg disabled:opacity-70 flex items-center">
+        <div class="flex justify-end">
+          <button type="submit" form="classMigrateForm" :disabled="isSaving || !isClassMigrateFormDirty" class="px-5 py-2 bg-brand-red hover:bg-brand-orange text-white font-semibold rounded-lg disabled:opacity-70 flex items-center">
             {{ isSaving ? 'Memigrasi...' : 'Migrasikan Kelas' }}
           </button>
         </div>
@@ -750,7 +771,6 @@ import { ref, reactive, computed, onMounted, onActivated, watch } from "vue";
 import { useToastStore } from "../../stores/toast";
 import { useGlobalDropdownsStore } from "../../stores/globalDropdowns";
 import { classService } from "../../services/modules/admin/classService";
-import { userService } from "../../services/modules/admin/userService";
 import api from "../../services/api"; // Akses langsung untuk route yang belum ada servicenya
 
 // Shared Components
@@ -785,7 +805,6 @@ const paginationMeta = reactive({
 const academicYearOptions = computed(() => dropdowns.academicYearOptions);
 const allAcademicYearsRaw = computed(() => dropdowns.academicYearsRaw);
 const teacherOptions = computed(() => dropdowns.teacherDropdownOptions);
-const availableStudents = computed(() => dropdowns.studentOptionsRaw);
 
 const classGradeFilter = ref("");
 const academicYearFilter = ref("");
@@ -798,6 +817,8 @@ const classGradeOptions = [
 const isLoading = ref(true);
 const isSaving = ref(false);
 const isExportingCsv = ref(false);
+const loadingTeacherClassId = ref(null);
+const loadingStudentClassId = ref(null);
 
 const selectedClass = ref(null);
 
@@ -821,12 +842,35 @@ const studentForm = reactive({ student_ids: [] });
 const searchStudentQuery = ref("");
 
 // TAMBAHKAN STATE FILTER MODE
-const studentFilterMode = ref("unassigned");
+const studentFilterMode = ref("all");
 
 const studentFilterOptions = [
+  { value: "all", label: "Semua Siswa" },
   { value: "unassigned", label: "Siswa Belum Ada Kelas" },
-  { value: "all", label: "Semua Siswa Aktif" },
 ];
+
+// State untuk data siswa dari endpoint baru
+const selectedClassStudents = ref([]);
+const selectedUnassignedStudents = ref([]);
+const originalStudentIds = ref([]);
+
+// State untuk modal konfirmasi pengeluaran siswa
+const removeStudentConfirm = reactive({
+  isOpen: false,
+  studentId: null,
+  studentName: "",
+});
+
+// State untuk modal konfirmasi wali kelas
+const teacherConfirmModal = reactive({
+  isOpen: false,
+  isLoading: false,
+  teacherName: "",
+});
+
+// Original values untuk dirty detection
+const originalClassName = ref("");
+const originalTeacherId = ref("");
 
 const normalizeClassName = (name) => {
   if (!name) return "";
@@ -859,22 +903,6 @@ const getClassGrade = (name) => {
   return null;
 };
 
-const isStudentAssignedInAcademicYear = (student, academicYearId) => {
-  if (!student?.student || !academicYearId) return false;
-
-  const classes = student.student.classes || [];
-  if (classes.length > 0) {
-    return classes.some((cls) => {
-      const pivotYearId = cls.pivot?.academic_year_id;
-      const classYearId = cls.academic_year_id;
-      const resolvedYearId = pivotYearId ?? classYearId;
-      return String(resolvedYearId) === String(academicYearId);
-    });
-  }
-
-  return Boolean(student.student.class_id);
-};
-
 const filteredClasses = computed(() => {
   if (!classGradeFilter.value) return classes.value;
   return classes.value.filter(
@@ -882,32 +910,32 @@ const filteredClasses = computed(() => {
   );
 });
 
-// BUBAT COMPUTED UNTUK LIVE SEARCH & SMART FILTER
+// COMPUTED: Filter siswa berdasarkan mode filter dan pencarian
 const filteredAvailableStudents = computed(() => {
-  let filtered = availableStudents.value;
-  const academicYearId = selectedClass.value?.academic_year_id;
-  const selectedSet = new Set(
-    studentForm.student_ids.map((id) => String(id)),
-  );
+  let filtered = [];
 
-  // 1. Terapkan Smart Filter (Berdasarkan Status Kelas Siswa)
   if (studentFilterMode.value === "unassigned") {
-    // Hanya tampilkan siswa yang belum punya kelas di tahun ajaran ini
-    filtered = filtered.filter(
-      (u) => !isStudentAssignedInAcademicYear(u, academicYearId),
-    );
+    // Hanya tampilkan siswa yang belum punya kelas
+    filtered = [...selectedUnassignedStudents.value];
+  } else {
+    // Default: tampilkan siswa di kelas ini + siswa belum punya kelas
+    filtered = [...selectedClassStudents.value, ...selectedUnassignedStudents.value];
   }
 
-  // 2. Terapkan Filter Pencarian Teks (Live Search)
+  // Filter pencarian teks (live search)
   if (searchStudentQuery.value) {
     const query = searchStudentQuery.value.toLowerCase();
     filtered = filtered.filter(
-      (u) =>
-        u.name.toLowerCase().includes(query) ||
-        u.email.toLowerCase().includes(query),
+      (s) =>
+        s.name.toLowerCase().includes(query) ||
+        (s.nis && s.nis.toLowerCase().includes(query)),
     );
   }
 
+  // Sort: selected first, then alphabetical
+  const selectedSet = new Set(
+    studentForm.student_ids.map((id) => String(id)),
+  );
   return [...filtered].sort((a, b) => {
     const aSelected = selectedSet.has(String(a.id));
     const bSelected = selectedSet.has(String(b.id));
@@ -956,31 +984,41 @@ const filteredTeacherList = computed(() => {
   return available;
 });
 
-const isAllSelected = computed({
-  get() {
-    // Jika tidak ada data yang tampil, checkbox 'Pilih Semua' tidak dicentang
-    if (filteredAvailableStudents.value.length === 0) return false;
+// --- DIRTY STATE DETECTION ---
+// Modal 1: Kelas
+const isClassFormDirty = computed(() => {
+  if (!isEditing.value) {
+    return classForm.name.trim() !== "" && classForm.academic_year_id !== "";
+  }
+  return classForm.name !== originalClassName.value;
+});
 
-    // Centang otomatis JIKA semua siswa yang sedang tampil sudah masuk ke array pilihan
-    return filteredAvailableStudents.value.every((student) =>
-      studentForm.student_ids.includes(student.id),
-    );
-  },
-  set(value) {
-    if (value) {
-      // Jika dicentang: Ambil ID dari siswa yang tampil, gabungkan dengan yang sudah ada (hindari duplikat pakai Set)
-      const visibleIds = filteredAvailableStudents.value.map((s) => s.id);
-      studentForm.student_ids = [
-        ...new Set([...studentForm.student_ids, ...visibleIds]),
-      ];
-    } else {
-      // Jika hapus centang: Keluarkan semua ID siswa yang sedang tampil dari array pilihan
-      const visibleIds = filteredAvailableStudents.value.map((s) => s.id);
-      studentForm.student_ids = studentForm.student_ids.filter(
-        (id) => !visibleIds.includes(id),
-      );
-    }
-  },
+// Modal 2: Wali Kelas
+const isTeacherFormDirty = computed(() => {
+  return teacherForm.teacher_id !== "" && teacherForm.teacher_id !== originalTeacherId.value;
+});
+
+// Modal 3: Siswa
+const isStudentFormDirty = computed(() => {
+  const originalSet = new Set(originalStudentIds.value.map(String));
+  const currentSet = new Set(studentForm.student_ids.map(String));
+  if (originalSet.size !== currentSet.size) return true;
+  for (const id of originalSet) {
+    if (!currentSet.has(id)) return true;
+  }
+  return false;
+});
+
+// Modal 4: Migrasi Semester
+const isMigrateFormDirty = computed(() => {
+  return migrateForm.from_academic_year_id !== "" &&
+    migrateForm.to_academic_year_id !== "" &&
+    migrateForm.from_academic_year_id !== migrateForm.to_academic_year_id;
+});
+
+// Modal 5: Migrasi Kelas
+const isClassMigrateFormDirty = computed(() => {
+  return classMigrateForm.to_academic_year_id !== "";
 });
 
 // --- DATA FETCHING ---
@@ -994,9 +1032,7 @@ const fetchInitialData = async () => {
     // Use global dropdown store — fetches only if cache is empty
     await Promise.all([
       dropdowns.ensureAcademicYears(),
-      dropdowns.ensureTeacherOptions(),
-      dropdowns.ensureStudentOptions(),
-      dropdowns.ensureClasses(), // PERF FIX: use store cache instead of separate fetchAllClasses
+      dropdowns.ensureClasses(),
     ]);
 
     // Do NOT auto-select year — let user choose (default: all years shown)
@@ -1211,6 +1247,8 @@ const openClassModal = (cls = null) => {
   selectedClass.value = cls;
   classForm.name = cls?.name || "";
   classForm.academic_year_id = cls?.academic_year_id || "";
+  // Simpan original values untuk dirty detection
+  originalClassName.value = cls?.name || "";
   isClassModalOpen.value = true;
 };
 
@@ -1218,7 +1256,12 @@ const saveClass = async () => {
   isSaving.value = true;
   try {
     if (isEditing.value) {
-      await classService.update(selectedClass.value.id, classForm);
+      // Saat edit, gunakan academic_year_id dari kelas yang sudah ada
+      const payload = {
+        name: classForm.name,
+        academic_year_id: selectedClass.value.academic_year_id,
+      };
+      await classService.update(selectedClass.value.id, payload);
       toastStore.success("Data kelas diperbarui.");
     } else {
       await classService.create(classForm);
@@ -1256,15 +1299,30 @@ const executeDeleteClass = async () => {
   }
 };
 
-const openTeacherModal = (cls) => {
-  selectedClass.value = cls;
-  teacherForm.teacher_id = cls.homeroom_teacher?.user_id || "";
-  searchTeacherQuery.value = ""; // Reset kolom pencarian
-  isTeacherModalOpen.value = true;
+const openTeacherModal = async (cls) => {
+  loadingTeacherClassId.value = cls.id;
+  try {
+    selectedClass.value = cls;
+    teacherForm.teacher_id = cls.homeroom_teacher?.user_id || "";
+    originalTeacherId.value = cls.homeroom_teacher?.user_id || "";
+    searchTeacherQuery.value = "";
+    await dropdowns.ensureTeacherOptions();
+    isTeacherModalOpen.value = true;
+  } finally {
+    loadingTeacherClassId.value = null;
+  }
 };
 
-const saveTeacherAssignment = async () => {
-  isSaving.value = true;
+const saveTeacherAssignment = () => {
+  const teacher = filteredTeacherList.value.find(
+    (t) => t.value === teacherForm.teacher_id,
+  );
+  teacherConfirmModal.teacherName = teacher?.label || "";
+  teacherConfirmModal.isOpen = true;
+};
+
+const executeTeacherAssignment = async () => {
+  teacherConfirmModal.isLoading = true;
   try {
     await classService.assignTeacher(
       selectedClass.value.id,
@@ -1274,41 +1332,55 @@ const saveTeacherAssignment = async () => {
       `Wali kelas untuk ${selectedClass.value.name} berhasil ditetapkan.`,
     );
     isTeacherModalOpen.value = false;
+    teacherConfirmModal.isOpen = false;
     refreshClasses();
   } catch (error) {
     toastStore.error(
       error.response?.data?.message || "Gagal menetapkan wali kelas.",
     );
   } finally {
-    isSaving.value = false;
+    teacherConfirmModal.isLoading = false;
   }
 };
 
 // --- ASSIGN SISWA ---
 const openStudentModal = async (cls) => {
-  selectedClass.value = cls;
-  studentForm.student_ids = [];
-  searchStudentQuery.value = "";
-  studentFilterMode.value = cls.students_count > 0 ? "all" : "unassigned";
-  isStudentModalOpen.value = true;
-
+  loadingStudentClassId.value = cls.id;
   try {
-    const res = await classService.getById(cls.id);
-    const detail = res.data.data || res.data;
-    const existingStudentIds = (detail.students || [])
-      .map((student) => student.user_id)
-      .filter(Boolean);
+    selectedClass.value = cls;
+    studentForm.student_ids = [];
+    searchStudentQuery.value = "";
+    originalStudentIds.value = [];
+    selectedClassStudents.value = [];
+    selectedUnassignedStudents.value = [];
+    studentFilterMode.value = "all";
 
-    selectedClass.value = detail;
-    studentForm.student_ids = [...new Set(existingStudentIds)];
+    // Fetch student options dari endpoint baru (hanya 1 API call)
+    const res = await classService.getStudentOptions(cls.id);
+    const { class_students, unassigned_students } = res.data;
 
-    if (studentForm.student_ids.length > 0) {
-      studentFilterMode.value = "all";
-    }
+    // Simpan data untuk display
+    selectedClassStudents.value = class_students.map((s) => ({
+      ...s,
+      _type: "class",
+    }));
+    selectedUnassignedStudents.value = unassigned_students.map((s) => ({
+      ...s,
+      _type: "unassigned",
+    }));
+
+    // Pre-check siswa yang sudah di kelas
+    const classIds = class_students.map((s) => s.id);
+    studentForm.student_ids = [...classIds];
+    originalStudentIds.value = [...classIds];
+
+    isStudentModalOpen.value = true;
   } catch (error) {
     toastStore.error(
-      error.response?.data?.message || "Gagal memuat data kelas.",
+      error.response?.data?.message || "Gagal memuat data siswa.",
     );
+  } finally {
+    loadingStudentClassId.value = null;
   }
 };
 
@@ -1334,6 +1406,46 @@ const saveStudentAssignment = async () => {
   } finally {
     isSaving.value = false;
   }
+};
+
+// --- HANDLER CHECKBOX SISWA ---
+const handleStudentCheckboxChange = (student, event) => {
+  const isChecked = event.target.checked;
+
+  if (isChecked) {
+    // Centang: tambahkan ke daftar
+    if (!studentForm.student_ids.includes(student.id)) {
+      studentForm.student_ids = [...studentForm.student_ids, student.id];
+    }
+  } else {
+    // Uncentang: cek apakah siswa ini awalnya ada di kelas
+    if (originalStudentIds.value.includes(student.id)) {
+      // Siswa asli kelas -> tampilkan konfirmasi
+      removeStudentConfirm.studentId = student.id;
+      removeStudentConfirm.studentName = student.name;
+      removeStudentConfirm.isOpen = true;
+      // Revert checkbox sementara (tunggu konfirmasi)
+      event.target.checked = true;
+    } else {
+      // Siswa baru (baru dicentang lalu di-uncentang) -> langsung hapus
+      studentForm.student_ids = studentForm.student_ids.filter(
+        (id) => id !== student.id,
+      );
+    }
+  }
+};
+
+const confirmRemoveStudent = () => {
+  // Hapus siswa dari daftar centang
+  studentForm.student_ids = studentForm.student_ids.filter(
+    (id) => id !== removeStudentConfirm.studentId,
+  );
+  removeStudentConfirm.isOpen = false;
+};
+
+const cancelRemoveStudent = () => {
+  // Biarkan tetap centang (sudah di-revert via event.target.checked = true)
+  removeStudentConfirm.isOpen = false;
 };
 
 // --- MIGRATION MODE COMPUTED ---

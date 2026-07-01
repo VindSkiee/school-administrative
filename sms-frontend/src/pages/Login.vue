@@ -40,13 +40,13 @@
         <form @submit.prevent="handleLogin" class="space-y-5">
           <div>
             <label class="block text-sm font-semibold text-gray-700 mb-1"
-              >Alamat Email</label
+              >Email / NIP / NIS / NISN</label
             >
             <input
               v-model="form.email"
               @blur="checkEmailRequirements"
-              type="email"
-              placeholder="Masukkan email Anda"
+              type="text"
+              placeholder="Masukkan email, NIP, NIS, atau NISN"
               required
               class="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:ring-2 focus:ring-brand-red/20 focus:border-brand-red transition-all outline-none text-sm bg-gray-50 focus:bg-white"
             />
@@ -113,6 +113,18 @@
             </div>
           </transition>
 
+          <div class="flex items-center gap-2 mt-4">
+            <input
+              v-model="form.remember"
+              type="checkbox"
+              id="remember-me"
+              class="w-4 h-4 rounded border-gray-300 text-brand-red focus:ring-brand-red/30 cursor-pointer"
+            />
+            <label for="remember-me" class="text-sm text-gray-600 cursor-pointer select-none">
+              Ingat saya
+            </label>
+          </div>
+
           <button
             type="submit"
             :disabled="isLoading || isCheckingEmail"
@@ -165,6 +177,7 @@ const toastStore = useToastStore();
 const form = reactive({
   email: "",
   password: "",
+  remember: false,
   "g-recaptcha-response": "",
 });
 
@@ -174,12 +187,11 @@ const needsRecaptcha = ref(false);
 const showPassword = ref(false);
 const lastCheckedEmail = ref(""); // Mencegah API dipanggil berulang kali untuk email yang sama
 
-// FUNGSI BARU: Mengecek email saat kursor pindah (blur)
+// Mengecek apakah credential memerlukan reCAPTCHA (admin/kepala sekolah)
 const checkEmailRequirements = async () => {
-  // Hanya jalankan jika email valid dan berbeda dari yang terakhir dicek
+  // Hanya jalankan jika input tidak kosong dan berbeda dari yang terakhir dicek
   if (
     !form.email ||
-    !form.email.includes("@") ||
     form.email === lastCheckedEmail.value
   )
     return;
@@ -188,10 +200,10 @@ const checkEmailRequirements = async () => {
   lastCheckedEmail.value = form.email;
 
   try {
-    // Panggil lewat Store, BUKAN API langsung. UI menjadi sangat bersih!
+    // Backend akan resolve user dari email/NIP/NIS/NISN lalu cek role
     needsRecaptcha.value = await authStore.checkEmail(form.email);
 
-    // Kosongkan token lama jika email diganti dan ternyata tidak butuh captcha
+    // Kosongkan token lama jika credential diganti dan ternyata tidak butuh captcha
     if (!needsRecaptcha.value) {
       form["g-recaptcha-response"] = "";
     }
@@ -227,7 +239,7 @@ const handleLogin = async () => {
   }
 
   try {
-    const payload = { email: form.email, password: form.password };
+    const payload = { email: form.email, password: form.password, remember: form.remember };
     if (needsRecaptcha.value && form["g-recaptcha-response"]) {
       payload["g-recaptcha-response"] = form["g-recaptcha-response"];
     }

@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
+use App\Traits\RecordsActivity;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use App\Traits\RecordsActivity;
 
 class SchoolClass extends Model
 {
@@ -17,6 +17,13 @@ class SchoolClass extends Model
         'name',
         'academic_year_id',
         'homeroom_teacher_id',
+        'is_published',
+        'published_at',
+    ];
+
+    protected $casts = [
+        'is_published' => 'boolean',
+        'published_at' => 'datetime',
     ];
 
     /**

@@ -1,0 +1,111 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  "instructions": [
+    "AGENTS.md",
+    "PROJECT_CONTEXT.md",
+    "AGENT_GUIDE.md"
+  ],
+
+  "skills": {
+    "paths": [
+      ".opencode/skills",
+      "backend/skills"
+    ]
+  },
+
+  "agent": {
+    "build": {
+      "description": "Build, edit, and implement code for EduPlatform (School Administrative)",
+      "mode": "primary",
+      "steps": 50
+    },
+    "plan": {
+      "description": "Plan architecture, trace codebases, design implementation strategies",
+      "mode": "primary",
+      "steps": 30
+    },
+    "laravel-dev": {
+      "description": "Laravel backend development: controllers, services, models, migrations, routes",
+      "mode": "subagent",
+      "steps": 40
+    },
+    "vue-dev": {
+      "description": "Vue 3 frontend development: pages, components, composables, router, services",
+      "mode": "subagent",
+      "steps": 40
+    },
+    "reviewer": {
+      "description": "Code review: check errors, conventions, security, and consistency",
+      "mode": "subagent",
+      "steps": 20,
+      "permission": {
+        "edit": "deny"
+      }
+    }
+  },
+
+  "compaction": {
+    "auto": true,
+    "tail_turns": 8,
+    "prune": false,
+    "preserve_recent_tokens": 4000
+  },
+
+  "tool_output": {
+    "max_lines": 150,
+    "max_bytes": 40960
+  },
+
+  "snapshot": true,
+
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp"
+    }
+  },
+
+  "permission": {
+    "edit": "allow",
+    "bash": {
+      "php artisan *": "allow",
+      "composer *": "allow",
+      "npm *": "allow",
+      "npx *": "allow",
+      "vendor/bin/pint *": "allow",
+      "vendor/bin/pest *": "allow",
+      "git status*": "allow",
+      "git diff*": "allow",
+      "git log*": "allow",
+      "git add*": "ask",
+      "git commit*": "ask",
+      "git push*": "ask",
+      "rm *": "ask",
+      "*": "ask"
+    }
+  },
+
+  "command": {
+    "session-save": {
+      "description": "Save current session context to session log",
+      "template": "Save the current session context to .opencode/session_logs/ with: (1) summary of work done, (2) decisions made, (3) files modified, (4) pending tasks, (5) next steps. Use format YYYY-MM-DD_topic.md."
+    },
+    "session-load": {
+      "description": "Load and summarize the latest session context",
+      "template": "Read the latest session log from .opencode/session_logs/ and provide a summary of: current project state, pending tasks, recent decisions, and what to do next."
+    },
+    "session-status": {
+      "description": "Check session status and pending tasks",
+      "template": "Check the current session status: read the latest session log, list any pending tasks, and show what files were modified in the last session."
+    },
+    "done": {
+      "description": "Mark current task as complete and show shutdown checklist",
+      "template": "The current task is complete. Show the SESSION SHUTDOWN CHECKLIST with: task status, files modified, verification results, summary, and next steps. Ask user to confirm saving session."
+    },
+    "checkpoint": {
+      "description": "Save mid-session checkpoint (for context preservation)",
+      "template": "Save a mid-session checkpoint to .opencode/session_logs/ with: current task state, files modified so far, what's in progress, and next steps. This is for context preservation, not session end."
+    }
+  }
+}

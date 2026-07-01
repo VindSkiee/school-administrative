@@ -3,7 +3,9 @@
 use App\Http\Controllers\API\Admin\AcademicYearController;
 use App\Http\Controllers\API\Admin\ActivityLogController;
 use App\Http\Controllers\API\Admin\ClassController;
+use App\Http\Controllers\API\Admin\DashboardController;
 use App\Http\Controllers\API\Admin\GradingSettingController;
+use App\Http\Controllers\API\Admin\HolidayController;
 use App\Http\Controllers\API\Admin\ReportController as AdminReportController;
 use App\Http\Controllers\API\Admin\ScheduleController;
 use App\Http\Controllers\API\Admin\SemesterReportController as AdminSemesterReport;
@@ -13,8 +15,8 @@ use App\Http\Controllers\API\Admin\UserController;
 use Illuminate\Support\Facades\Route;
 
 Route::patch('users/{id}/reset-password', [UserController::class, 'resetPassword']);
+Route::get('users/{id}/teacher-active-schedules', [UserController::class, 'teacherActiveSchedules']);
 Route::apiResource('users', UserController::class);
-
 
 Route::middleware(['auth:sanctum'])->group(function () {
     // PERF FIX: lightweight dropdown endpoints (id+name only)
@@ -22,7 +24,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('students/options', [UserController::class, 'studentOptions']);
     Route::get('classes/options', [ClassController::class, 'options']);
 });
-
 
 // Academic Years Management
 Route::apiResource('academic-years', AcademicYearController::class)
@@ -42,6 +43,7 @@ Route::apiResource('classes', ClassController::class);
 // Custom routes untuk assign
 Route::post('classes/{id}/assign-students', [ClassController::class, 'assignStudents']);
 Route::post('classes/{id}/assign-teacher', [ClassController::class, 'assignTeacher']);
+Route::get('classes/{id}/student-options', [ClassController::class, 'studentOptions']);
 
 // Subject Management
 Route::apiResource('subjects', SubjectController::class);
@@ -50,6 +52,8 @@ Route::put('subjects/{subjectId}/competency', [SubjectDetailController::class, '
 
 // Schedule Management
 Route::apiResource('schedules', ScheduleController::class);
+Route::get('schedules/{id}/meeting-sessions', [ScheduleController::class, 'meetingSessions']);
+Route::post('schedules/swap', [ScheduleController::class, 'swap']);
 
 Route::middleware('throttle:heavy-api')->group(function () {
     Route::get('reports/distribution', [AdminReportController::class, 'distribution']);
@@ -61,6 +65,12 @@ Route::middleware('throttle:heavy-api')->group(function () {
 });
 
 Route::get('activity-logs', [ActivityLogController::class, 'index']);
-// Endpoint untuk mempublikasikan rapor dan mengunci semester
-Route::patch('academic-years/{id}/publish-reports', [AdminSemesterReport::class, 'publish']);
-Route::get('dashboard/stats', [\App\Http\Controllers\API\Admin\DashboardController::class, 'index']);
+// Per-class publish endpoints
+Route::get('academic-years/{id}/classes-readiness', [AdminSemesterReport::class, 'classesReadiness']);
+Route::get('academic-years/{academicYearId}/classes/{classId}/readiness-detail', [AdminSemesterReport::class, 'classReadinessDetail']);
+Route::patch('academic-years/{academicYearId}/classes/{classId}/publish', [AdminSemesterReport::class, 'publishClass']);
+Route::patch('academic-years/{id}/publish-all-classes', [AdminSemesterReport::class, 'publishAllClasses']);
+Route::get('dashboard/stats', [DashboardController::class, 'index']);
+
+// Holiday Management
+Route::apiResource('holidays', HolidayController::class)->only(['index', 'store', 'destroy']);

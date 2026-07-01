@@ -93,6 +93,18 @@
         </div>
       </template>
 
+      <!-- DYNAMIC SLOT: Menimpa cara kolom 'identity_number' dirender -->
+      <template #cell(identity_number)="{ item }">
+        <div v-if="item.student" class="text-sm text-gray-600 space-y-0.5">
+          <div v-if="item.student.nisn">NISN: {{ item.student.nisn }}</div>
+          <div v-if="item.student.nis">NIS: {{ item.student.nis }}</div>
+          <span v-if="!item.student.nisn && !item.student.nis">-</span>
+        </div>
+        <span v-else class="text-sm text-gray-600">
+          {{ item.teacher?.nip || item.admin?.nip || item.principal?.nip || "-" }}
+        </span>
+      </template>
+
       <!-- DYNAMIC SLOT: Menimpa cara kolom 'role' dirender -->
       <template #cell(role)="{ item }">
         <span
@@ -127,9 +139,31 @@
             </svg>
           </button>
 
-          <!-- Hapus -->
+          <!-- Nonaktifkan (user punya data terkait) -->
           <button
-            v-if="item.id !== authStore.user?.id"
+            v-if="item.has_data && item.id !== authStore.user?.id"
+            @click="promptDeactivateUser(item)"
+            class="px-3 py-2 bg-red-50 border border-red-200 hover:bg-red-100 text-red-700 font-semibold rounded-lg transition-colors flex items-center"
+            title="Nonaktifkan"
+          >
+            <svg
+              class="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+              />
+            </svg>
+          </button>
+
+          <!-- Hapus (user tidak punya data terkait) -->
+          <button
+            v-else-if="item.id !== authStore.user?.id"
             @click="promptDeleteUser(item)"
             class="px-3 py-2 bg-brand-red hover:bg-brand-orange text-white font-semibold rounded-lg shadow-md transition-colors flex items-center"
             title="Hapus"
@@ -317,13 +351,6 @@
       <template #footer>
         <div class="flex justify-end gap-3">
           <button
-            type="button"
-            @click="closeModal"
-            class="px-5 py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold rounded-lg transition-colors"
-          >
-            Batal
-          </button>
-          <button
             type="submit"
             form="userForm"
             :disabled="isSaving"
@@ -359,11 +386,26 @@
     <ConfirmModal
       :isOpen="confirmModal.isOpen"
       :isLoading="confirmModal.isLoading"
-      title="Hapus Pengguna?"
+      :title="confirmModal.title"
       :message="confirmModal.message"
-      confirmText="Ya, Hapus!"
-      @confirm="executeDeleteUser"
+      :confirmText="confirmModal.confirmText"
+      @confirm="executeConfirmAction"
       @cancel="confirmModal.isOpen = false"
+    />
+
+    <!-- COMPONENT: TeacherReplacementModal -->
+    <TeacherReplacementModal
+      :isOpen="replacementModal.isOpen"
+      :isLoading="replacementModal.isLoading"
+      :isLoadingConfirm="replacementModal.isLoadingConfirm"
+      :teacherName="replacementModal.teacherName"
+      :schedules="replacementModal.schedules"
+      :homeroomClass="replacementModal.homeroomClass"
+      :teacherOptions="replacementModal.teacherOptions"
+      :homeroomOptions="replacementModal.homeroomOptions"
+      :validationError="replacementModal.validationError"
+      @confirm="handleReplacementConfirm"
+      @cancel="replacementModal.isOpen = false"
     />
   </div>
 </template>
@@ -379,6 +421,7 @@ import BaseSelect from "../../components/BaseSelect.vue";
 import BaseTable from "../../components/BaseTable.vue";
 import BaseModal from "../../components/BaseModal.vue";
 import ConfirmModal from "../../components/ConfirmModal.vue";
+import TeacherReplacementModal from "../../components/TeacherReplacementModal.vue";
 
 const toastStore = useToastStore();
 const authStore = useAuthStore();
@@ -386,6 +429,7 @@ const authStore = useAuthStore();
 // --- CONFIGURATION ---
 const tableColumns = [
   { key: "name", label: "Nama Pengguna" },
+  { key: "identity_number", label: "NIP / NIS / NISN", align: "center" },
   { key: "email", label: "Email" },
   { key: "role", label: "Peran (Role)", align: "center" },
   { key: "actions", label: "Aksi", align: "center" },
@@ -422,8 +466,23 @@ const roleFilter = ref('');
 const confirmModal = reactive({
   isOpen: false,
   isLoading: false,
+  actionType: "",
+  title: "",
   message: "",
+  confirmText: "",
   targetId: null,
+});
+const replacementModal = reactive({
+  isOpen: false,
+  isLoading: false,
+  isLoadingConfirm: false,
+  teacherName: '',
+  schedules: [],
+  homeroomClass: null,
+  teacherOptions: [],
+  homeroomOptions: [],
+  targetId: null,
+  validationError: '',
 });
 const isModalOpen = ref(false);
 const isEditing = ref(false);
@@ -578,23 +637,76 @@ const openModal = (user = null) => {
 };
 
 const promptDeleteUser = (user) => {
+  confirmModal.actionType = "delete";
   confirmModal.targetId = user.id;
+  confirmModal.title = "Hapus Pengguna?";
   confirmModal.message = `Yakin menghapus "${user.name}"? Data tidak dapat dikembalikan.`;
+  confirmModal.confirmText = "Ya, Hapus!";
   confirmModal.isOpen = true;
 };
 
-const executeDeleteUser = async () => {
+const promptDeactivateUser = async (user) => {
+  // Cek apakah guru ini punya jadwal atau kelas perwalian aktif
+  if (user.role === 'teacher') {
+    replacementModal.isLoading = true;
+    replacementModal.validationError = '';
+    replacementModal.targetId = user.id;
+    replacementModal.teacherName = user.name;
+    replacementModal.isOpen = true;
+
+    try {
+      const res = await userService.getTeacherActiveSchedules(user.id);
+      replacementModal.schedules = res.data.schedules || [];
+      replacementModal.homeroomClass = res.data.homeroom_class || null;
+      replacementModal.teacherOptions = (res.data.teacher_options || []).map(
+        (t) => ({ value: t.id, label: t.name })
+      );
+      replacementModal.homeroomOptions = (res.data.homeroom_options || []).map(
+        (t) => ({ value: t.id, label: t.name })
+      );
+    } catch {
+      toastStore.error('Gagal memuat data jadwal guru.');
+      replacementModal.isOpen = false;
+    } finally {
+      replacementModal.isLoading = false;
+    }
+    return;
+  }
+
+  // Non-guru: langsung tampilkan ConfirmModal seperti biasa
+  confirmModal.actionType = "deactivate";
+  confirmModal.targetId = user.id;
+  confirmModal.title = "Nonaktifkan Pengguna?";
+  confirmModal.message = `"${user.name}" memiliki data terkait. Akun akan dinonaktifkan agar tidak bisa login.`;
+  confirmModal.confirmText = "Ya, Nonaktifkan";
+  confirmModal.isOpen = true;
+};
+
+const executeConfirmAction = async () => {
   confirmModal.isLoading = true;
   try {
-    await userService.delete(confirmModal.targetId);
-    toastStore.success("Dihapus.");
+    if (confirmModal.actionType === "deactivate") {
+      await userService.update(confirmModal.targetId, { is_active: false });
+      toastStore.success("Pengguna berhasil dinonaktifkan.");
+    } else {
+      await userService.delete(confirmModal.targetId);
+      toastStore.success("Pengguna berhasil dihapus.");
+    }
     if (users.value.length === 1 && paginationMeta.current_page > 1) {
       fetchUsers(paginationMeta.current_page - 1);
     } else {
       fetchUsers(paginationMeta.current_page);
     }
   } catch (error) {
-    toastStore.error("Gagal menghapus.");
+    const errors = error.response?.data?.errors;
+    if (errors) {
+      const firstError = Object.values(errors)[0][0];
+      toastStore.error(firstError);
+    } else {
+      toastStore.error(
+        error.response?.data?.error || error.response?.data?.message || "Operasi gagal.",
+      );
+    }
   } finally {
     confirmModal.isLoading = false;
     confirmModal.isOpen = false;
@@ -602,6 +714,35 @@ const executeDeleteUser = async () => {
 };
 
 const closeModal = () => (isModalOpen.value = false);
+
+const handleReplacementConfirm = async (payload) => {
+  replacementModal.isLoadingConfirm = true;
+  replacementModal.validationError = '';
+  try {
+    await userService.update(replacementModal.targetId, {
+      is_active: false,
+      ...payload,
+    });
+    toastStore.success('Guru berhasil dinonaktifkan dan jadwal digantikan.');
+    replacementModal.isOpen = false;
+    if (users.value.length === 1 && paginationMeta.current_page > 1) {
+      fetchUsers(paginationMeta.current_page - 1);
+    } else {
+      fetchUsers(paginationMeta.current_page);
+    }
+  } catch (error) {
+    const errors = error.response?.data?.errors;
+    if (errors) {
+      const firstError = Object.values(errors)[0][0];
+      replacementModal.validationError = firstError;
+    } else {
+      replacementModal.validationError =
+        error.response?.data?.error || error.response?.data?.message || 'Operasi gagal.';
+    }
+  } finally {
+    replacementModal.isLoadingConfirm = false;
+  }
+};
 
 onMounted(fetchUsers);
 </script>

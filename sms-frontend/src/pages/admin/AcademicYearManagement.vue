@@ -90,22 +90,34 @@
       </template>
 
       <template #cell(status)="{ item }">
-        <span
-          v-if="item.is_active"
-          class="inline-flex items-center text-center px-2.5 py-1 rounded-full text-xs font-bold bg-brand-red text-white"
-        >
+        <div class="flex flex-col items-center gap-1.5">
           <span
-            class="w-1.5 h-1.5 rounded-full bg-white mr-1.5 animate-pulse"
-          ></span>
-          Aktif Saat Ini
-        </span>
+            v-if="item.is_active"
+            class="inline-flex items-center text-center px-2.5 py-1 rounded-full text-xs font-bold bg-brand-red text-white"
+          >
+            <span
+              class="w-1.5 h-1.5 rounded-full bg-white mr-1.5 animate-pulse"
+            ></span>
+            Aktif Saat Ini
+          </span>
 
-        <span
-          v-else
-          class="inline-flex items-center text-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600"
-        >
-          Selesai / Arsip
-        </span>
+          <span
+            v-else
+            class="inline-flex items-center text-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600"
+          >
+            Selesai / Arsip
+          </span>
+
+          <span
+            v-if="item.is_report_published"
+            class="inline-flex items-center text-center px-2.5 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700 border border-green-200"
+          >
+            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+            Sudah DIterbitkan
+          </span>
+        </div>
       </template>
 
       <template #cell(actions)="{ item }">
@@ -220,16 +232,32 @@
             required
           />
         </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1.5"
+              >Tanggal Mulai</label
+            >
+            <input
+              v-model="form.start_date"
+              type="date"
+              class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-brand-red outline-none transition-colors text-sm"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1.5"
+              >Tanggal Berakhir</label
+            >
+            <input
+              v-model="form.end_date"
+              type="date"
+              :min="form.start_date || ''"
+              class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-brand-red outline-none transition-colors text-sm"
+            />
+          </div>
+        </div>
       </form>
       <template #footer>
         <div class="flex justify-end gap-3">
-          <button
-            type="button"
-            @click="closeModal"
-            class="px-5 py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold rounded-lg transition-colors"
-          >
-            Batal
-          </button>
           <button
             type="submit"
             form="academicYearForm"
@@ -288,7 +316,7 @@ const isSaving = ref(false);
 
 const isModalOpen = ref(false);
 const isEditing = ref(false);
-const form = reactive({ id: null, name: "", semester: "odd" });
+const form = reactive({ id: null, name: "", semester: "odd", start_date: "", end_date: "" });
 
 // Reusable Confirm Modal State for both Delete and Set Active
 const confirmModal = reactive({
@@ -392,6 +420,8 @@ const openModal = (item = null) => {
   form.id = item?.id || null;
   form.name = item?.name || "";
   form.semester = item?.semester || "odd";
+  form.start_date = item?.start_date ? item.start_date.split("T")[0] : "";
+  form.end_date = item?.end_date ? item.end_date.split("T")[0] : "";
   isModalOpen.value = true;
 };
 

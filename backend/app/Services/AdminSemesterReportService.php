@@ -6,7 +6,9 @@ use App\Models\AcademicYear;
 use App\Models\Principal;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Models\SubjectCompetencySetting;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class AdminSemesterReportService
@@ -51,7 +53,7 @@ class AdminSemesterReportService
         return Cache::remember("report_distribution_{$academicYearId}", 300, function () use ($academicYearId) {
             // PERF FIX: Single raw SQL that computes everything at DB level
             // instead of loading all eager relations into memory
-            $rows = \Illuminate\Support\Facades\DB::select("
+            $rows = DB::select('
                 SELECT
                     u.id AS user_id,
                     s.nis,
@@ -106,18 +108,40 @@ class AdminSemesterReportService
                         AND sch7.academic_year_id = ?
                     ) THEN 1
                     ELSE 0
-                    END AS grades_ready
+                    END AS grades_ready,
+                    -- Check if all subjects in this class have competency settings configured
+                    CASE WHEN (
+                        SELECT COUNT(DISTINCT sch8.subject_id)
+                        FROM schedules sch8
+                        WHERE sch8.class_id = sc.id
+                        AND sch8.academic_year_id = ?
+                    ) = 0 THEN 1
+                    WHEN (
+                        SELECT COUNT(DISTINCT scs.subject_id)
+                        FROM subject_competency_settings scs
+                        INNER JOIN schedules sch9 ON sch9.subject_id = scs.subject_id
+                        WHERE sch9.class_id = sc.id
+                        AND sch9.academic_year_id = ?
+                        AND scs.academic_year_id = ?
+                    ) >= (
+                        SELECT COUNT(DISTINCT sch10.subject_id)
+                        FROM schedules sch10
+                        WHERE sch10.class_id = sc.id
+                        AND sch10.academic_year_id = ?
+                    ) THEN 1
+                    ELSE 0
+                    END AS competency_ready
                 FROM students s
                 INNER JOIN users u ON u.id = s.user_id
                 INNER JOIN class_student cs ON cs.student_id = u.id
                 INNER JOIN classes sc ON sc.id = cs.class_id
                 WHERE sc.academic_year_id = ?
                 ORDER BY sc.name, u.name
-            ", [$academicYearId, $academicYearId, $academicYearId, $academicYearId, $academicYearId, $academicYearId, $academicYearId]);
+            ', [$academicYearId, $academicYearId, $academicYearId, $academicYearId, $academicYearId, $academicYearId, $academicYearId, $academicYearId, $academicYearId, $academicYearId, $academicYearId]);
 
             $data = [];
             foreach ($rows as $row) {
-                $isReady = (bool) $row->attendance_ready && (bool) $row->grades_ready;
+                $isReady = (bool) $row->attendance_ready && (bool) $row->grades_ready && (bool) $row->competency_ready;
                 $missingParts = [];
 
                 if (! $row->attendance_ready) {
@@ -125,6 +149,9 @@ class AdminSemesterReportService
                 }
                 if (! $row->grades_ready) {
                     $missingParts[] = 'Nilai belum diisi';
+                }
+                if (! $row->competency_ready) {
+                    $missingParts[] = 'Capaian kompetensi belum dikonfigurasi untuk semua mapel';
                 }
 
                 $data[] = [
@@ -173,6 +200,25 @@ class AdminSemesterReportService
             ]);
         }
 
+        // Validate competency settings for all subjects in this class
+        $subjectIds = $schoolClass->schedules->pluck('subject_id')->unique()->filter()->values();
+        $configuredSubjectIds = SubjectCompetencySetting::where('academic_year_id', $academicYearId)
+            ->whereIn('subject_id', $subjectIds)
+            ->pluck('subject_id')
+            ->toArray();
+        $missingCompetency = $subjectIds->diff($configuredSubjectIds);
+
+        if ($missingCompetency->isNotEmpty()) {
+            $missingNames = $schoolClass->schedules
+                ->filter(fn ($s) => $missingCompetency->contains($s->subject_id))
+                ->pluck('subject.name')
+                ->unique()
+                ->values()
+                ->implode(', ');
+
+            throw new HttpException(422, "Capaian kompetensi belum dikonfigurasi untuk mapel: {$missingNames}. Silakan atur di menu Mata Pelajaran → Detail → Capaian Kompetensi.");
+        }
+
         $reportData = $this->buildReportData($academicYear, $student, $schoolClass);
 
         return $this->pdfService->generateSemesterReportPdf($reportData, $student->user->name);
@@ -206,6 +252,15 @@ class AdminSemesterReportService
         $missingSubjects = [];
         $attendanceMissing = $schoolClass->schedules->isEmpty();
 
+        // Check competency settings for all subjects in this class
+        $subjectIds = $schoolClass->schedules->pluck('subject_id')->unique()->filter()->values();
+        $configuredSubjectIds = SubjectCompetencySetting::where('academic_year_id', $schoolClass->academic_year_id)
+            ->whereIn('subject_id', $subjectIds)
+            ->pluck('subject_id')
+            ->toArray();
+        $missingCompetencySubjects = $subjectIds->diff($configuredSubjectIds);
+        $allCompetencyConfigured = $missingCompetencySubjects->isEmpty();
+
         foreach ($schoolClass->schedules as $schedule) {
             if ($schedule->attendances->where('student_id', $student->user_id)->isEmpty()) {
                 $attendanceMissing = true;
@@ -236,6 +291,10 @@ class AdminSemesterReportService
 
         if ($attendanceMissing) {
             $missingInfoParts[] = 'Kehadiran belum direkap';
+        }
+
+        if (! $allCompetencyConfigured) {
+            $missingInfoParts[] = 'Capaian kompetensi belum dikonfigurasi untuk semua mapel';
         }
 
         return [
@@ -292,7 +351,7 @@ class AdminSemesterReportService
     private function buildSubjectResults(SchoolClass $schoolClass, Student $student, AcademicYear $academicYear): array
     {
         // Preload all competency settings for this academic year
-        $competencySettings = \App\Models\SubjectCompetencySetting::where('academic_year_id', $academicYear->id)
+        $competencySettings = SubjectCompetencySetting::where('academic_year_id', $academicYear->id)
             ->get()
             ->keyBy('subject_id');
 

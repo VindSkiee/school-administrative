@@ -159,6 +159,11 @@ const routes = [
         name: "TeacherGradebook",
         component: () => import("../pages/teacher/TeacherGradebook.vue"),
       },
+      {
+        path: "attendance-recap",
+        name: "TeacherAttendanceRecap",
+        component: () => import("../pages/teacher/AttendanceRecap.vue"),
+      },
     ],
   },
   // --- STUDENT ROUTES ---

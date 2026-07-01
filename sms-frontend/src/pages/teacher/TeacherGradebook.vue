@@ -60,7 +60,7 @@
       v-if="gradingWeights && !isHomeroomMode && selectedScheduleId"
       class="text-[10px] font-bold text-gray-400 bg-gray-50 px-3 py-2.5 rounded-lg border border-gray-100 text-center sm:text-left lg:whitespace-nowrap"
     >
-      Bobot: Tugas {{ gradingWeights.task }}% | UTS
+      Bobot Nilai Akhir: Tugas {{ gradingWeights.task }}% | UTS
       {{ gradingWeights.uts }}% | UAS {{ gradingWeights.uas }}% | Kehadiran
       {{ gradingWeights.attendance }}%
     </span>
@@ -190,9 +190,20 @@
             </svg>
           </div>
           <div>
-            <h3 class="text-lg font-bold text-gray-800">
-              Rekap Kelas Wali — {{ homeroomClassDisplayName }}
-            </h3>
+            <div class="flex items-center gap-2">
+              <h3 class="text-lg font-bold text-gray-800">
+                Rekap Kelas Wali — {{ homeroomClassDisplayName }}
+              </h3>
+              <BasePopoverInfo>
+                <p class="font-bold text-gray-800 mb-2">Panduan Rekap Kelas Wali</p>
+                <ul class="space-y-1.5 list-disc list-inside">
+                  <li><strong>Mode baca:</strong> Tabel ini hanya untuk melihat rekap nilai per mapel. Tidak bisa diedit.</li>
+                  <li><strong>Filter mapel:</strong> Gunakan dropdown "Mata Pelajaran" di atas untuk fokus pada mapel tertentu.</li>
+                  <li><strong>Urutkan kolom:</strong> Klik header kolom untuk mengurutkan. Klik lagi untuk membalik urutan.</li>
+                  <li><strong>Rata-rata:</strong> Dihitung otomatis dari semua nilai per mata pelajaran siswa.</li>
+                </ul>
+              </BasePopoverInfo>
+            </div>
             <p class="text-xs text-gray-500">
               Nilai akhir per mata pelajaran. Mode ini hanya baca. Gunakan
               filter di atas untuk fokus pada mapel tertentu.
@@ -283,9 +294,20 @@
       <div
         class="p-4 border-b border-gray-100 bg-gray-50/50 flex flex-wrap items-center justify-between gap-3"
       >
-        <h3 class="text-sm font-bold text-gray-700">
-          Tabel Nilai — {{ selectedScheduleLabel }}
-        </h3>
+        <div class="flex items-center gap-2">
+          <h3 class="text-sm font-bold text-gray-700">
+            Tabel Nilai — {{ selectedScheduleLabel }}
+          </h3>
+          <BasePopoverInfo>
+            <p class="font-bold text-gray-800 mb-2">Panduan Buku Nilai</p>
+            <ul class="space-y-1.5 list-disc list-inside">
+              <li><strong>Edit nilai:</strong> Klik sel angka, lalu ketik nilai baru. Tekan Enter untuk simpan.</li>
+              <li><strong>Nilai 0–100:</strong> Hanya angka 0 hingga 100 yang diterima.</li>
+              <li><strong>Urutkan kolom:</strong> Klik header kolom untuk mengurutkan. Klik lagi untuk membalik urutan.</li>
+              <li><strong>Nilai Akhir:</strong> Diurutkan otomatis berdasarkan bobot (Tugas, UTS, UAS, Kehadiran).</li>
+            </ul>
+          </BasePopoverInfo>
+        </div>
         <div class="flex items-center gap-2">
           <span
             class="px-2.5 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded-lg"
@@ -358,6 +380,7 @@ import { assignmentService } from "../../services/modules/teacher/assignmentServ
 import { useToastStore } from "../../stores/toast";
 import { useReportStatus } from "../../composables/useReportStatus";
 import BaseSelect from "../../components/BaseSelect.vue";
+import BasePopoverInfo from "../../components/BasePopoverInfo.vue";
 import api from "../../services/api";
 
 ModuleRegistry.registerModules([

@@ -2,23 +2,20 @@
 
 namespace App\Models;
 
+use App\Traits\RecordsActivity;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Tymon\JWTAuth\Contracts\JWTSubject;
-use App\Traits\RecordsActivity;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Database\Eloquent\Casts\Attribute;
 use Laravel\Sanctum\HasApiTokens;
-
+use Tymon\JWTAuth\Contracts\JWTSubject;
 
 class User extends Authenticatable implements JWTSubject
 {
-    use RecordsActivity;
-
     use HasApiTokens, HasFactory, Notifiable, SoftDeletes;
+    use RecordsActivity;
 
     protected $fillable = [
         'name',
@@ -39,23 +36,28 @@ class User extends Authenticatable implements JWTSubject
         return Attribute::make(
             get: function () {
                 // Jika kolom avatar di database ADA isinya
-                if (!empty($this->avatar)) {
-                    
+                if (! empty($this->avatar)) {
+
                     // Jika itu URL dari luar (misal: Google/SSO)
                     if (str_starts_with($this->avatar, 'http')) {
                         return $this->avatar;
                     }
-                    
+
                     // Langsung paksa jadikan URL tanpa mengecek exists()
-                    return asset('storage/' . $this->avatar);
+                    return asset('storage/'.$this->avatar);
                 }
-                
+
                 return null;
             }
         );
     }
 
     protected $hidden = [
+        'password',
+        'remember_token',
+    ];
+
+    protected $activityExcluded = [
         'password',
         'remember_token',
     ];

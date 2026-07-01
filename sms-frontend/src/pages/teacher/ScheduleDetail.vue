@@ -56,6 +56,12 @@
       <div
         class="w-full lg:w-auto bg-gray-50 p-3 rounded-xl border border-gray-200 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3"
       >
+        <div v-if="meetingInfo" class="flex items-center gap-2">
+          <span class="px-2.5 py-1 bg-gray-100 text-gray-700 font-mono text-xs font-bold rounded border border-gray-200">
+            Pertemuan {{ meetingInfo.meeting_number }}/{{ scheduleInfo.meeting_total || 0 }}
+          </span>
+        </div>
+
         <label class="text-sm font-semibold text-gray-600">
           Tanggal Pertemuan:
         </label>
@@ -186,11 +192,41 @@
               </div>
             </div>
 
+            <div
+              v-else-if="isHoliday"
+              class="bg-yellow-50 border border-yellow-200 rounded-2xl p-8 text-center shadow-sm max-w-3xl mx-auto"
+            >
+              <div
+                class="w-16 h-16 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mx-auto mb-4"
+              >
+                <svg
+                  class="w-8 h-8"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                  ></path>
+                </svg>
+              </div>
+              <h3 class="text-xl font-bold text-yellow-800 mb-2">
+                Hari Libur
+              </h3>
+              <p class="text-yellow-600 font-medium">
+                Tanggal ini adalah hari libur. Absensi tidak diperlukan.
+              </p>
+            </div>
+
             <div v-else-if="globalDate">
               <AttendancePanel
                 :scheduleId="scheduleId"
                 :selectedDate="globalDate"
                 :locked="isReportPublished"
+                :isHoliday="isHoliday"
               />
             </div>
           </div>
@@ -326,6 +362,14 @@ const goBack = () => {
   router.push({ path: '/teacher/schedules/today', query: day ? { day } : {} });
 };
 
+const isHoliday = computed(() => scheduleInfo.value?.is_holiday === true);
+
+const meetingInfo = computed(() => {
+  const session = scheduleInfo.value?.meeting_session;
+  if (!session) return null;
+  return session;
+});
+
 // FIX: Gunakan local ref untuk track scheduleInfo loading, bukan loadedScheduleId.
 // loadedScheduleId diperlukan oleh children (prefetchAllData) — jangan direset di parent.
 const _infoLoadedFor = ref(null);
@@ -333,16 +377,9 @@ const _infoLoadedFor = ref(null);
 const fetchScheduleData = async () => {
   try {
     const targetId = String(scheduleId.value);
-    // FIX: Jika AttendanceSchedule sudah prefetch data ini, skip fetch
-    if (attendanceDetailStore.isDataLoaded(targetId)) {
-      _infoLoadedFor.value = targetId;
-      return;
-    }
-    if (_infoLoadedFor.value !== targetId) {
-      const response = await attendanceService.getScheduleDetail(scheduleId.value);
-      attendanceDetailStore.scheduleInfo = response.data;
-      _infoLoadedFor.value = targetId;
-    }
+    const response = await attendanceService.getScheduleDetail(scheduleId.value, globalDate.value || undefined);
+    attendanceDetailStore.scheduleInfo = response.data;
+    _infoLoadedFor.value = targetId;
   } catch (error) {
     console.error("Gagal memuat detail jadwal:", error);
     toastStore.error("Jadwal tidak ditemukan atau Anda tidak memiliki akses.");
@@ -369,4 +406,9 @@ onActivated(async () => {
 
 // PERF FIX: removed router.replace on date change — prevents component remount via Vue Router
 // Date changes are handled locally via reactive state; child panels watch the selectedDate prop
+
+// Re-fetch schedule data when date changes (to get fresh meeting_session + is_holiday)
+watch(globalDate, () => {
+  fetchScheduleData();
+});
 </script>

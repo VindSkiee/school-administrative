@@ -39,12 +39,21 @@
       </template>
 
       <template #cell(name)="{ item }">
-        <button
-          @click="router.push({ name: 'AdminSubjectDetail', params: { id: item.id } })"
-          class="font-bold text-brand-red hover:text-brand-orange hover:underline cursor-pointer transition-colors text-left"
-        >
-          {{ item.name }}
-        </button>
+        <div class="flex items-center gap-2">
+          <button
+            @click="router.push({ name: 'AdminSubjectDetail', params: { id: item.id } })"
+            class="font-bold text-brand-red hover:text-brand-orange hover:underline cursor-pointer transition-colors text-left"
+          >
+            {{ item.name }}
+          </button>
+          <span
+            v-if="!item.has_competency"
+            class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700 border border-red-200 shrink-0"
+            title="Belum ada pengaturan capaian kompetensi"
+          >
+            Belum Diatur Kompetensi
+          </span>
+        </div>
       </template>
 
       <template #cell(actions)="{ item }">
@@ -59,8 +68,14 @@
 
           <button
             @click="promptDelete(item)"
-            class="px-3 py-2 bg-brand-red hover:bg-brand-orange text-white font-semibold rounded-lg shadow-md transition-colors flex items-center"
-            title="Hapus Mapel"
+            :disabled="item.has_data"
+            :class="[
+              'px-3 py-2 font-semibold rounded-lg shadow-md transition-colors flex items-center',
+              item.has_data
+                ? 'bg-gray-100 border border-gray-200 text-gray-300 cursor-not-allowed'
+                : 'bg-brand-red hover:bg-brand-orange text-white',
+            ]"
+            :title="item.has_data ? 'Tidak bisa hapus: mapel masih terikat jadwal' : 'Hapus Mapel'"
           >
             <Icon icon="mdi:trash-can-outline" class="w-4 h-4" />
           </button>
@@ -103,13 +118,6 @@
       <template #footer>
         <div class="flex justify-end gap-3">
           <button
-            type="button"
-            @click="isModalOpen = false"
-            class="px-5 py-2.5 bg-white border hover:bg-gray-50 text-gray-700 font-semibold rounded-lg transition-colors"
-          >
-            Batal
-          </button>
-          <button
             type="submit"
             form="subjectForm"
             :disabled="isSaving"
@@ -134,7 +142,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue';
+import { ref, reactive, onMounted, onActivated, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { useToastStore } from '../../stores/toast';
@@ -287,5 +295,9 @@ const executeDelete = async () => {
 
 onMounted(() => {
   fetchSubjects();
+});
+
+onActivated(() => {
+  fetchSubjects(paginationMeta.current_page);
 });
 </script>

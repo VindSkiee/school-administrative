@@ -39,7 +39,8 @@
           v-if="isOpen"
           ref="dropdownPanel"
           :style="dropdownStyle"
-          class="fixed z-[100] bg-white border border-gray-100 rounded-xl shadow-2xl overflow-hidden mt-1"
+          class="fixed z-[100] bg-white border border-gray-100 rounded-xl shadow-2xl overflow-hidden"
+          :class="dropdownStyle.opensUpward ? 'mb-1' : 'mt-1'"
         >
           <div
             v-if="isSearchEnabled"
@@ -163,6 +164,7 @@ const calculatePosition = () => {
 
   const rect = triggerBtn.value.getBoundingClientRect();
   const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
   const margin = Math.max(0, props.dropdownMargin);
 
   let width = measuredWidth.value ?? rect.width;
@@ -175,10 +177,33 @@ const calculatePosition = () => {
   }
   if (left < margin) left = margin;
 
+  const dropdownMaxHeight = 240;
+  const spaceBelow = viewportHeight - rect.bottom - margin;
+  const spaceAbove = rect.top - margin;
+  const minVisible = 100;
+
+  let top;
+  let maxHeight;
+  let opensUpward = false;
+
+  if (spaceBelow >= minVisible) {
+    top = rect.bottom;
+    maxHeight = Math.min(dropdownMaxHeight, spaceBelow);
+  } else if (spaceAbove > spaceBelow) {
+    opensUpward = true;
+    top = Math.max(margin, rect.top - dropdownMaxHeight);
+    maxHeight = Math.min(dropdownMaxHeight, spaceAbove);
+  } else {
+    top = rect.bottom;
+    maxHeight = Math.min(dropdownMaxHeight, Math.max(spaceBelow, minVisible));
+  }
+
   dropdownStyle.value = {
-    top: `${rect.bottom}px`,
+    top: `${top}px`,
     left: `${left}px`,
-    width: `${width}px`
+    width: `${width}px`,
+    maxHeight: `${maxHeight}px`,
+    opensUpward,
   };
 };
 

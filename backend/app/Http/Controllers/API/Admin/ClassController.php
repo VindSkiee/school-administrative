@@ -10,6 +10,7 @@ use App\Services\ClassService;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -20,21 +21,21 @@ class ClassController
     /** Flush all class option cache keys (all years + specific years) */
     private function flushClassOptionsCache(): void
     {
-        \Illuminate\Support\Facades\Cache::forget('admin_class_options_all');
+        Cache::forget('admin_class_options_all');
         // Flush year-specific keys for known years
-        $yearIds = \Illuminate\Support\Facades\DB::table('academic_years')->pluck('id');
+        $yearIds = DB::table('academic_years')->pluck('id');
         foreach ($yearIds as $yearId) {
-            \Illuminate\Support\Facades\Cache::forget('admin_class_options_year_' . $yearId);
+            Cache::forget('admin_class_options_year_'.$yearId);
         }
     }
 
     // PERF FIX: lightweight dropdown endpoint + 120s cache
     public function options(Request $request): JsonResponse
     {
-        $cacheKey = 'admin_class_options' . ($request->filled('academic_year_id') ? '_year_' . $request->academic_year_id : '_all');
+        $cacheKey = 'admin_class_options'.($request->filled('academic_year_id') ? '_year_'.$request->academic_year_id : '_all');
 
-        $classes = \Illuminate\Support\Facades\Cache::remember($cacheKey, 120, function () use ($request) {
-            $query = \Illuminate\Support\Facades\DB::table('classes')
+        $classes = Cache::remember($cacheKey, 120, function () use ($request) {
+            $query = DB::table('classes')
                 ->select('classes.id', 'classes.name', 'classes.academic_year_id');
 
             if ($request->filled('academic_year_id')) {
@@ -50,7 +51,7 @@ class ClassController
     // PERF FIX: single raw SQL with LEFT JOINs replaces 4 Eloquent queries (N+1 elimination)
     public function index(Request $request): JsonResponse
     {
-        $query = \Illuminate\Support\Facades\DB::table('classes as c')
+        $query = DB::table('classes as c')
             ->leftJoin('academic_years as ay', 'ay.id', '=', 'c.academic_year_id')
             ->leftJoin('teachers as ht', 'ht.user_id', '=', 'c.homeroom_teacher_id')
             ->leftJoin('users as hu', 'hu.id', '=', 'ht.user_id')
@@ -64,7 +65,8 @@ class ClassController
                 'ay.is_active as academic_year_is_active',
                 'hu.id as homeroom_teacher_user_id',
                 'hu.name as homeroom_teacher_name',
-                \Illuminate\Support\Facades\DB::raw('(SELECT COUNT(*) FROM class_student cs WHERE cs.class_id = c.id) as students_count')
+                DB::raw('(SELECT COUNT(*) FROM class_student cs WHERE cs.class_id = c.id) as students_count'),
+                DB::raw('(SELECT COUNT(*) FROM schedules s WHERE s.class_id = c.id) as schedules_count')
             );
 
         if ($request->filled('academic_year_id')) {
@@ -78,10 +80,10 @@ class ClassController
             if (isset($romanMap[$grade])) {
                 $roman = $romanMap[$grade];
                 $query->where(function ($subQuery) use ($grade, $roman) {
-                    $subQuery->where('c.name', 'like', $grade . '%')
-                             ->orWhere('c.name', 'like', 'KELAS ' . $grade . '%')
-                             ->orWhere('c.name', 'like', $roman . '%')
-                             ->orWhere('c.name', 'like', 'KELAS ' . $roman . '%');
+                    $subQuery->where('c.name', 'like', $grade.'%')
+                        ->orWhere('c.name', 'like', 'KELAS '.$grade.'%')
+                        ->orWhere('c.name', 'like', $roman.'%')
+                        ->orWhere('c.name', 'like', 'KELAS '.$roman.'%');
                 });
             }
         }
@@ -114,6 +116,7 @@ class ClassController
                         ],
                     ] : null,
                     'students_count' => (int) $row->students_count,
+                    'has_data' => ((int) $row->students_count > 0) || ((int) $row->schedules_count > 0),
                 ];
             });
 
@@ -209,6 +212,54 @@ class ClassController
         ]);
     }
 
+    /**
+     * GET /classes/{id}/student-options
+     * Returns class students + unassigned students for the class's academic year.
+     * Students in OTHER classes are excluded to minimize resource usage.
+     */
+    public function studentOptions(string $id): JsonResponse
+    {
+        $class = SchoolClass::findOrFail($id);
+        $academicYearId = $class->academic_year_id;
+
+        // 1. Students currently in this class
+        $classStudents = DB::table('class_student')
+            ->join('students', 'students.user_id', '=', 'class_student.student_id')
+            ->join('users', 'users.id', '=', 'students.user_id')
+            ->where('class_student.class_id', $id)
+            ->where('class_student.academic_year_id', $academicYearId)
+            ->where('students.status', 'active')
+            ->select('students.user_id AS id', 'users.name', 'students.nis')
+            ->orderBy('users.name')
+            ->get()
+            ->toArray();
+
+        // 2. Students not assigned to ANY class in this academic year
+        $assignedStudentIds = DB::table('class_student')
+            ->where('academic_year_id', $academicYearId)
+            ->pluck('student_id')
+            ->all();
+
+        $unassignedQuery = DB::table('students')
+            ->join('users', 'users.id', '=', 'students.user_id')
+            ->where('students.status', 'active')
+            ->select('students.user_id AS id', 'users.name', 'students.nis');
+
+        if (! empty($assignedStudentIds)) {
+            $unassignedQuery->whereNotIn('students.user_id', $assignedStudentIds);
+        }
+
+        $unassignedStudents = $unassignedQuery
+            ->orderBy('users.name')
+            ->get()
+            ->toArray();
+
+        return response()->json([
+            'class_students' => $classStudents,
+            'unassigned_students' => $unassignedStudents,
+        ]);
+    }
+
     // DELETE
     public function destroy(string $id): JsonResponse
     {
@@ -251,6 +302,7 @@ class ClassController
             $classCount = DB::table('classes')->where('academic_year_id', $fromYearId)->count();
             if ($classCount === 0) {
                 DB::rollBack();
+
                 return response()->json(['message' => 'Tidak ada kelas di tahun ajaran asal.'], 404);
             }
 
@@ -258,7 +310,7 @@ class ClassController
 
             // PERF FIX: Bulk upsert classes using INSERT ... SELECT with ON DUPLICATE KEY
             // Step 1: Insert new classes that don't exist yet in target year
-            DB::statement("
+            DB::statement('
                 INSERT INTO classes (name, academic_year_id, homeroom_teacher_id, created_at, updated_at)
                 SELECT c.name, ?, c.homeroom_teacher_id, ?, ?
                 FROM classes c
@@ -267,10 +319,10 @@ class ClassController
                     SELECT 1 FROM classes c2
                     WHERE c2.name = c.name AND c2.academic_year_id = ?
                 )
-            ", [$toYearId, $now, $now, $fromYearId, $toYearId]);
+            ', [$toYearId, $now, $now, $fromYearId, $toYearId]);
 
             // Step 2: Update homeroom_teacher_id where target class has NULL but source has value
-            DB::statement("
+            DB::statement('
                 UPDATE classes target
                 INNER JOIN classes source ON source.name = target.name
                     AND source.academic_year_id = ?
@@ -279,31 +331,31 @@ class ClassController
                 WHERE target.academic_year_id = ?
                 AND target.homeroom_teacher_id IS NULL
                 AND source.homeroom_teacher_id IS NOT NULL
-            ", [$fromYearId, $now, $toYearId]);
+            ', [$fromYearId, $now, $toYearId]);
 
             $migratedClassCount = DB::table('classes')->where('academic_year_id', $toYearId)->count();
 
             // PERF FIX: Bulk insert student pivots using INSERT ... SELECT (single query)
-            DB::statement("
+            DB::statement('
                 INSERT IGNORE INTO class_student (class_id, student_id, academic_year_id, created_at, updated_at)
                 SELECT target.id, cs.student_id, ?, ?, ?
                 FROM class_student cs
                 INNER JOIN classes source ON source.id = cs.class_id AND source.academic_year_id = ?
                 INNER JOIN classes target ON target.name = source.name AND target.academic_year_id = ?
-            ", [$toYearId, $now, $now, $fromYearId, $toYearId]);
+            ', [$toYearId, $now, $now, $fromYearId, $toYearId]);
 
             $migratedStudentCount = DB::table('class_student')
                 ->where('academic_year_id', $toYearId)
                 ->count();
 
             // PERF FIX: Bulk duplicate schedules using INSERT ... SELECT (single query)
-            DB::statement("
+            DB::statement('
                 INSERT INTO schedules (class_id, subject_id, teacher_id, academic_year_id, day_of_week, start_time, end_time, created_at, updated_at)
                 SELECT target.id, s.subject_id, s.teacher_id, ?, s.day_of_week, s.start_time, s.end_time, ?, ?
                 FROM schedules s
                 INNER JOIN classes source ON source.id = s.class_id AND source.academic_year_id = ?
                 INNER JOIN classes target ON target.name = source.name AND target.academic_year_id = ?
-            ", [$toYearId, $now, $now, $fromYearId, $toYearId]);
+            ', [$toYearId, $now, $now, $fromYearId, $toYearId]);
 
             DB::commit();
 
@@ -312,6 +364,7 @@ class ClassController
             ], 200);
         } catch (Exception $e) {
             DB::rollBack();
+
             return response()->json([
                 'message' => 'Terjadi kesalahan saat migrasi.',
                 'error' => $e->getMessage(),
@@ -342,11 +395,13 @@ class ClassController
 
             if (! $activeYear) {
                 DB::rollBack();
+
                 return response()->json(['message' => 'Tidak ada tahun ajaran aktif.'], 422);
             }
 
             if ($activeYear->semester !== 'even') {
                 DB::rollBack();
+
                 return response()->json(['message' => 'Migrasi kelas hanya dapat dilakukan pada semester Genap.'], 422);
             }
 
@@ -355,16 +410,19 @@ class ClassController
 
             if (! $targetYear) {
                 DB::rollBack();
+
                 return response()->json(['message' => 'Tahun ajaran tujuan tidak ditemukan.'], 404);
             }
 
             if ($targetYear->is_active) {
                 DB::rollBack();
+
                 return response()->json(['message' => 'Tahun ajaran tujuan sudah aktif. Gunakan tahun ajaran yang belum aktif.'], 422);
             }
 
             if ($targetYear->id === $activeYear->id) {
                 DB::rollBack();
+
                 return response()->json(['message' => 'Tahun ajaran tujuan tidak boleh sama dengan tahun ajaran aktif.'], 422);
             }
 
@@ -375,6 +433,7 @@ class ClassController
             $classCount = DB::table('classes')->where('academic_year_id', $fromYearId)->count();
             if ($classCount === 0) {
                 DB::rollBack();
+
                 return response()->json(['message' => 'Tidak ada kelas di tahun ajaran aktif.'], 404);
             }
 
@@ -452,6 +511,7 @@ class ClassController
             ], 200);
         } catch (Exception $e) {
             DB::rollBack();
+
             return response()->json([
                 'message' => 'Terjadi kesalahan saat migrasi kelas.',
                 'error' => $e->getMessage(),

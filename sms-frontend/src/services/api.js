@@ -8,10 +8,22 @@ const api = axios.create({
     }
 });
 
-// Request Interceptor: Suntikkan JWT Token otomatis
+// Request Interceptor: Suntikkan JWT Token otomatis + cek expiry
 api.interceptors.request.use(config => {
     const token = localStorage.getItem('access_token');
+    const expiresAt = localStorage.getItem('token_expires_at');
+
     if (token) {
+        // Cek apakah token sudah expired
+        if (expiresAt && Date.now() > new Date(expiresAt).getTime()) {
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('user_data');
+            localStorage.removeItem('token_expires_at');
+            if (window.location.pathname !== '/login') {
+                window.location.href = '/login';
+            }
+            return Promise.reject(new Error('Token expired'));
+        }
         config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
@@ -55,6 +67,7 @@ api.interceptors.response.use(
         if (status === 401) {
             localStorage.removeItem('access_token');
             localStorage.removeItem('user_data');
+            localStorage.removeItem('token_expires_at');
             
             // CEGAH HARD RELOAD JIKA USER SEDANG BERADA DI HALAMAN LOGIN
             // Hard reload HANYA terjadi jika sesi expired saat user berada di dalam Dashboard

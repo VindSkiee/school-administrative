@@ -8,9 +8,10 @@ use App\Models\Attendance;
 use App\Models\Grade;
 use App\Models\GradingSetting;
 use App\Models\Schedule;
+use App\Models\SchoolClass;
 use App\Models\Student;
-use App\Models\Submission;
 use App\Models\Subject;
+use App\Models\Submission;
 use App\Services\GradeAggregationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -22,15 +23,36 @@ class TeacherGradebookController
 
     /**
      * GET /report-status
-     * Lightweight endpoint to check if the active academic year's report is published.
+     * Return per-class publish status for the logged-in teacher.
      */
     public function reportStatus(): JsonResponse
     {
+        $teacherId = auth('api')->user()->id;
         $activeYear = AcademicYear::where('is_active', true)->first();
 
+        if (! $activeYear) {
+            return response()->json([
+                'is_report_published' => false,
+                'published_at' => null,
+                'classes' => [],
+            ]);
+        }
+
+        $teacherClasses = SchoolClass::where('academic_year_id', $activeYear->id)
+            ->whereHas('schedules', fn ($q) => $q->where('teacher_id', $teacherId))
+            ->get(['id', 'name', 'is_published', 'published_at']);
+
+        $anyPublished = $teacherClasses->contains('is_published', true);
+
         return response()->json([
-            'is_report_published' => $activeYear?->is_report_published ?? false,
-            'published_at' => $activeYear?->is_report_published ? $activeYear->updated_at : null,
+            'is_report_published' => $anyPublished,
+            'published_at' => $anyPublished ? $teacherClasses->where('is_published', true)->first()->published_at : null,
+            'classes' => $teacherClasses->map(fn ($c) => [
+                'id' => $c->id,
+                'name' => $c->name,
+                'is_published' => $c->is_published,
+                'published_at' => $c->published_at,
+            ]),
         ]);
     }
 
@@ -66,6 +88,7 @@ class TeacherGradebookController
             ->map(function ($schedule) use ($teacherId) {
                 $schedule->is_homeroom = $schedule->schoolClass
                     && $schedule->schoolClass->homeroom_teacher_id === $teacherId;
+
                 return $schedule;
             });
 
@@ -202,7 +225,7 @@ class TeacherGradebookController
         // Get all unique subjects taught in this class for this academic year
         $subjects = Subject::whereHas('schedules', function ($q) use ($classId, $academicYearId) {
             $q->where('class_id', $classId)
-              ->where('academic_year_id', $academicYearId);
+                ->where('academic_year_id', $academicYearId);
         })->get(['id', 'name']);
 
         // Get all active students in this class
@@ -316,23 +339,23 @@ class TeacherGradebookController
             'score' => 'nullable|numeric|min:0|max:100',
         ]);
 
-        // Block grade changes when report is published
-        $activeYear = AcademicYear::where('is_active', true)->first();
-        if ($activeYear && $activeYear->is_report_published) {
-            return response()->json([
-                'error' => 'Rapor semester ini telah diterbitkan. Anda tidak dapat lagi mengubah nilai.',
-            ], 403);
-        }
-
         $teacherId = auth('api')->user()->id;
         $studentId = (int) $request->input('student_id');
         $assignmentId = (int) $request->input('assignment_id');
         $score = $request->input('score');
 
         // Verify teacher owns the assignment's schedule
-        $assignment = Assignment::with('schedule')->findOrFail($assignmentId);
+        $assignment = Assignment::with('schedule.schoolClass')->findOrFail($assignmentId);
         if ($assignment->schedule->teacher_id !== $teacherId) {
             return response()->json(['error' => 'Akses ditolak.'], 403);
+        }
+
+        // Block grade changes when the class is published
+        $schoolClass = $assignment->schedule->schoolClass;
+        if ($schoolClass && $schoolClass->is_published) {
+            return response()->json([
+                'error' => 'Kelas ini sudah dipublikasikan. Anda tidak dapat lagi mengubah nilai.',
+            ], 403);
         }
 
         // Find or create the submission for this student+assignment pair

@@ -24,7 +24,7 @@ export const useAttendanceDetailStore = defineStore('attendanceDetail', {
       this.isLoading = true;
       try {
         const [resSchedule, resStudents, resAttendances, resRequests] = await Promise.all([
-          attendanceService.getScheduleDetail(scheduleId),
+          attendanceService.getScheduleDetail(scheduleId, selectedDate),
           attendanceService.getStudentsForAttendance(scheduleId),
           attendanceService.getExistingAttendances(scheduleId, selectedDate),
           attendanceService.getAttendanceRequests(),

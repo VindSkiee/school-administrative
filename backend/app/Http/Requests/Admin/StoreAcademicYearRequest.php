@@ -15,17 +15,18 @@ class StoreAcademicYearRequest extends FormRequest
     public function rules(): array
     {
         return [
-            // Gunakan regex untuk memastikan format wajib YYYY/YYYY (Contoh: 2025/2026)
             'name' => ['required', 'string', 'regex:/^\d{4}\/\d{4}$/'],
             'semester' => ['required', Rule::in(['odd', 'even'])],
+            'start_date' => ['nullable', 'date'],
+            'end_date' => ['nullable', 'date', 'gte:start_date'],
         ];
     }
 
-    // Tambahkan pesan custom agar errornya mudah dimengerti oleh Frontend/User
     public function messages(): array
     {
         return [
             'name.regex' => 'Format tahun ajaran tidak valid. Harus menggunakan format YYYY/YYYY (contoh: 2025/2026).',
+            'end_date.gte' => 'Tanggal berakhir harus setelah atau sama dengan tanggal mulai.',
         ];
     }
 }

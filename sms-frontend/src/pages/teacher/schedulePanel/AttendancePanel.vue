@@ -8,7 +8,20 @@
 
     <template v-else>
       <div
-        v-if="pendingRequests.length > 0"
+        v-if="isHoliday"
+        class="bg-yellow-50 border border-yellow-200 rounded-2xl p-6 text-center shadow-sm"
+      >
+        <div class="w-12 h-12 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mx-auto mb-3">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+          </svg>
+        </div>
+        <h3 class="text-lg font-bold text-yellow-800 mb-1">Hari Libur</h3>
+        <p class="text-sm text-yellow-600 font-medium">Absensi tidak diperlukan pada hari libur.</p>
+      </div>
+
+      <div
+        v-else-if="pendingRequests.length > 0"
         class="bg-orange-50 border border-orange-200 rounded-2xl p-4 shadow-sm"
       >
         <h3 class="text-orange-800 font-bold flex items-center gap-2 mb-3">
@@ -243,6 +256,7 @@ const props = defineProps({
   scheduleId: { type: [String, Number], required: true },
   selectedDate: { type: String, required: true },
   locked: { type: Boolean, default: false },
+  isHoliday: { type: Boolean, default: false },
 });
 
 const toastStore = useToastStore();
@@ -250,7 +264,7 @@ const attendanceDetailStore = useAttendanceDetailStore();
 
 const _isAlreadySubmitted = ref(false);
 const isAlreadySubmitted = computed(() => {
-  if (props.locked) return true;
+  if (props.locked || props.isHoliday) return true;
   return _isAlreadySubmitted.value;
 });
 const isSubmitting = ref(false);
