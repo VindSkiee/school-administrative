@@ -330,6 +330,7 @@ class AdminSemesterReportService
             'academic_year' => $academicYear->name,
             'semester' => $academicYear->semester,
             'semester_label' => $academicYear->semester === 'odd' ? 'Ganjil' : 'Genap',
+            'phase' => $academicYear->phase ?? 'D',
             'student_name' => $student->user?->name ?? '-',
             'student_nis' => $student->nis ?? '-',
             'student_nisn' => $student->nisn ?? '-',
@@ -338,8 +339,9 @@ class AdminSemesterReportService
             'homeroom_teacher_nip' => $schoolClass->homeroomTeacher?->nip ?? '-',
             'principal_name' => $principal?->user?->name ?? '-',
             'principal_nip' => $principal?->nip ?? '-',
-            'generated_at' => now()->format('d-m-Y'),
+            'generated_at' => now()->format('d M Y'),
             'homeroom_note' => '-',
+            'keterangan_kenaikan_kelas' => $this->resolveNextClassName($schoolClass),
             'results' => $this->buildSubjectResults($schoolClass, $student, $academicYear),
             'attendance' => $this->buildAttendanceSummary($schoolClass, $student),
         ];
@@ -454,5 +456,32 @@ class AdminSemesterReportService
                 'missing_data' => $missingData,
             ], JSON_UNESCAPED_UNICODE)
         );
+    }
+
+    /**
+     * Resolve next class name for semester genap (class promotion).
+     * e.g. "7G" -> "Naik ke kelas VIII", "9A" -> "Lulus / Tamat Belajar".
+     */
+    private function resolveNextClassName(SchoolClass $schoolClass): string
+    {
+        $name = trim($schoolClass->name);
+        preg_match('/^(\d+)/', $name, $matches);
+        $currentGrade = isset($matches[1]) ? (int) $matches[1] : 0;
+
+        $romanMap = [
+            7 => 'VII',
+            8 => 'VIII',
+            9 => 'IX',
+            10 => 'X',
+        ];
+
+        if ($currentGrade >= 9) {
+            return 'Lulus / Tamat Belajar';
+        }
+
+        $nextGrade = $currentGrade + 1;
+        $roman = $romanMap[$nextGrade] ?? (string) $nextGrade;
+
+        return "Naik ke kelas {$roman}";
     }
 }

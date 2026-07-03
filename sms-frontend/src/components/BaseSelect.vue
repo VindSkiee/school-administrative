@@ -29,18 +29,18 @@
     <teleport to="body">
       <transition
         enter-active-class="transition ease-out duration-150"
-        enter-from-class="opacity-0 -translate-y-2"
-        enter-to-class="opacity-100 translate-y-0"
+        :enter-from-class="direction === 'right' ? 'opacity-0 -translate-x-2' : 'opacity-0 -translate-y-2'"
+        enter-to-class="opacity-100 translate-x-0 translate-y-0"
         leave-active-class="transition ease-in duration-100"
-        leave-from-class="opacity-100 translate-y-0"
-        leave-to-class="opacity-0 -translate-y-2"
+        leave-from-class="opacity-100 translate-x-0 translate-y-0"
+        :leave-to-class="direction === 'right' ? 'opacity-0 -translate-x-2' : 'opacity-0 -translate-y-2'"
       >
         <div
           v-if="isOpen"
           ref="dropdownPanel"
           :style="dropdownStyle"
           class="fixed z-[100] bg-white border border-gray-100 rounded-xl shadow-2xl overflow-hidden"
-          :class="dropdownStyle.opensUpward ? 'mb-1' : 'mt-1'"
+          :class="dropdownStyle.opensUpward ? 'mb-1' : dropdownStyle.opensRight ? 'ml-1' : 'mt-1'"
         >
           <div
             v-if="isSearchEnabled"
@@ -54,7 +54,7 @@
               class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-brand-red focus:border-brand-red outline-none"
             />
           </div>
-          <ul class="max-h-60 overflow-y-auto py-1.5 custom-scrollbar">
+          <ul :style="{ maxHeight: `${props.maxHeight}px` }" class="overflow-y-auto py-1.5 custom-scrollbar">
             <li
               v-if="placeholder"
               @click="selectOption('')"
@@ -102,7 +102,9 @@ const props = defineProps({
   emptyMessage: { type: String, default: 'Tidak ada data.' },
   searchThreshold: { type: Number, default: 20 },
   autoWidth: { type: Boolean, default: true },
-  dropdownMargin: { type: Number, default: 12 }
+  dropdownMargin: { type: Number, default: 12 },
+  direction: { type: String, default: 'down', validator: (v) => ['down', 'right'].includes(v) },
+  maxHeight: { type: Number, default: 240 }
 });
 
 const emit = defineEmits(['update:modelValue']);
@@ -171,13 +173,44 @@ const calculatePosition = () => {
   const maxWidth = Math.max(160, viewportWidth - margin * 2);
   width = Math.min(width, maxWidth);
 
+  const dropdownMaxHeight = props.maxHeight;
+  const gap = 4;
+
+  if (props.direction === 'right') {
+    const spaceRight = viewportWidth - rect.right - margin;
+    const spaceLeft = rect.left - margin;
+
+    let left;
+    if (spaceRight >= width + gap) {
+      left = rect.right + gap;
+    } else if (spaceLeft >= width + gap) {
+      left = rect.left - width - gap;
+    } else {
+      left = Math.max(margin, viewportWidth - margin - width);
+    }
+
+    const maxTop = viewportHeight - margin - dropdownMaxHeight;
+    let top = Math.max(margin, Math.min(rect.top, maxTop));
+    let maxHeight = Math.min(dropdownMaxHeight, viewportHeight - margin * 2);
+
+    dropdownStyle.value = {
+      top: `${top}px`,
+      left: `${left}px`,
+      width: `${width}px`,
+      maxHeight: `${maxHeight}px`,
+      opensUpward: false,
+      opensRight: true,
+    };
+    return;
+  }
+
+  // direction === 'down' (default)
   let left = rect.left;
   if (left + width > viewportWidth - margin) {
     left = Math.max(margin, viewportWidth - margin - width);
   }
   if (left < margin) left = margin;
 
-  const dropdownMaxHeight = 240;
   const spaceBelow = viewportHeight - rect.bottom - margin;
   const spaceAbove = rect.top - margin;
   const minVisible = 100;
@@ -204,6 +237,7 @@ const calculatePosition = () => {
     width: `${width}px`,
     maxHeight: `${maxHeight}px`,
     opensUpward,
+    opensRight: false,
   };
 };
 

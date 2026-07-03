@@ -155,7 +155,8 @@ class ScheduleService
 
     /**
      * Swap day/time between two schedules.
-     * Both schedules must be in the same academic year.
+     * Both schedules must be in the same class and academic year.
+     * Durations must be equal. No post-swap clashes allowed.
      * Blocked if either has upcoming meeting sessions with attendance data.
      */
     public function swapSchedules(Schedule $scheduleA, Schedule $scheduleB): array
@@ -164,8 +165,20 @@ class ScheduleService
             throw new HttpException(422, 'Kedua jadwal harus berada di tahun ajaran yang sama.');
         }
 
+        if ($scheduleA->class_id !== $scheduleB->class_id) {
+            throw new HttpException(422, 'Kedua jadwal harus dari kelas yang sama.');
+        }
+
         if ($scheduleA->id === $scheduleB->id) {
             throw new HttpException(422, 'Tidak bisa menukar jadwal dengan dirinya sendiri.');
+        }
+
+        // Duration must be equal
+        $durationA = $this->calculateDuration($scheduleA->start_time, $scheduleA->end_time);
+        $durationB = $this->calculateDuration($scheduleB->start_time, $scheduleB->end_time);
+
+        if ($durationA !== $durationB) {
+            throw new HttpException(422, 'Durasi kedua jadwal harus sama. Jadwal A: '.$durationA.', Jadwal B: '.$durationB.'.');
         }
 
         // Check if either schedule has upcoming sessions with attendance data
@@ -185,33 +198,91 @@ class ScheduleService
             throw new HttpException(422, 'Tidak bisa menukar jadwal: salah satu sudah memiliki data absensi di pertemuan mendatang. Tunggu hingga minggu depan.');
         }
 
-        // Swap in a transaction
-        return DB::transaction(function () use ($scheduleA, $scheduleB) {
-            // Temporarily store A's time values
-            $tempDay = $scheduleA->day_of_week;
-            $tempStart = $scheduleA->start_time;
-            $tempEnd = $scheduleA->end_time;
+        // Simulate swap and check for clashes
+        $newA = [
+            'day_of_week' => $scheduleB->day_of_week,
+            'start_time' => $scheduleB->start_time,
+            'end_time' => $scheduleB->end_time,
+        ];
+        $newB = [
+            'day_of_week' => $scheduleA->day_of_week,
+            'start_time' => $scheduleA->start_time,
+            'end_time' => $scheduleA->end_time,
+        ];
 
-            // A gets B's time
+        $this->validateSwapClash($scheduleA, $newA, [$scheduleA->id, $scheduleB->id]);
+        $this->validateSwapClash($scheduleB, $newB, [$scheduleA->id, $scheduleB->id]);
+
+        // Swap in a transaction using temp placeholder to avoid unique constraint collision
+        return DB::transaction(function () use ($scheduleA, $scheduleB, $newA, $newB) {
+            $originalDayA = $scheduleA->day_of_week;
+            $originalDayB = $scheduleB->day_of_week;
+
             $scheduleA->update([
-                'day_of_week' => $scheduleB->day_of_week,
-                'start_time' => $scheduleB->start_time,
-                'end_time' => $scheduleB->end_time,
+                'day_of_week' => $newA['day_of_week'],
+                'start_time' => '23:59',
+                'end_time' => '23:59',
             ]);
 
-            // B gets A's old time
             $scheduleB->update([
-                'day_of_week' => $tempDay,
-                'start_time' => $tempStart,
-                'end_time' => $tempEnd,
+                'day_of_week' => $newB['day_of_week'],
+                'start_time' => $newB['start_time'],
+                'end_time' => $newB['end_time'],
             ]);
 
-            // Regenerate meeting sessions for both
-            $this->regenerateMeetingSessions($scheduleA);
-            $this->regenerateMeetingSessions($scheduleB);
+            $scheduleA->update([
+                'start_time' => $newA['start_time'],
+                'end_time' => $newA['end_time'],
+            ]);
+
+            if ($scheduleA->day_of_week !== $originalDayA) {
+                $this->regenerateMeetingSessions($scheduleA);
+            }
+            if ($scheduleB->day_of_week !== $originalDayB) {
+                $this->regenerateMeetingSessions($scheduleB);
+            }
 
             return [$scheduleA->fresh(), $scheduleB->fresh()];
         });
+    }
+
+    /**
+     * Validate that a schedule's new time slot doesn't clash with existing schedules.
+     */
+    private function validateSwapClash(Schedule $schedule, array $newTime, array $ignoreIds): void
+    {
+        $clashQuery = Schedule::query()
+            ->where('academic_year_id', $schedule->academic_year_id)
+            ->whereNotIn('id', $ignoreIds)
+            ->where('day_of_week', $newTime['day_of_week'])
+            ->where(function ($query) use ($newTime) {
+                $query->where('start_time', '<', $newTime['end_time'])
+                    ->where('end_time', '>', $newTime['start_time']);
+            });
+
+        $classClash = (clone $clashQuery)->where('class_id', $schedule->class_id)->exists();
+        if ($classClash) {
+            throw new HttpException(422, 'Bentrok: Kelas ini sudah memiliki jadwal lain pada waktu yang dituju.');
+        }
+
+        $teacherClash = (clone $clashQuery)->where('teacher_id', $schedule->teacher_id)->exists();
+        if ($teacherClash) {
+            throw new HttpException(422, 'Bentrok: Guru ini sudah dijadwalkan mengajar di kelas lain pada waktu yang dituju.');
+        }
+    }
+
+    /**
+     * Calculate duration in minutes from start and end time strings.
+     */
+    private function calculateDuration(string $start, string $end): int
+    {
+        $startParts = explode(':', $start);
+        $endParts = explode(':', $end);
+
+        $startMinutes = (int) $startParts[0] * 60 + (int) $startParts[1];
+        $endMinutes = (int) $endParts[0] * 60 + (int) $endParts[1];
+
+        return $endMinutes - $startMinutes;
     }
 
     /**

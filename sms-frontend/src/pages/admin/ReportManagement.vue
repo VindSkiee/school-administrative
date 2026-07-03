@@ -24,6 +24,12 @@
           placeholder="Pilih Tahun Ajaran"
           :disabled="isLoadingInitial || isLoadingYears"
         />
+        <p
+          v-if="selectedAcademicYear"
+          class="text-xs text-gray-500 mt-1.5"
+        >
+          Semester {{ selectedAcademicYear.semester === "odd" ? "Ganjil" : "Genap" }} — Fase {{ selectedAcademicYear.phase || "D" }}
+        </p>
       </div>
     </section>
 

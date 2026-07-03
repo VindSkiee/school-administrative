@@ -17,6 +17,7 @@ class StoreAcademicYearRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'regex:/^\d{4}\/\d{4}$/'],
             'semester' => ['required', Rule::in(['odd', 'even'])],
+            'phase' => ['required', 'string', 'max:1', 'regex:/^[A-F]$/'],
             'start_date' => ['nullable', 'date'],
             'end_date' => ['nullable', 'date', 'gte:start_date'],
         ];
@@ -26,6 +27,7 @@ class StoreAcademicYearRequest extends FormRequest
     {
         return [
             'name.regex' => 'Format tahun ajaran tidak valid. Harus menggunakan format YYYY/YYYY (contoh: 2025/2026).',
+            'phase.regex' => 'Fase harus berupa satu huruf kapital A-F (contoh: D).',
             'end_date.gte' => 'Tanggal berakhir harus setelah atau sama dengan tanggal mulai.',
         ];
     }

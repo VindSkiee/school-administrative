@@ -89,6 +89,12 @@
         </span>
       </template>
 
+      <template #cell(phase)="{ item }">
+        <span class="px-3 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-700 border border-gray-200">
+          {{ item.phase || "D" }}
+        </span>
+      </template>
+
       <template #cell(status)="{ item }">
         <div class="flex flex-col items-center gap-1.5">
           <span
@@ -232,6 +238,21 @@
             required
           />
         </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1.5"
+            >Fase</label
+          >
+          <input
+            v-model="form.phase"
+            type="text"
+            required
+            maxlength="1"
+            placeholder="Contoh: D"
+            class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-brand-red outline-none transition-colors uppercase"
+            @input="form.phase = form.phase.toUpperCase().replace(/[^A-F]/g, '').slice(0, 1)"
+          />
+          <p class="text-xs text-gray-400 mt-1">Huruf kapital A-F (Kurikulum Merdeka)</p>
+        </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label class="block text-sm font-semibold text-gray-700 mb-1.5"
@@ -300,6 +321,7 @@ const dropdowns = useGlobalDropdownsStore();
 const tableColumns = [
   { key: "name", label: "Tahun Ajaran" },
   { key: "semester", label: "Semester", align: "center" },
+  { key: "phase", label: "Fase", align: "center" },
   { key: "status", label: "Status", align: "center" },
   { key: "actions", label: "Aksi", align: "center" },
 ];
@@ -316,7 +338,7 @@ const isSaving = ref(false);
 
 const isModalOpen = ref(false);
 const isEditing = ref(false);
-const form = reactive({ id: null, name: "", semester: "odd", start_date: "", end_date: "" });
+const form = reactive({ id: null, name: "", semester: "odd", phase: "D", start_date: "", end_date: "" });
 
 // Reusable Confirm Modal State for both Delete and Set Active
 const confirmModal = reactive({
@@ -420,6 +442,7 @@ const openModal = (item = null) => {
   form.id = item?.id || null;
   form.name = item?.name || "";
   form.semester = item?.semester || "odd";
+  form.phase = item?.phase || "D";
   form.start_date = item?.start_date ? item.start_date.split("T")[0] : "";
   form.end_date = item?.end_date ? item.end_date.split("T")[0] : "";
   isModalOpen.value = true;

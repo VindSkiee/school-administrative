@@ -490,6 +490,8 @@
             :options="swapTargetOptions"
             placeholder="Pilih jadwal untuk ditukar..."
             searchable
+            direction="right"
+            :maxHeight="400"
           />
         </div>
 
