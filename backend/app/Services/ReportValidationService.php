@@ -76,7 +76,7 @@ class ReportValidationService
         foreach ($schedules as $schedule) {
             $subjectName = $schedule->subject?->name ?? 'Tanpa Nama';
 
-            foreach (['task', 'uts', 'uas'] as $type) {
+            foreach (['task', 'ujian_harian', 'uts', 'uas'] as $type) {
                 // Count graded submissions from the eager-loaded collection
                 $gradedCount = $schedule->assignments
                     ->where('type', $type)
@@ -87,13 +87,14 @@ class ReportValidationService
                 if ($gradedCount < 1) {
                     $typeLabel = match ($type) {
                         'task' => 'Tugas',
+                        'ujian_harian' => 'Ujian Harian',
                         'uts' => 'UTS',
                         'uas' => 'UAS',
                     };
 
                     throw new HttpException(
                         422,
-                        "Nilai belum lengkap! Mapel {$subjectName} harus memiliki minimal 1 nilai Tugas, 1 UTS, dan 1 UAS. (Missing: {$typeLabel})"
+                        "Nilai belum lengkap! Mapel {$subjectName} harus memiliki minimal 1 nilai Tugas, 1 Ujian Harian, 1 UTS, dan 1 UAS. (Missing: {$typeLabel})"
                     );
                 }
             }

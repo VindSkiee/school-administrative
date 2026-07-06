@@ -5,9 +5,9 @@ namespace App\Services;
 use App\Models\AcademicYear;
 use App\Models\Assignment;
 use App\Models\Schedule;
-use App\Models\Submission;
-use App\Models\Student;
 use App\Models\SchoolClass;
+use App\Models\Student;
+use App\Models\Submission;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -54,12 +54,12 @@ class StudentDashboardService
             ->whereHas('schedule', function ($query) use ($activeClassId) {
                 $query->where('class_id', $activeClassId);
             })
-            ->where('due_date', '>', now()) 
+            ->where('due_date', '>', now())
             ->whereDoesntHave('submissions', function ($query) use ($student) {
-                $query->where('student_id', $student->user_id); 
+                $query->where('student_id', $student->user_id);
             })
             ->orderBy('due_date', 'asc')
-            ->take(4) 
+            ->take(4)
             ->get()
             ->map(function ($assignment) {
                 return [
@@ -73,14 +73,14 @@ class StudentDashboardService
         // 4. Nilai Terbaru (Baru saja dinilai guru)
         $recentGrades = Submission::with(['assignment.schedule.subject', 'grade'])
             ->where('student_id', $student->user_id)
-            ->whereHas('grade') 
-            ->orderByDesc(function($query) {
+            ->whereHas('grade')
+            ->orderByDesc(function ($query) {
                 $query->select('created_at')
                     ->from('grades')
                     ->whereColumn('submission_id', 'submissions.id')
                     ->limit(1);
             })
-            ->take(3) 
+            ->take(3)
             ->get()
             ->map(function ($submission) {
                 return [
@@ -90,12 +90,14 @@ class StudentDashboardService
                     'subject_name' => $submission->assignment->schedule->subject->name ?? 'Unknown',
                     'grade' => [
                         'score' => $submission->grade->score ?? 0,
-                    ]
+                    ],
                 ];
             });
 
         return [
-            'academic_year' => $activeYear ? $activeYear->name . ' ' . ($activeYear->semester === 'odd' ? 'Ganjil' : 'Genap') : null,
+            'academic_year' => $activeYear ? $activeYear->name.' '.($activeYear->semester === 'odd' ? 'Ganjil' : 'Genap') : null,
+            'academic_year_start_date' => $activeYear?->start_date?->format('Y-m-d'),
+            'academic_year_end_date' => $activeYear?->end_date?->format('Y-m-d'),
             'homeroom_class' => $classInfo,
             'today_schedules' => $todaySchedules,
             'deadline_assignments' => $deadlineAssignments,

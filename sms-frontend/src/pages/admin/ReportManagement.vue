@@ -296,7 +296,8 @@
                   <p class="mb-1.5"><strong>Kolom Kesiapan:</strong></p>
                   <ul class="list-disc list-inside mb-1.5 space-y-0.5">
                     <li><strong>Kehadiran</strong> = Status pencatatan absensi untuk semua pertemuan yang sudah terjadwal.</li>
-                    <li><strong>Nilai</strong> = Status pengisian nilai untuk tugas, UTS, dan UAS yang sudah dibuat.</li>
+                    <li><strong>Nilai</strong> = Status pengisian nilai untuk tugas, ujian harian, UTS, dan UAS yang sudah dibuat.</li>
+                    <li><strong>Catatan</strong> = Status pengisian catatan wali kelas untuk semua siswa di kelas ini.</li>
                     <li><strong>Siswa (X/Y)</strong> = X = jumlah siswa yang sudah lengkap data absensi dan nilainya; Y = total siswa di kelas ini.</li>
                     <li><strong>Status</strong> = "Siap" jika semua kriteria terpenuhi, "Sudah Diterbitkan" jika sudah diterbitkan, atau "Belum Siap".</li>
                   </ul>
@@ -352,6 +353,7 @@
                     <th class="px-4 py-3 text-left">Wali Kelas</th>
                     <th class="px-4 py-3 text-center">Kehadiran</th>
                     <th class="px-4 py-3 text-center">Nilai</th>
+                    <th class="px-4 py-3 text-center">Catatan</th>
                     <th class="px-4 py-3 text-center">Siswa</th>
                     <th class="px-4 py-3 text-center">Status</th>
                     <th class="px-4 py-3 text-center">Aksi</th>
@@ -405,6 +407,20 @@
                       <td class="px-4 py-3 text-center">
                         <span
                           v-if="cls.readiness.grades.is_complete"
+                          class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700"
+                        >
+                          Lengkap
+                        </span>
+                        <span
+                          v-else
+                          class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700"
+                        >
+                          Belum
+                        </span>
+                      </td>
+                      <td class="px-4 py-3 text-center">
+                        <span
+                          v-if="cls.readiness.notes?.is_complete"
                           class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700"
                         >
                           Lengkap
@@ -474,7 +490,7 @@
 
                     <!-- Expanded detail row -->
                     <tr v-if="expandedClassId === cls.class_id">
-                      <td colspan="8" class="p-0">
+                      <td colspan="9" class="p-0">
                         <div
                           class="bg-gray-50 border-t border-b border-gray-200 px-6 py-4 relative"
                         >
@@ -559,17 +575,18 @@
                                     <li><strong>X</strong> = jumlah pertemuan yang sudah memiliki data absensi (sudah direkam guru).</li>
                                     <li><strong>Y</strong> = jumlah pertemuan yang sudah terjadwal sampai hari ini (belum termasuk pertemuan masa depan dan hari libur).</li>
                                   </ul>
-                                  <p class="mb-1.5"><strong>Tugas / UTS / UAS (X/Y):</strong></p>
+                                  <p class="mb-1.5"><strong>Tugas / Ujian Harian / UTS / UAS:</strong></p>
                                   <ul class="list-disc list-inside mb-1.5 space-y-0.5">
-                                    <li><strong>X</strong> = jumlah assignment yang sudah dinilai (memiliki grade).</li>
-                                    <li><strong>Y</strong> = jumlah assignment yang sudah dibuat untuk mapel ini.</li>
+                                    <li><strong>Lengkap</strong> = Semua assignment untuk jenis ini sudah dinilai (memiliki grade).</li>
+                                    <li><strong>Belum</strong> = Masih ada assignment yang belum dinilai.</li>
+                                    <li><strong>—</strong> = Belum ada assignment dibuat untuk jenis ini.</li>
                                   </ul>
                                   <p class="mb-1.5"><strong>Capaian Kompetensi:</strong></p>
                                   <ul class="list-disc list-inside mb-1.5 space-y-0.5">
                                     <li><strong>Terkonfigurasi</strong> = Pengaturan capaian kompetensi sudah diatur di menu Mata Pelajaran → Detail.</li>
                                     <li><strong>Belum</strong> = Pengaturan capaian kompetensi belum diatur. Wajib diatur sebelum download rapor.</li>
                                   </ul>
-                                  <p><strong>Status:</strong> "Siap" jika kehadiran, tugas, UTS, UAS, dan capaian kompetensi untuk mapel ini sudah lengkap (X = Y).</p>
+                                  <p><strong>Status:</strong> "Siap" jika kehadiran, tugas, ujian harian, UTS, UAS, dan capaian kompetensi untuk mapel ini sudah lengkap.</p>
                                 </BasePopoverInfo>
                               </div>
                               <button
@@ -654,17 +671,22 @@
                                       Kehadiran
                                     </th>
                                     <th
-                                      class="px-3 py-2 text-right font-medium text-gray-400 text-[11px] uppercase tracking-wide"
+                                      class="px-3 py-2 text-center font-medium text-gray-400 text-[11px] uppercase tracking-wide"
                                     >
                                       Tugas
                                     </th>
                                     <th
-                                      class="px-3 py-2 text-right font-medium text-gray-400 text-[11px] uppercase tracking-wide"
+                                      class="px-3 py-2 text-center font-medium text-gray-400 text-[11px] uppercase tracking-wide"
+                                    >
+                                      Ujian Harian
+                                    </th>
+                                    <th
+                                      class="px-3 py-2 text-center font-medium text-gray-400 text-[11px] uppercase tracking-wide"
                                     >
                                       UTS
                                     </th>
                                     <th
-                                      class="px-3 py-2 text-right font-medium text-gray-400 text-[11px] uppercase tracking-wide"
+                                      class="px-3 py-2 text-center font-medium text-gray-400 text-[11px] uppercase tracking-wide"
                                     >
                                       UAS
                                     </th>
@@ -734,28 +756,21 @@
                                     </td>
 
                                     <td
-                                      class="px-3 py-2.5 text-right tabular-nums"
+                                      class="px-3 py-2.5 text-center"
                                     >
                                       <template v-if="subj.grades.task.exists">
                                         <span
-                                          :class="
-                                            subj.grades.task.is_complete
-                                              ? 'text-gray-700'
-                                              : 'text-red-600 font-medium'
-                                          "
+                                          v-if="subj.grades.task.is_complete"
+                                          class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700"
                                         >
-                                          {{ subj.grades.task.graded }}/{{
-                                            subj.grades.task.total
-                                          }}
+                                          Lengkap
                                         </span>
                                         <span
-                                          v-if="
-                                            subj.grades.task.average !== null
-                                          "
-                                          class="text-gray-400 ml-1"
-                                          >·
-                                          {{ subj.grades.task.average }}</span
+                                          v-else
+                                          class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700"
                                         >
+                                          Belum
+                                        </span>
                                       </template>
                                       <span v-else class="text-gray-300"
                                         >—</span
@@ -763,27 +778,43 @@
                                     </td>
 
                                     <td
-                                      class="px-3 py-2.5 text-right tabular-nums"
+                                      class="px-3 py-2.5 text-center"
+                                    >
+                                      <template v-if="subj.grades.ujian_harian.exists">
+                                        <span
+                                          v-if="subj.grades.ujian_harian.is_complete"
+                                          class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700"
+                                        >
+                                          Lengkap
+                                        </span>
+                                        <span
+                                          v-else
+                                          class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700"
+                                        >
+                                          Belum
+                                        </span>
+                                      </template>
+                                      <span v-else class="text-gray-300"
+                                        >—</span
+                                      >
+                                    </td>
+
+                                    <td
+                                      class="px-3 py-2.5 text-center"
                                     >
                                       <template v-if="subj.grades.uts.exists">
                                         <span
-                                          :class="
-                                            subj.grades.uts.is_complete
-                                              ? 'text-gray-700'
-                                              : 'text-red-600 font-medium'
-                                          "
+                                          v-if="subj.grades.uts.is_complete"
+                                          class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700"
                                         >
-                                          {{ subj.grades.uts.graded }}/{{
-                                            subj.grades.uts.total
-                                          }}
+                                          Lengkap
                                         </span>
                                         <span
-                                          v-if="
-                                            subj.grades.uts.average !== null
-                                          "
-                                          class="text-gray-400 ml-1"
-                                          >· {{ subj.grades.uts.average }}</span
+                                          v-else
+                                          class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700"
                                         >
+                                          Belum
+                                        </span>
                                       </template>
                                       <span v-else class="text-gray-300"
                                         >—</span
@@ -791,27 +822,21 @@
                                     </td>
 
                                     <td
-                                      class="px-3 py-2.5 text-right tabular-nums"
+                                      class="px-3 py-2.5 text-center"
                                     >
                                       <template v-if="subj.grades.uas.exists">
                                         <span
-                                          :class="
-                                            subj.grades.uas.is_complete
-                                              ? 'text-gray-700'
-                                              : 'text-red-600 font-medium'
-                                          "
+                                          v-if="subj.grades.uas.is_complete"
+                                          class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700"
                                         >
-                                          {{ subj.grades.uas.graded }}/{{
-                                            subj.grades.uas.total
-                                          }}
+                                          Lengkap
                                         </span>
                                         <span
-                                          v-if="
-                                            subj.grades.uas.average !== null
-                                          "
-                                          class="text-gray-400 ml-1"
-                                          >· {{ subj.grades.uas.average }}</span
+                                          v-else
+                                          class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700"
                                         >
+                                          Belum
+                                        </span>
                                       </template>
                                       <span v-else class="text-gray-300"
                                         >—</span

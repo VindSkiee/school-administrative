@@ -163,6 +163,7 @@ class ReportCardScenarioSeeder extends Seeder
             'uts_weight' => 25,
             'uas_weight' => 25,
             'attendance_weight' => 10,
+            'min_score_to_pass' => 60,
         ]);
 
         $this->command->info('   ✅ GradingSetting: Task 40% + UTS 25% + UAS 25% + Kehadiran 10%');

@@ -24,7 +24,7 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
           <div>
             <label class="block text-sm font-bold text-gray-700 mb-2">Bobot Tugas Harian</label>
             <div class="relative">
@@ -38,6 +38,21 @@
               <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-lg">%</span>
             </div>
             <p class="text-xs text-gray-500 mt-1">Rata-rata dari seluruh tugas harian yang diberikan.</p>
+          </div>
+
+          <div>
+            <label class="block text-sm font-bold text-gray-700 mb-2">Bobot Ujian Harian</label>
+            <div class="relative">
+              <input
+                v-model.number="form.daily_exam_weight"
+                type="number"
+                min="0"
+                max="100"
+                class="w-full px-4 py-3 border border-gray-300 rounded-xl text-2xl font-black text-center focus:ring-2 focus:ring-brand-red/20 focus:border-brand-red outline-none transition-all"
+              />
+              <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-lg">%</span>
+            </div>
+            <p class="text-xs text-gray-500 mt-1">Ujian harian beserta remedialnya (jika ada).</p>
           </div>
 
           <div>
@@ -83,6 +98,32 @@
               <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-lg">%</span>
             </div>
             <p class="text-xs text-gray-500 mt-1">Persentase kehadiran siswa. Set 0 untuk menonaktifkan.</p>
+          </div>
+        </div>
+
+        <div class="mb-8 mt-2 pt-6 border-t border-gray-100">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="w-10 h-10 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center shrink-0">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-gray-800">Kriteria Kenaikan Kelas</h3>
+              <p class="text-xs text-gray-500">Minimum rata-rata nilai seluruh mata pelajaran agar siswa dinyatakan naik kelas.</p>
+            </div>
+          </div>
+          <div class="max-w-xs">
+            <label class="block text-sm font-bold text-gray-700 mb-2">Minimum Nilai Kelulusan</label>
+            <div class="relative">
+              <input
+                v-model.number="form.min_score_to_pass"
+                type="number"
+                min="0"
+                max="100"
+                class="w-full px-4 py-3 border border-gray-300 rounded-xl text-2xl font-black text-center focus:ring-2 focus:ring-brand-red/20 focus:border-brand-red outline-none transition-all"
+              />
+              <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-lg">%</span>
+            </div>
+            <p class="text-xs text-gray-500 mt-1.5">Siswa harus memiliki rata-rata nilai di atas angka ini di <strong>semua</strong> mata pelajaran untuk naik kelas.</p>
           </div>
         </div>
 
@@ -136,41 +177,66 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import { useRoute } from 'vue-router';
 import { principalService } from '../../services/modules/principal/principalService';
+import { adminGradingService } from '../../services/modules/admin/gradingService';
+import { useGlobalDropdownsStore } from '../../stores/globalDropdowns';
 import { useToastStore } from '../../stores/toast';
 
+const route = useRoute();
 const toastStore = useToastStore();
+const dropdowns = useGlobalDropdownsStore();
 
 const isLoading = ref(true);
 const isSaving = ref(false);
 const academicYearName = ref('');
 
+const isAdmin = computed(() => route.path.startsWith('/admin'));
+
 const form = ref({
-  task_weight: 40,
+  task_weight: 30,
+  daily_exam_weight: 10,
   uts_weight: 25,
   uas_weight: 25,
   attendance_weight: 10,
+  min_score_to_pass: 60,
 });
 
 const totalWeight = computed(() => {
   const t = Number(form.value.task_weight) || 0;
+  const de = Number(form.value.daily_exam_weight) || 0;
   const u = Number(form.value.uts_weight) || 0;
   const a = Number(form.value.uas_weight) || 0;
   const att = Number(form.value.attendance_weight) || 0;
-  return t + u + a + att;
+  return t + de + u + a + att;
 });
 
 const fetchSettings = async () => {
   isLoading.value = true;
   try {
-    const res = await principalService.getGradingSettings();
-    const data = res.data?.data || res.data;
-    academicYearName.value = data.academic_year_name || 'Tahun Ajaran Aktif';
+    let data;
+    if (isAdmin.value) {
+      await dropdowns.ensureAcademicYears();
+      const activeYear = dropdowns.academicYearsRaw.find(y => y.is_active);
+      if (!activeYear) {
+        toastStore.error('Tidak ada tahun ajaran aktif.');
+        return;
+      }
+      const res = await adminGradingService.getGradingSettings(activeYear.id);
+      data = res.data?.data || res.data;
+      academicYearName.value = `${activeYear.name} ${activeYear.semester === 'odd' ? 'Ganjil' : 'Genap'}`;
+    } else {
+      const res = await principalService.getGradingSettings();
+      data = res.data?.data || res.data;
+      academicYearName.value = data.academic_year_name || 'Tahun Ajaran Aktif';
+    }
     form.value = {
-      task_weight: data.task_weight ?? 40,
+      task_weight: data.task_weight ?? 30,
+      daily_exam_weight: data.daily_exam_weight ?? 10,
       uts_weight: data.uts_weight ?? 25,
       uas_weight: data.uas_weight ?? 25,
       attendance_weight: data.attendance_weight ?? 10,
+      min_score_to_pass: data.min_score_to_pass ?? 60,
     };
   } catch (error) {
     toastStore.error('Gagal memuat pengaturan bobot nilai.');
@@ -184,12 +250,22 @@ const saveSettings = async () => {
 
   isSaving.value = true;
   try {
-    await principalService.updateGradingSettings({
+    const payload = {
       task_weight: Number(form.value.task_weight),
+      daily_exam_weight: Number(form.value.daily_exam_weight),
       uts_weight: Number(form.value.uts_weight),
       uas_weight: Number(form.value.uas_weight),
       attendance_weight: Number(form.value.attendance_weight),
-    });
+      min_score_to_pass: Number(form.value.min_score_to_pass),
+    };
+    if (isAdmin.value) {
+      await dropdowns.ensureAcademicYears();
+      const activeYear = dropdowns.academicYearsRaw.find(y => y.is_active);
+      payload.academic_year_id = activeYear.id;
+      await adminGradingService.updateGradingSettings(payload);
+    } else {
+      await principalService.updateGradingSettings(payload);
+    }
     toastStore.success('Pengaturan bobot nilai berhasil disimpan.');
   } catch (error) {
     const msg = error.response?.data?.message || 'Gagal menyimpan pengaturan.';

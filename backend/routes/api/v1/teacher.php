@@ -10,6 +10,7 @@ use App\Http\Controllers\API\Teacher\MaterialController as TeacherMaterialContro
 use App\Http\Controllers\API\Teacher\TeacherDashboardController;
 use App\Http\Controllers\API\Teacher\TeacherGradebookController;
 use App\Http\Controllers\API\Teacher\TeacherHomeroomController;
+use App\Http\Controllers\API\Teacher\TeacherReportController;
 use App\Http\Controllers\Api\Teacher\TeacherStudentController;
 use Illuminate\Support\Facades\Route;
 
@@ -28,6 +29,8 @@ Route::delete('assignments/{id}', [TeacherAssignController::class, 'destroy']);
 Route::get('schedules/{schedule_id}/assignments', [TeacherAssignController::class, 'index']);
 Route::get('assignments', [TeacherAssignController::class, 'globalIndex']);
 Route::get('assignments/{id}/submissions', [TeacherAssignController::class, 'submissions']);
+Route::get('assignments/{id}/below-kkm', [TeacherAssignController::class, 'belowKKM']);
+Route::post('assignments/{id}/create-remedial', [TeacherAssignController::class, 'createRemedial']);
 Route::post('submissions/{id}/grade', [TeacherGradeController::class, 'store']);
 Route::get('schedules/{schedule_id}/grades/aggregate', [TeacherAggregate::class, 'show']);
 Route::get('dashboard/stats', [TeacherDashboardController::class, 'index']);
@@ -40,9 +43,18 @@ Route::get('students/{id}', [TeacherStudentController::class, 'showProfile']);
 Route::get('report-status', [TeacherGradebookController::class, 'reportStatus']);
 Route::get('gradebook/academic-years', [TeacherGradebookController::class, 'academicYears']);
 Route::get('gradebook/schedules', [TeacherGradebookController::class, 'schedules']);
-Route::get('gradebook', [TeacherGradebookController::class, 'index']);
+Route::middleware('throttle:heavy-api')->group(function () {
+    Route::get('gradebook', [TeacherGradebookController::class, 'index']);
+    Route::get('homeroom/gradebook-recap', [TeacherGradebookController::class, 'homeroomRecap']);
+});
 Route::post('gradebook/inline-save', [TeacherGradebookController::class, 'inlineSave']);
-Route::get('homeroom/gradebook-recap', [TeacherGradebookController::class, 'homeroomRecap']);
 
 // === Attendance Recap ===
 Route::get('attendance-recap', [AttendanceRecapController::class, 'index']);
+
+// === Report Management (Catatan Wali Kelas) ===
+Route::get('report/academic-years', [TeacherReportController::class, 'academicYears']);
+Route::get('report/homeroom-class', [TeacherReportController::class, 'homeroomClass']);
+Route::get('report/students', [TeacherReportController::class, 'index']);
+Route::post('report/notes', [TeacherReportController::class, 'saveNotes']);
+Route::get('report/pdf/{studentId}', [TeacherReportController::class, 'downloadPdf']);

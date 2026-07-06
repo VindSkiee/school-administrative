@@ -60,6 +60,27 @@
         </div>
 
         <form @submit.prevent="saveCompetency" class="p-5 space-y-5">
+          <div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center shrink-0">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"></path></svg>
+              </div>
+              <div class="flex-1">
+                <label class="block text-sm font-bold text-amber-800">KKM (Minimum Nilai Kelulusan)</label>
+                <p class="text-xs text-amber-600">Batas nilai minimum untuk tuntas pada mata pelajaran ini. Berlaku untuk semua ujian harian, UTS, dan UAS di mapel ini.</p>
+              </div>
+              <div class="w-24 shrink-0">
+                <input
+                  v-model.number="form.min_score"
+                  type="number"
+                  min="0"
+                  max="100"
+                  class="w-full px-3 py-2 border border-amber-300 rounded-lg text-center font-bold text-amber-800 focus:ring-1 focus:ring-amber-500 outline-none text-sm bg-white"
+                />
+              </div>
+            </div>
+          </div>
+
           <div v-for="(level, idx) in competencyLevels" :key="level.key" class="border border-gray-200 rounded-xl p-4"
                :class="level.borderColor">
             <div class="flex flex-col sm:flex-row gap-4">
@@ -160,6 +181,7 @@ const competencyLevels = [
 ];
 
 const form = reactive({
+  min_score: 60,
   sangat_baik_min: 85,
   sangat_baik_text: 'Mencapai kompetensi dengan sangat baik dalam memahami materi pembelajaran.',
   baik_min: 75,
@@ -176,6 +198,7 @@ const hasChanges = computed(() => {
   if (!formSnapshot.value) return false;
   const snap = formSnapshot.value;
   return (
+    form.min_score !== snap.min_score ||
     form.sangat_baik_min !== snap.sangat_baik_min ||
     form.sangat_baik_text !== snap.sangat_baik_text ||
     form.baik_min !== snap.baik_min ||
@@ -209,6 +232,7 @@ const fetchDetail = async () => {
     teachers.value = data.teachers || [];
 
     if (data.competency) {
+      form.min_score = data.competency.min_score ?? 60;
       form.sangat_baik_min = data.competency.sangat_baik_min;
       form.sangat_baik_text = data.competency.sangat_baik_text;
       form.baik_min = data.competency.baik_min;
@@ -218,6 +242,7 @@ const fetchDetail = async () => {
       form.sangat_kurang_min = data.competency.sangat_kurang_min;
       form.sangat_kurang_text = data.competency.sangat_kurang_text;
     } else {
+      form.min_score = 60;
       form.sangat_baik_min = 85;
       form.sangat_baik_text = 'Mencapai kompetensi dengan sangat baik dalam memahami materi pembelajaran.';
       form.baik_min = 75;
@@ -241,6 +266,7 @@ const saveCompetency = async () => {
   try {
     await subjectService.saveCompetency(subjectId, {
       academic_year_id: selectedAcademicYearId.value,
+      min_score: form.min_score,
       sangat_baik_min: form.sangat_baik_min,
       sangat_baik_text: form.sangat_baik_text,
       baik_min: form.baik_min,

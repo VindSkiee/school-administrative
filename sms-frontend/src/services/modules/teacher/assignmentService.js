@@ -25,6 +25,14 @@ export const assignmentService = {
     return api.get(`/v1/teacher/assignments/${id}/submissions`);
   },
 
+  // === Remedial endpoints ===
+  getBelowKKM(assignmentId) {
+    return api.get(`/v1/teacher/assignments/${assignmentId}/below-kkm`);
+  },
+  createRemedial(assignmentId, payload) {
+    return api.post(`/v1/teacher/assignments/${assignmentId}/create-remedial`, payload);
+  },
+
   // === Gradebook endpoints ===
   getGradebook(scheduleId, academicYearId) {
     return api.get('/v1/teacher/gradebook', {

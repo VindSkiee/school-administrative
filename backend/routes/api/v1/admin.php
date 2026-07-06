@@ -37,6 +37,8 @@ Route::post('grading-settings', [GradingSettingController::class, 'updateOrCreat
 Route::get('grading-settings/{academicYearId}', [GradingSettingController::class, 'show']);
 
 // Class Management
+// Custom route — must be before apiResource to avoid {class} wildcard conflict
+Route::get('classes/migration-history', [ClassController::class, 'migrationHistory']);
 
 Route::apiResource('classes', ClassController::class);
 
@@ -44,6 +46,7 @@ Route::apiResource('classes', ClassController::class);
 Route::post('classes/{id}/assign-students', [ClassController::class, 'assignStudents']);
 Route::post('classes/{id}/assign-teacher', [ClassController::class, 'assignTeacher']);
 Route::get('classes/{id}/student-options', [ClassController::class, 'studentOptions']);
+Route::get('classes/{id}/migration-students', [ClassController::class, 'migrationStudents']);
 
 // Subject Management
 Route::apiResource('subjects', SubjectController::class);

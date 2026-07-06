@@ -20,9 +20,11 @@ class GradingSettingController
             ['academic_year_id' => $validated['academic_year_id']],
             [
                 'task_weight' => $validated['task_weight'],
+                'daily_exam_weight' => $validated['daily_exam_weight'],
                 'uts_weight' => $validated['uts_weight'],
                 'uas_weight' => $validated['uas_weight'],
                 'attendance_weight' => $validated['attendance_weight'],
+                'min_score_to_pass' => $validated['min_score_to_pass'] ?? 60,
             ]
         );
 

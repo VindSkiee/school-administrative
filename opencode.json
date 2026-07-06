@@ -48,7 +48,7 @@
   "compaction": {
     "auto": true,
     "tail_turns": 8,
-    "prune": false,
+    "prune": true,
     "preserve_recent_tokens": 4000
   },
 

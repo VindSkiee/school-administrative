@@ -3,22 +3,26 @@
 namespace App\Services;
 
 use App\Models\Assignment;
-use App\Models\Submission;
+use App\Models\GradingSetting;
 use App\Models\Schedule;
+use App\Models\Student;
+use App\Models\SubjectCompetencySetting;
+use App\Models\Submission;
+use Carbon\Carbon;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpKernel\Exception\HttpException;
-use Carbon\Carbon;
 
 class AssignmentService
 {
     // --- AREA GURU ---
-    public function createAssignment(int $teacherId, array $data, ?array $files): \App\Models\Assignment
+    public function createAssignment(int $teacherId, array $data, ?array $files): Assignment
     {
-        $schedule = \App\Models\Schedule::query()->findOrFail($data['schedule_id']);
+        $schedule = Schedule::query()->findOrFail($data['schedule_id']);
 
         if ($schedule->teacher_id !== $teacherId) {
-            throw new \Symfony\Component\HttpKernel\Exception\HttpException(403, "Akses ditolak: Anda tidak mengajar di jadwal ini.");
+            throw new HttpException(403, 'Akses ditolak: Anda tidak mengajar di jadwal ini.');
         }
 
         $paths = [];
@@ -29,26 +33,163 @@ class AssignmentService
         }
         $data['attachments'] = $paths;
 
-        return \App\Models\Assignment::query()->create($data);
+        // Strip frontend-only fields
+        unset($data['enable_remedial'], $data['remedial_mode']);
+
+        return Assignment::query()->create($data);
     }
 
-    public function deleteAssignment(int $teacherId, \App\Models\Assignment $assignment): void
+    public function deleteAssignment(int $teacherId, Assignment $assignment): void
     {
-        $schedule = \App\Models\Schedule::query()->findOrFail($assignment->schedule_id);
-        
+        $schedule = Schedule::query()->findOrFail($assignment->schedule_id);
+
         if ($schedule->teacher_id !== $teacherId) {
-            throw new \Symfony\Component\HttpKernel\Exception\HttpException(403, "Akses ditolak.");
+            throw new HttpException(403, 'Akses ditolak.');
         }
 
-        // Hapus file fisik jika ada
         if (is_array($assignment->attachments)) {
             foreach ($assignment->attachments as $path) {
-                if (\Illuminate\Support\Facades\Storage::disk('public')->exists($path)) {
-                    \Illuminate\Support\Facades\Storage::disk('public')->delete($path);
+                if (Storage::disk('public')->exists($path)) {
+                    Storage::disk('public')->delete($path);
                 }
             }
         }
         $assignment->delete();
+    }
+
+    /**
+     * Get students from the same class whose graded score for a specific exam type is below KKM.
+     * KKM is resolved per-subject (SubjectCompetencySetting.min_score), falling back to global.
+     * Excludes students who already have a remedial assignment for this exam.
+     *
+     * @return array<int, array{id:int, name:string, nis:string, score:float|null}>
+     */
+    public function getStudentsBelowKKM(int $teacherId, int $assignmentId): array
+    {
+        $assignment = Assignment::with('schedule')->findOrFail($assignmentId);
+
+        if ($assignment->schedule->teacher_id !== $teacherId) {
+            throw new HttpException(403, 'Akses ditolak.');
+        }
+
+        $academicYearId = $assignment->schedule->academic_year_id;
+        $classId = $assignment->schedule->class_id;
+
+        // Resolve KKM: prefer subject-level, fallback to global
+        $kkm = $this->resolveSubjectKKM(
+            $assignment->schedule->subject_id,
+            $academicYearId
+        );
+
+        // Get students in this class
+        $students = Student::with(['user:id,name'])
+            ->whereHas('classes', fn ($q) => $q->where('classes.id', $classId))
+            ->where('status', 'active')
+            ->orderBy('nisn')
+            ->get();
+
+        // Get existing remedial assignment IDs for this parent
+        $remedialAssignmentIds = Assignment::where('linked_assignment_id', $assignmentId)
+            ->pluck('id');
+
+        $result = [];
+        foreach ($students as $student) {
+            // Get the student's graded score for this exam
+            $submission = Submission::where('assignment_id', $assignmentId)
+                ->where('student_id', $student->user_id)
+                ->first();
+
+            $score = $submission?->grade?->score;
+
+            // Only include students below KKM
+            if ($score !== null && (float) $score < $kkm) {
+                // Check if student already has remedial
+                $hasRemedial = false;
+                if ($remedialAssignmentIds->isNotEmpty()) {
+                    $hasRemedial = Submission::whereIn('assignment_id', $remedialAssignmentIds)
+                        ->where('student_id', $student->user_id)
+                        ->exists();
+                }
+
+                $result[] = [
+                    'id' => $student->user_id,
+                    'name' => $student->user?->name ?? 'Tanpa Nama',
+                    'nis' => $student->nis ?? '-',
+                    'score' => (float) $score,
+                    'has_remedial' => $hasRemedial,
+                ];
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Create remedial assignments for students below KKM.
+     * Creates a single remedial assignment + auto-creates empty submissions for each target student.
+     *
+     * @param  array<int, int>  $studentIds
+     */
+    public function createRemedialAssignments(
+        int $teacherId,
+        int $parentAssignmentId,
+        array $studentIds,
+        ?string $remedialMode = null,
+    ): Assignment {
+        $parent = Assignment::with('schedule')->findOrFail($parentAssignmentId);
+
+        if ($parent->schedule->teacher_id !== $teacherId) {
+            throw new HttpException(403, 'Akses ditolak.');
+        }
+
+        if (! in_array($parent->type, ['ujian_harian', 'uts', 'uas'])) {
+            throw new HttpException(422, 'Remedial hanya dapat dibuat untuk tipe ujian.');
+        }
+
+        $academicYear = $parent->schedule->academicYear;
+        $kkm = $this->resolveSubjectKKM(
+            $parent->schedule->subject_id,
+            $parent->schedule->academic_year_id
+        );
+
+        return DB::transaction(function () use ($parent, $studentIds, $remedialMode, $kkm) {
+            // Create the remedial assignment
+            $remedial = Assignment::create([
+                'schedule_id' => $parent->schedule_id,
+                'type' => $parent->type,
+                'date' => now()->format('Y-m-d'),
+                'title' => "{$parent->title} — Remedial",
+                'description' => "Remedial untuk: {$parent->title}\nBatas KKM: {$kkm}\nSiswa yang mendapat remedial: ".count($studentIds).' orang.',
+                'due_date' => now()->addDays(7)->format('Y-m-d H:i:s'),
+                'attachments' => $parent->attachments ?? [],
+                'is_remedial' => true,
+                'remedial_for_type' => $parent->type,
+                'linked_assignment_id' => $parent->id,
+            ]);
+
+            // Auto-create empty submissions for target students
+            foreach ($studentIds as $studentId) {
+                Submission::firstOrCreate(
+                    ['assignment_id' => $remedial->id, 'student_id' => $studentId],
+                    ['file_path' => null, 'submitted_at' => now()]
+                );
+            }
+
+            // Also store the remedial_mode on the parent's grades for below-KKM students
+            if ($remedialMode) {
+                foreach ($studentIds as $studentId) {
+                    $parentSubmission = Submission::where('assignment_id', $parent->id)
+                        ->where('student_id', $studentId)
+                        ->first();
+
+                    if ($parentSubmission?->grade) {
+                        $parentSubmission->grade->update(['remedial_mode' => $remedialMode]);
+                    }
+                }
+            }
+
+            return $remedial;
+        });
     }
 
     // --- AREA SISWA ---
@@ -56,17 +197,14 @@ class AssignmentService
     {
         $assignment = Assignment::with('schedule')->findOrFail($assignmentId);
 
-        // 1. Validasi Kelas (IDOR Prevention)
         if ($assignment->schedule->class_id !== $classId) {
-            throw new HttpException(403, "Akses ditolak: Tugas ini bukan untuk kelas Anda.");
+            throw new HttpException(403, 'Akses ditolak: Tugas ini bukan untuk kelas Anda.');
         }
 
-        // 2. Validasi Deadline
         if (Carbon::now()->isAfter($assignment->due_date)) {
-            throw new HttpException(422, "Tenggat waktu pengumpulan tugas telah lewat.");
+            throw new HttpException(422, 'Tenggat waktu pengumpulan tugas telah lewat.');
         }
 
-        // Cek apakah siswa sudah pernah submit (untuk menghapus file lama jika ada)
         $existingSubmission = Submission::query()
             ->where('assignment_id', $assignment->id)
             ->where('student_id', $studentId)
@@ -76,10 +214,8 @@ class AssignmentService
             Storage::disk('public')->delete($existingSubmission->file_path);
         }
 
-        // Simpan file baru
         $path = $file->store('submissions', 'public');
 
-        // Gunakan updateOrCreate untuk Insert atau Update
         return Submission::query()->updateOrCreate(
             [
                 'assignment_id' => $assignment->id,
@@ -90,5 +226,24 @@ class AssignmentService
                 'submitted_at' => now(),
             ]
         );
+    }
+
+    /**
+     * Resolve KKM for a subject: prefer SubjectCompetencySetting.min_score, fallback to global.
+     */
+    private function resolveSubjectKKM(int $subjectId, int $academicYearId): int
+    {
+        $setting = SubjectCompetencySetting::where('subject_id', $subjectId)
+            ->where('academic_year_id', $academicYearId)
+            ->first();
+
+        if ($setting && $setting->min_score !== null) {
+            return (int) $setting->min_score;
+        }
+
+        // Fallback to global
+        $gradingSetting = GradingSetting::where('academic_year_id', $academicYearId)->first();
+
+        return $gradingSetting?->min_score_to_pass ?? 60;
     }
 }

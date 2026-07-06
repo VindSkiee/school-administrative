@@ -10,7 +10,7 @@ class Grade extends Model
 {
     use RecordsActivity;
 
-    protected $fillable = ['submission_id', 'score', 'feedback', 'graded_by'];
+    protected $fillable = ['submission_id', 'score', 'feedback', 'graded_by', 'remedial_mode', 'custom_score'];
 
     public function submission(): BelongsTo
     {

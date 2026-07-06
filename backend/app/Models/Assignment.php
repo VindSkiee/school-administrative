@@ -8,7 +8,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Assignment extends Model
 {
-    // 1. Tambahkan 'date' dan 'attachments', hapus 'file_path'
     protected $fillable = [
         'schedule_id',
         'type',
@@ -17,14 +16,34 @@ class Assignment extends Model
         'description',
         'due_date',
         'attachments',
+        'is_remedial',
+        'remedial_for_type',
+        'linked_assignment_id',
     ];
 
-    // 2. Beri tahu Laravel tipe datanya
     protected $casts = [
         'due_date' => 'datetime',
-        'attachments' => 'array', // Wajib agar JSON otomatis jadi Array
+        'attachments' => 'array',
+        'is_remedial' => 'boolean',
     ];
 
-    public function schedule(): BelongsTo { return $this->belongsTo(Schedule::class); }
-    public function submissions(): HasMany { return $this->hasMany(Submission::class); }
+    public function schedule(): BelongsTo
+    {
+        return $this->belongsTo(Schedule::class);
+    }
+
+    public function submissions(): HasMany
+    {
+        return $this->hasMany(Submission::class);
+    }
+
+    public function parentAssignment(): BelongsTo
+    {
+        return $this->belongsTo(Assignment::class, 'linked_assignment_id');
+    }
+
+    public function remedialAssignments(): HasMany
+    {
+        return $this->hasMany(Assignment::class, 'linked_assignment_id');
+    }
 }

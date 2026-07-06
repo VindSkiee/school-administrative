@@ -2,14 +2,16 @@
 
 namespace App\Http\Controllers\API\Student;
 
+use App\Http\Requests\Student\StoreSubmissionRequest;
+use App\Models\AcademicYear;
 use App\Models\Assignment;
 use App\Models\Schedule;
-use App\Models\AcademicYear;
-use App\Http\Requests\Student\StoreSubmissionRequest;
+use App\Models\User;
 use App\Services\AssignmentService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class AssignmentController
 {
@@ -18,7 +20,7 @@ class AssignmentController
     public function index(Request $request): JsonResponse
     {
         $user = auth('api')->user();
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $student = $user->student()->with('classes')->first();
 
         // PERF FIX: only get class from the active academic year (not just first class)
@@ -27,7 +29,7 @@ class AssignmentController
             ? $student->classes->firstWhere('academic_year_id', $activeYearId)
             : $student->classes->first();
 
-        if (!$activeClass) {
+        if (! $activeClass) {
             return response()->json(['error' => 'Anda tidak terdaftar di kelas aktif manapun.'], 403);
         }
 
@@ -39,9 +41,20 @@ class AssignmentController
                 $q->where('student_id', $student->user_id)->with('grade');
             },
         ])
-        ->whereHas('schedule', function ($q) use ($activeClass) {
-            $q->where('class_id', $activeClass->id);
-        });
+            ->whereHas('schedule', function ($q) use ($activeClass) {
+                $q->where('class_id', $activeClass->id);
+            })
+        // Sembunyikan tugas remedial kecuali siswa punya submission (target remedial)
+            ->where(function ($q) use ($student) {
+                $q->where('is_remedial', false)
+                    ->orWhereNull('is_remedial')
+                    ->orWhere(function ($q2) use ($student) {
+                        $q2->where('is_remedial', true)
+                            ->whereHas('submissions', function ($sq) use ($student) {
+                                $sq->where('student_id', $student->user_id);
+                            });
+                    });
+            });
 
         // 2. Filter by subject: when schedule_id is given, show assignments for the same
         // subject across ALL schedules in this class (not just one schedule slot).
@@ -87,6 +100,7 @@ class AssignmentController
         $assignments->getCollection()->transform(function ($assignment) {
             $assignment->submission = $assignment->submissions->first() ?? null;
             unset($assignment->submissions);
+
             return $assignment;
         });
 
@@ -96,7 +110,7 @@ class AssignmentController
     public function submit(StoreSubmissionRequest $request, string $id): JsonResponse
     {
         $user = auth('api')->user();
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $student = $user->student()->with('classes')->first();
 
         // PERF FIX: only get class from the active academic year
@@ -105,7 +119,7 @@ class AssignmentController
             ? $student->classes->firstWhere('academic_year_id', $activeYearId)
             : $student->classes->first();
 
-        if (!$activeClass) {
+        if (! $activeClass) {
             return response()->json(['error' => 'Anda tidak terdaftar di kelas manapun.'], 403);
         }
 
@@ -122,7 +136,7 @@ class AssignmentController
                 'message' => 'Jawaban tugas berhasil diunggah.',
                 'data' => $submission,
             ], 201);
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+        } catch (HttpException $e) {
             return response()->json(['error' => $e->getMessage()], $e->getStatusCode());
         }
     }

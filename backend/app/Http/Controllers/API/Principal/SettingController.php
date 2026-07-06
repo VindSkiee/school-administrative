@@ -30,11 +30,13 @@ class SettingController
             'success' => true,
             'data' => [
                 'academic_year_id' => $activeYear->id,
-                'academic_year_name' => "{$activeYear->name} " . ($activeYear->semester === 'odd' ? 'Ganjil' : 'Genap'),
-                'task_weight' => $setting?->task_weight ?? 40,
+                'academic_year_name' => "{$activeYear->name} ".($activeYear->semester === 'odd' ? 'Ganjil' : 'Genap'),
+                'task_weight' => $setting?->task_weight ?? 30,
+                'daily_exam_weight' => $setting?->daily_exam_weight ?? 10,
                 'uts_weight' => $setting?->uts_weight ?? 25,
                 'uas_weight' => $setting?->uas_weight ?? 25,
                 'attendance_weight' => $setting?->attendance_weight ?? 10,
+                'min_score_to_pass' => $setting?->min_score_to_pass ?? 60,
             ],
         ]);
     }
@@ -47,17 +49,19 @@ class SettingController
     {
         $validated = $request->validate([
             'task_weight' => ['required', 'integer', 'min:0', 'max:100'],
+            'daily_exam_weight' => ['required', 'integer', 'min:0', 'max:100'],
             'uts_weight' => ['required', 'integer', 'min:0', 'max:100'],
             'uas_weight' => ['required', 'integer', 'min:0', 'max:100'],
             'attendance_weight' => ['required', 'integer', 'min:0', 'max:100'],
+            'min_score_to_pass' => ['nullable', 'integer', 'min:0', 'max:100'],
         ]);
 
-        $total = $validated['task_weight'] + $validated['uts_weight'] + $validated['uas_weight'] + $validated['attendance_weight'];
+        $total = $validated['task_weight'] + $validated['daily_exam_weight'] + $validated['uts_weight'] + $validated['uas_weight'] + $validated['attendance_weight'];
 
         if ($total !== 100) {
             return response()->json([
                 'success' => false,
-                'message' => "Total bobot keseluruhan (Tugas, UTS, UAS, dan Kehadiran) harus tepat 100%. Saat ini totalnya {$total}%.",
+                'message' => "Total bobot keseluruhan (Tugas, Ujian Harian, UTS, UAS, dan Kehadiran) harus tepat 100%. Saat ini totalnya {$total}%.",
                 'errors' => [
                     'weights' => ["Total bobot harus 100%, saat ini {$total}%."],
                 ],
@@ -77,9 +81,11 @@ class SettingController
             ['academic_year_id' => $activeYear->id],
             [
                 'task_weight' => $validated['task_weight'],
+                'daily_exam_weight' => $validated['daily_exam_weight'],
                 'uts_weight' => $validated['uts_weight'],
                 'uas_weight' => $validated['uas_weight'],
                 'attendance_weight' => $validated['attendance_weight'],
+                'min_score_to_pass' => $validated['min_score_to_pass'] ?? 60,
             ]
         );
 

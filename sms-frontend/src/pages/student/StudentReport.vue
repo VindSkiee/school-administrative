@@ -200,11 +200,13 @@ const getPredicateColor = (score) => {
 
 const groupDetails = (details) => {
   const tasks = details.filter(d => d.type === 'task' || !d.type);
+  const uh = details.filter(d => d.type === 'ujian_harian');
   const uts = details.filter(d => d.type === 'uts');
   const uas = details.filter(d => d.type === 'uas');
 
   return [
     { label: 'Tugas Harian', badgeClass: 'bg-blue-50 text-blue-700', items: tasks },
+    { label: 'Ujian Harian', badgeClass: 'bg-green-50 text-green-700', items: uh },
     { label: 'UTS', badgeClass: 'bg-orange-50 text-brand-orange', items: uts },
     { label: 'UAS', badgeClass: 'bg-red-50 text-brand-red', items: uas },
   ];

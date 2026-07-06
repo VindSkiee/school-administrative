@@ -30,6 +30,8 @@ class ClassReadinessService
         $allGradesComplete = collect($gradeDetails)->every(fn (array $d): bool => $d['is_complete']);
         $allStudentsReady = $studentDetails['not_ready_count'] === 0;
         $allCompetencyConfigured = collect($competencyDetails)->every(fn (array $d): bool => $d['is_configured']);
+        $notesDetails = $this->getNotesReadiness($classId, $academicYearId);
+        $allNotesComplete = collect($notesDetails)->every(fn (array $d): bool => $d['has_note']);
 
         return [
             'class_id' => $schoolClass->id,
@@ -37,7 +39,7 @@ class ClassReadinessService
             'homeroom_teacher' => $schoolClass->homeroomTeacher?->user?->name ?? '-',
             'is_published' => $schoolClass->is_published,
             'published_at' => $schoolClass->published_at?->toIso8601String(),
-            'is_ready' => $allAttendanceComplete && $allGradesComplete && $allStudentsReady && $allCompetencyConfigured,
+            'is_ready' => $allAttendanceComplete && $allGradesComplete && $allStudentsReady && $allCompetencyConfigured && $allNotesComplete,
             'readiness' => [
                 'attendance' => [
                     'is_complete' => $allAttendanceComplete,
@@ -55,6 +57,12 @@ class ClassReadinessService
                     'total' => $studentDetails['total_count'],
                     'ready' => $studentDetails['ready_count'],
                     'not_ready' => $studentDetails['not_ready'],
+                ],
+                'notes' => [
+                    'is_complete' => $allNotesComplete,
+                    'total' => count($notesDetails),
+                    'completed' => collect($notesDetails)->where('has_note', true)->count(),
+                    'details' => $notesDetails,
                 ],
             ],
         ];
@@ -173,6 +181,7 @@ class ClassReadinessService
                 ],
                 'grades' => [
                     'task' => ['exists' => false, 'graded' => 0, 'total' => 0, 'average' => null, 'is_complete' => false],
+                    'ujian_harian' => ['exists' => false, 'graded' => 0, 'total' => 0, 'average' => null, 'is_complete' => false],
                     'uts' => ['exists' => false, 'graded' => 0, 'total' => 0, 'average' => null, 'is_complete' => false],
                     'uas' => ['exists' => false, 'graded' => 0, 'total' => 0, 'average' => null, 'is_complete' => false],
                 ],
@@ -205,6 +214,7 @@ class ClassReadinessService
         foreach ($subjectMap as &$subject) {
             $attComplete = $subject['attendance']['is_complete'];
             $taskOk = $subject['grades']['task']['is_complete'];
+            $uhOk = $subject['grades']['ujian_harian']['is_complete'];
             $utsOk = $subject['grades']['uts']['is_complete'];
             $uasOk = $subject['grades']['uas']['is_complete'];
 
@@ -212,7 +222,7 @@ class ClassReadinessService
             $subjectId = DB::table('schedules')->where('id', $subject['schedule_id'])->value('subject_id');
             $subject['competency_configured'] = in_array($subjectId, $configuredCompetencySubjectIds, true);
 
-            $subject['is_subject_ready'] = $attComplete && $taskOk && $utsOk && $uasOk && $subject['competency_configured'];
+            $subject['is_subject_ready'] = $attComplete && $taskOk && $uhOk && $utsOk && $uasOk && $subject['competency_configured'];
         }
         unset($subject);
 
@@ -405,6 +415,23 @@ class ClassReadinessService
                 'missing_meetings' => max(0, $total - $completed),
             ];
         }, $rows);
+    }
+
+    private function getNotesReadiness(int $classId, int $academicYearId): array
+    {
+        $students = DB::select('
+            SELECT u.id AS user_id, u.name, cs.note
+            FROM class_student cs
+            INNER JOIN users u ON u.id = cs.student_id
+            WHERE cs.class_id = ? AND cs.academic_year_id = ?
+            ORDER BY u.name
+        ', [$classId, $academicYearId]);
+
+        return array_map(fn ($row) => [
+            'student_id' => $row->user_id,
+            'name' => $row->name,
+            'has_note' => ! empty(trim($row->note ?? '')),
+        ], $students);
     }
 
     private function getGradeReadiness(int $classId, int $academicYearId): array

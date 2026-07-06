@@ -138,20 +138,108 @@ Ketika context window hampir penuh, opencode akan melakukan **compaction** (komp
 - Agent bisa LUPA apa yang sedang dikerjakan
 - Detail spesifik (angka, nama file, baris kode) bisa hilang
 - Reasoning di belakang keputusan bisa hilang
+- **Compaction terjadi TANPA peringatan dan TANPA otomatis save**
 
-### Solusi: Proaktif Save
+### Rule #1: SELALU ADA SESSION LOG
 
-Agent WAJIB proaktif menyimpan state SEBELUM compaction terjadi:
+**SETIAP** session WAJIB memiliki session log. Tidak ada exception.
 
-**Tanda-tanda context mau habis:**
-- Banyak tool calls sudah dilakukan (10+ tool calls)
-- Output tools sudah panjang
-- User belum bilang "done" tapi work sudah banyak
+```
+Session Log Rule:
+─────────────────────────────────────────────────────
+Mulai kerja → BUAT session log → Isi minimal summary
+     │
+     ▼
+Kerja 3 tool calls → UPDATE session log
+     │
+     ▼
+Kerja 6 tool calls → UPDATE session log
+     │
+     ▼
+Kerja 9 tool calls → UPDATE session log (EMERGENCY SAVE)
+     │
+     ▼
+Selesai → FINAL session log
+```
 
-**Ketika mendeteksi, agent WAJIB:**
-1. SAVe current state ke session log SEKARANG
-2. Jangan tunggu user minta save
-3. Simpan: apa yang sedang dikerjakan, file apa saja yang sudah diubah, langkah selanjutnya
+### Proaktif Save Protocol
+
+Agent WAJIB proaktif menyimpan state SEBELUM compaction terjadi.
+
+#### Checkpoint Thresholds (WAJIB)
+
+```
+Tool Calls:  1   2   3   4   5   6   7   8   9  10  11  12 ...
+             │   │   │   │   │   │   │   │   │   │   │   │
+Checkpoint:  ·   ·   ✓   ·   ·   ✓   ·   ·   ✓   ·   ·   EMG
+                     ▲           ▲           ▲           ▲
+                     │           │           │           │
+                First save   Second    Third save   EMERGENCY
+                           save                    (save now!)
+```
+
+| Threshold | Aksi | Keterangan |
+|-----------|------|------------|
+| **3 tool calls** | Save checkpoint | First save - minimal summary |
+| **6 tool calls** | Save checkpoint | Second save - update semua progress |
+| **9 tool calls** | **EMERGENCY SAVE** | Save SEKARANG - compaction sudah dekat |
+| **10+ tool calls** | **STOP & SAVE** | Jangan lanjut kerja sampai save selesai |
+
+#### Multiple Signal Detection
+
+Agent harus mendeteksi multiple sinyal, bukan hanya tool call count:
+
+**Signal 1: Tool Call Count**
+- 3+ tool calls → First checkpoint
+- 6+ tool calls → Second checkpoint
+- 9+ tool calls → Emergency save
+
+**Signal 2: Output Size**
+- Tool output mulai di-truncate → Save sekarang
+- Response terakhir sangat panjang → Save sekarang
+
+**Signal 3: Conversation Length**
+- Banyak back-and-forth messages → Save sekarang
+- User bertanya pertanyaan kompleks → Save sekarang
+
+**Signal 4: Work Complexity**
+- Selesai edit 1 file → Save checkpoint
+- Selesai running migration → Save checkpoint
+- Selesai refactor → Save checkpoint
+- Selesai debugging → Save checkpoint
+
+#### Emergency Save Protocol
+
+Ketika context sudah sangat dekat dengan compaction (9+ tool calls atau output truncated):
+
+```
+⚠️ EMERGENCY SAVE - Context hampir habis!
+Menyimpan session log SEKARANG...
+[Save minimal session log]
+✅ Emergency save selesai.
+Melanjutkan kerja...
+```
+
+**Minimal Save Format (untuk emergency):**
+
+```markdown
+# Session: YYYY-MM-DD - [Topic] (EMERGENCY SAVE)
+
+## Summary
+[1 kalimat apa yang sedang dikerjakan]
+
+## Current State
+- Task: [nama task]
+- File sedang di-edit: [nama file]
+- Progress: [X/Y selesai]
+
+## Files Modified
+- `path/to/file1.php`: [status]
+- `path/to/file2.php`: [status]
+
+## Next Steps
+1. [Langkah paling krusial yang harus dilanjutkan]
+```
 
 ### Context Recovery Setelah Compaction
 
@@ -160,6 +248,24 @@ Setelah compaction, agent WAJIB:
 1. **Cek session logs** - Baca file terakhir di `.opencode/session_logs/`
 2. **Verify state** - Cek git status, cek file yang disebutkan masih ada
 3. **Resume** - Lanjutkan dari where it left off
+
+```
+Recovery Protocol:
+─────────────────────────────────────────────────────
+Compaction detected
+     │
+     ▼
+Baca session log terakhir
+     │
+     ▼
+Cek git status + file list
+     │
+     ▼
+Verify apa yang sudah dikerjakan
+     │
+     ▼
+Resume dari last checkpoint
+```
 
 ### Mid-Session Checkpoint
 
@@ -182,12 +288,18 @@ Session log bukan hanya untuk akhir session, tapi juga **mid-session checkpoint*
 ```
 Session Log Timeline:
 ─────────────────────────────────────────────────────
-Start → Checkpoint 1 → Checkpoint 2 → ... → End
-  │         │              │                   │
-  ▼         ▼              ▼                   ▼
-Load    Save state      Save state          Final
-log     (mid-task)      (mid-task)          save
+Start → CP1 → CP2 → CP3 → CP4 → CP5 → CP6 → CP7 → CP8 → End
+  │      │     │     │     │     │     │     │     │     │
+  ▼      ▼     ▼     ▼     ▼     ▼     ▼     ▼     ▼     ▼
+Load   Save  Save  Save  Save  Save  Save  Save  Save  Final
+log    3tc   6tc   9tc   12tc  15tc  18tc  21tc  24tc  save
+              ▲           ▲
+              │           │
+         Checkpoint   Emergency
+                    (compaction risk)
 ```
+
+**tc = tool calls**
 
 ## Error Prevention Rules
 

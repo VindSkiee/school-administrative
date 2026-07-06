@@ -101,9 +101,17 @@
             >
               {{ item.schedule?.school_class?.name || "Tanpa Kelas" }}
             </span>
-            <p class="text-xs font-bold text-brand-red mt-2">
-              {{ item.schedule?.subject?.name || "Mata Pelajaran" }}
-            </p>
+            <div class="flex items-center gap-1.5 mt-2">
+              <p class="text-xs font-bold text-brand-red">
+                {{ item.schedule?.subject?.name || "Mata Pelajaran" }}
+              </p>
+              <span
+                class="px-1.5 py-0.5 text-[9px] font-bold rounded-md"
+                :class="getTypeBadge(item.type).classes"
+              >
+                {{ getTypeBadge(item.type).label }}
+              </span>
+            </div>
           </div>
           <span
             :class="
@@ -240,6 +248,15 @@ const isClosed = (dueDate) => {
   if (isReportPublished.value) return true;
   if (!dueDate) return false;
   return new Date() > new Date(dueDate);
+};
+
+const getTypeBadge = (type) => {
+  switch (type) {
+    case 'ujian_harian': return { label: 'UH', classes: 'bg-green-50 text-green-700' };
+    case 'uts': return { label: 'UTS', classes: 'bg-brand-orange/10 text-brand-orange' };
+    case 'uas': return { label: 'UAS', classes: 'bg-brand-red/10 text-brand-red' };
+    default: return { label: 'Tugas', classes: 'bg-blue-50 text-blue-700' };
+  }
 };
 
 // Effective deadline: when report is published, show published date as the cutoff

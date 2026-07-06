@@ -3,7 +3,9 @@
 namespace App\Services;
 
 use App\Models\AcademicYear;
+use App\Models\GradingSetting;
 use App\Models\Principal;
+use App\Models\Schedule;
 use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\SubjectCompetencySetting;
@@ -324,6 +326,12 @@ class AdminSemesterReportService
     {
         $principal = Principal::query()->with('user')->first();
 
+        // Find odd semester class for dual-semester promotion evaluation
+        $oddSemesterYear = $this->findOddSemesterYear($academicYear);
+        $oddSemesterClass = $oddSemesterYear
+            ? $this->findOddSemesterClass($schoolClass, $oddSemesterYear)
+            : null;
+
         return [
             'school_name' => config('app.school_name', 'SMP NEGERI 5 PURWAKARTA'),
             'school_address' => config('app.school_address', 'Jl. Kolonel Singawinata No. 97 Purwakarta'),
@@ -340,11 +348,30 @@ class AdminSemesterReportService
             'principal_name' => $principal?->user?->name ?? '-',
             'principal_nip' => $principal?->nip ?? '-',
             'generated_at' => now()->format('d M Y'),
-            'homeroom_note' => '-',
-            'keterangan_kenaikan_kelas' => $this->resolveNextClassName($schoolClass),
+            'homeroom_note' => $this->getStudentNote($schoolClass->id, $student->user_id),
+            'keterangan_kenaikan_kelas' => $this->resolvePromotionStatus(
+                $student,
+                $schoolClass,
+                $academicYear,
+                $oddSemesterClass,
+                $oddSemesterYear,
+            ),
             'results' => $this->buildSubjectResults($schoolClass, $student, $academicYear),
             'attendance' => $this->buildAttendanceSummary($schoolClass, $student),
         ];
+    }
+
+    /**
+     * Get the homeroom teacher's note for a student in a class.
+     */
+    private function getStudentNote(int $classId, int $studentId): string
+    {
+        $note = DB::table('class_student')
+            ->where('class_id', $classId)
+            ->where('student_id', $studentId)
+            ->value('note');
+
+        return $note ?? '-';
     }
 
     /**
@@ -410,6 +437,23 @@ class AdminSemesterReportService
     }
 
     /**
+     * Resolve grade index label (A/B/C/D) from a final score.
+     */
+    public function resolveGradeIndex(?float $finalScore): string
+    {
+        if ($finalScore === null) {
+            return '-';
+        }
+
+        return match (true) {
+            $finalScore >= 90 => 'A',
+            $finalScore >= 80 => 'B',
+            $finalScore >= 70 => 'C',
+            default => 'D',
+        };
+    }
+
+    /**
      * @return array{0: string, 1: string}
      */
     private function resolvePredicate(?float $finalScore): array
@@ -459,29 +503,402 @@ class AdminSemesterReportService
     }
 
     /**
-     * Resolve next class name for semester genap (class promotion).
-     * e.g. "7G" -> "Naik ke kelas VIII", "9A" -> "Lulus / Tamat Belajar".
+     * Resolve per-student promotion status based on global min_score_to_pass threshold.
+     * Checks every subject's final grade against the threshold.
+     *
+     * @param  SchoolClass  $schoolClass  The student's class in the current (even) semester
+     * @param  AcademicYear  $academicYear  The current (even) academic year
+     * @param  SchoolClass|null  $oddSemesterClass  The student's class in the odd semester (for dual-semester evaluation)
+     * @param  AcademicYear|null  $oddSemesterYear  The odd semester academic year
      */
-    private function resolveNextClassName(SchoolClass $schoolClass): string
-    {
+    private function resolvePromotionStatus(
+        Student $student,
+        SchoolClass $schoolClass,
+        AcademicYear $academicYear,
+        ?SchoolClass $oddSemesterClass = null,
+        ?AcademicYear $oddSemesterYear = null,
+    ): string {
         $name = trim($schoolClass->name);
         preg_match('/^(\d+)/', $name, $matches);
         $currentGrade = isset($matches[1]) ? (int) $matches[1] : 0;
 
-        $romanMap = [
-            7 => 'VII',
-            8 => 'VIII',
-            9 => 'IX',
-            10 => 'X',
-        ];
+        $gradingSetting = $academicYear->gradingSetting;
+        $minScore = $gradingSetting?->min_score_to_pass ?? 60;
 
-        if ($currentGrade >= 9) {
-            return 'Lulus / Tamat Belajar';
+        // Calculate weighted scores per subject across both semesters
+        $subjectScores = $this->calculateDualSemesterSubjectScores(
+            $student,
+            $schoolClass,
+            $academicYear,
+            $oddSemesterClass,
+            $oddSemesterYear,
+        );
+
+        $failedSubjects = [];
+
+        foreach ($subjectScores as $subjectName => $score) {
+            if ($score === null || $score < $minScore) {
+                $failedSubjects[] = $subjectName;
+            }
         }
 
-        $nextGrade = $currentGrade + 1;
-        $roman = $romanMap[$nextGrade] ?? (string) $nextGrade;
+        // Grade 9 special case
+        if ($currentGrade >= 9) {
+            return empty($failedSubjects) ? 'Lulus / Tamat Belajar' : 'Tidak Lulus';
+        }
 
-        return "Naik ke kelas {$roman}";
+        if (empty($failedSubjects)) {
+            $romanMap = [7 => 'VIII', 8 => 'IX', 10 => 'X'];
+            $nextRoman = $romanMap[$currentGrade] ?? (string) ($currentGrade + 1);
+
+            return "Naik ke kelas {$nextRoman}";
+        }
+
+        return 'Tidak Tuntas';
+    }
+
+    /**
+     * Calculate weighted subject scores combining both odd and even semesters.
+     *
+     * For each subject, computes the weighted average per semester using GradingSetting weights,
+     * then averages the two semester results into a single final grade.
+     *
+     * @return array<string, float|null> subject name → final weighted grade
+     */
+    public function calculateDualSemesterSubjectScores(
+        Student $student,
+        SchoolClass $evenClass,
+        AcademicYear $evenYear,
+        ?SchoolClass $oddClass,
+        ?AcademicYear $oddYear,
+    ): array {
+        // PERF FIX: Pre-fetch all attendance records in bulk to avoid N+1 in calculateWeightedSubjectScoresForSemester
+        $evenAttendanceMap = $this->bulkFetchAttendanceRates($student->user_id, $evenClass, $evenYear);
+        $evenScores = $this->calculateWeightedSubjectScoresForSemester($student, $evenClass, $evenYear, $evenAttendanceMap);
+
+        $oddScores = [];
+        if ($oddClass && $oddYear) {
+            $oddAttendanceMap = $this->bulkFetchAttendanceRates($student->user_id, $oddClass, $oddYear);
+            $oddScores = $this->calculateWeightedSubjectScoresForSemester($student, $oddClass, $oddYear, $oddAttendanceMap);
+        }
+
+        // Merge all subject names from both semesters
+        $allSubjectNames = array_unique(array_merge(array_keys($evenScores), array_keys($oddScores)));
+        $result = [];
+
+        foreach ($allSubjectNames as $subjectName) {
+            $evenGrade = $evenScores[$subjectName] ?? null;
+            $oddGrade = $oddScores[$subjectName] ?? null;
+
+            // Average both semesters; if one is missing, use the other
+            if ($evenGrade !== null && $oddGrade !== null) {
+                $result[$subjectName] = round(($evenGrade + $oddGrade) / 2, 2);
+            } else {
+                $result[$subjectName] = $evenGrade ?? $oddGrade;
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Calculate weighted scores per subject for a single semester.
+     *
+     * Uses GradingSetting weights (task, ujian_harian, uts, uas, attendance) with walking average approach:
+     * only includes weights for assignment types that have graded data.
+     * Applies remedial resolution for exam types (ujian_harian, uts, uas).
+     *
+     * @return array<string, float|null> subject name → weighted final grade
+     */
+    private function calculateWeightedSubjectScoresForSemester(
+        Student $student,
+        SchoolClass $schoolClass,
+        AcademicYear $academicYear,
+        ?array $attendanceMap = null,
+    ): array {
+        $gradingSetting = $academicYear->gradingSetting;
+        $weights = [
+            'task' => $gradingSetting?->task_weight ?? 30,
+            'ujian_harian' => $gradingSetting?->daily_exam_weight ?? 10,
+            'uts' => $gradingSetting?->uts_weight ?? 25,
+            'uas' => $gradingSetting?->uas_weight ?? 25,
+            'attendance' => $gradingSetting?->attendance_weight ?? 10,
+        ];
+
+        $result = [];
+
+        foreach ($schoolClass->schedules as $schedule) {
+            $subjectName = $schedule->subject?->name ?? '-';
+            $scoresByType = ['task' => [], 'ujian_harian' => [], 'uts' => [], 'uas' => []];
+            $remedialLookup = []; // linked_assignment_id => ['mode' => ..., 'scores' => [...]]
+
+            foreach ($schedule->assignments as $assignment) {
+                $submission = $assignment->submissions->firstWhere('student_id', $student->user_id);
+
+                if ($submission?->grade?->score !== null) {
+                    $type = $assignment->type ?? 'task';
+
+                    if ($assignment->is_remedial && $assignment->linked_assignment_id) {
+                        // Store remedial data for resolution
+                        $linkedId = $assignment->linked_assignment_id;
+                        if (! isset($remedialLookup[$linkedId])) {
+                            $remedialLookup[$linkedId] = ['mode' => 'replace', 'scores' => []];
+                        }
+                        $remedialLookup[$linkedId]['scores'][] = (float) $submission->grade->score;
+
+                        // Get remedial_mode from parent's grade
+                        $parentSubmission = $schedule->assignments
+                            ->firstWhere('id', $linkedId)?->submissions
+                            ->firstWhere('student_id', $student->user_id);
+                        if ($parentSubmission?->grade?->remedial_mode) {
+                            $remedialLookup[$linkedId]['mode'] = $parentSubmission->grade->remedial_mode;
+                        }
+                    } else {
+                        $scoresByType[$type][] = (float) $submission->grade->score;
+                    }
+                }
+            }
+
+            // Apply remedial resolution for exam types
+            foreach ($schedule->assignments as $assignment) {
+                if (! in_array($assignment->type, ['ujian_harian', 'uts', 'uas'])) {
+                    continue;
+                }
+
+                if (isset($remedialLookup[$assignment->id])) {
+                    $remedial = $remedialLookup[$assignment->id];
+                    $parentSubmission = $assignment->submissions->firstWhere('student_id', $student->user_id);
+
+                    if ($parentSubmission?->grade?->score !== null) {
+                        $examScore = (float) $parentSubmission->grade->score;
+                        $remedialAvg = array_sum($remedial['scores']) / count($remedial['scores']);
+
+                        // Resolve and replace the exam score in scoresByType
+                        $resolvedScore = match ($remedial['mode']) {
+                            'replace' => max($examScore, $remedialAvg),
+                            'average' => round(($examScore + $remedialAvg) / 2, 2),
+                            'custom' => $remedialAvg,
+                            default => max($examScore, $remedialAvg),
+                        };
+
+                        // Replace the score in the type array
+                        $typeScores = &$scoresByType[$assignment->type];
+                        foreach ($typeScores as &$s) {
+                            if ($s === $examScore) {
+                                $s = $resolvedScore;
+                                break;
+                            }
+                        }
+                        unset($s, $typeScores);
+                    }
+                }
+            }
+
+            // Average per type
+            $taskAvg = ! empty($scoresByType['task'])
+                ? array_sum($scoresByType['task']) / count($scoresByType['task'])
+                : null;
+            $uhAvg = ! empty($scoresByType['ujian_harian'])
+                ? array_sum($scoresByType['ujian_harian']) / count($scoresByType['ujian_harian'])
+                : null;
+            $utsAvg = ! empty($scoresByType['uts'])
+                ? array_sum($scoresByType['uts']) / count($scoresByType['uts'])
+                : null;
+            $uasAvg = ! empty($scoresByType['uas'])
+                ? array_sum($scoresByType['uas']) / count($scoresByType['uas'])
+                : null;
+
+            // PERF FIX: Use pre-fetched attendance map instead of per-schedule query
+            $attendanceRate = $attendanceMap[$schedule->id] ?? 100;
+
+            // Walking average: only include weights for types with data
+            $activeWeight = 0;
+            $weightedSum = 0;
+
+            if ($taskAvg !== null) {
+                $weightedSum += $taskAvg * $weights['task'];
+                $activeWeight += $weights['task'];
+            }
+            if ($uhAvg !== null) {
+                $weightedSum += $uhAvg * $weights['ujian_harian'];
+                $activeWeight += $weights['ujian_harian'];
+            }
+            if ($utsAvg !== null) {
+                $weightedSum += $utsAvg * $weights['uts'];
+                $activeWeight += $weights['uts'];
+            }
+            if ($uasAvg !== null) {
+                $weightedSum += $uasAvg * $weights['uas'];
+                $activeWeight += $weights['uas'];
+            }
+            if ($weights['attendance'] > 0) {
+                $weightedSum += $attendanceRate * $weights['attendance'];
+                $activeWeight += $weights['attendance'];
+            }
+
+            $finalScore = $activeWeight > 0
+                ? round($weightedSum / $activeWeight, 2)
+                : null;
+
+            $result[$subjectName] = $finalScore;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Calculate attendance rate for a student on a specific schedule.
+     */
+    private function calculateAttendanceRate(int $studentId, Schedule $schedule): float
+    {
+        $stats = DB::table('attendances')
+            ->where('schedule_id', $schedule->id)
+            ->where('student_id', $studentId)
+            ->select(
+                DB::raw('COUNT(*) as total'),
+                DB::raw("SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as present_count")
+            )
+            ->first();
+
+        $total = $stats->total ?? 0;
+        $present = $stats->present_count ?? 0;
+
+        return $total > 0 ? round(($present / $total) * 100, 2) : 100;
+    }
+
+    /**
+     * PERF FIX: Bulk-fetch attendance rates for all schedules in a class.
+     * Returns map of schedule_id => attendance_rate (float).
+     * Replaces N+1 calls to calculateAttendanceRate().
+     *
+     * @return array<int, float> schedule_id => attendance rate (0-100)
+     */
+    private function bulkFetchAttendanceRates(int $studentId, SchoolClass $schoolClass, AcademicYear $academicYear): array
+    {
+        $scheduleIds = $schoolClass->schedules->pluck('id');
+
+        if ($scheduleIds->isEmpty()) {
+            return [];
+        }
+
+        $stats = DB::table('attendances')
+            ->whereIn('schedule_id', $scheduleIds)
+            ->where('student_id', $studentId)
+            ->select(
+                'schedule_id',
+                DB::raw('COUNT(*) as total'),
+                DB::raw("SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as present_count")
+            )
+            ->groupBy('schedule_id')
+            ->get();
+
+        $result = [];
+        foreach ($stats as $row) {
+            $total = (int) $row->total;
+            $present = (int) $row->present_count;
+            $result[$row->schedule_id] = $total > 0 ? round(($present / $total) * 100, 2) : 100;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Find the matching class in the odd semester for a given even-semester class.
+     * Matches by class name (e.g. "7A" in even → "7A" in odd).
+     */
+    public function findOddSemesterClass(SchoolClass $evenClass, AcademicYear $oddYear): ?SchoolClass
+    {
+        return SchoolClass::where('academic_year_id', $oddYear->id)
+            ->where('name', $evenClass->name)
+            ->with([
+                'schedules' => function ($query) use ($oddYear): void {
+                    $query->where('academic_year_id', $oddYear->id)
+                        ->with([
+                            'subject',
+                            'teacher.user',
+                            'attendances',
+                            'assignments.submissions.grade',
+                        ]);
+                },
+            ])
+            ->first();
+    }
+
+    /**
+     * Find the odd semester academic year corresponding to the given even semester year.
+     * Matches by year range in the name (e.g. "2025/2026 Genap" → "2025/2026 Ganjil").
+     */
+    public function findOddSemesterYear(AcademicYear $evenYear): ?AcademicYear
+    {
+        // Extract year range from name (e.g. "2025/2026 Genap" → "2025/2026")
+        preg_match('/(\d{4}\/\d{4})/', $evenYear->name, $matches);
+        $yearRange = $matches[1] ?? null;
+
+        if (! $yearRange) {
+            return null;
+        }
+
+        return AcademicYear::where('semester', 'odd')
+            ->where('name', 'like', "%{$yearRange}%")
+            ->first();
+    }
+
+    /**
+     * Evaluate promotion status for a single student using dual-semester grades.
+     * Returns a structured result with pass/fail and failed subjects.
+     *
+     * @return array{passed: bool, failed_subjects: list<string>, reason: string}
+     */
+    public function evaluateStudentPromotion(
+        Student $student,
+        SchoolClass $evenClass,
+        AcademicYear $evenYear,
+        ?SchoolClass $oddClass = null,
+        ?AcademicYear $oddYear = null,
+    ): array {
+        $name = trim($evenClass->name);
+        preg_match('/^(\d+)/', $name, $matches);
+        $currentGrade = isset($matches[1]) ? (int) $matches[1] : 0;
+
+        $gradingSetting = $evenYear->gradingSetting;
+        $minScore = $gradingSetting?->min_score_to_pass ?? 60;
+
+        $subjectScores = $this->calculateDualSemesterSubjectScores(
+            $student,
+            $evenClass,
+            $evenYear,
+            $oddClass,
+            $oddYear,
+        );
+
+        $failedSubjects = [];
+
+        foreach ($subjectScores as $subjectName => $score) {
+            if ($score === null || $score < $minScore) {
+                $failedSubjects[] = $subjectName;
+            }
+        }
+
+        $passed = empty($failedSubjects);
+
+        // Grade 9: graduated vs not graduated
+        if ($currentGrade >= 9) {
+            return [
+                'passed' => $passed,
+                'failed_subjects' => $failedSubjects,
+                'reason' => $passed
+                    ? 'Lulus / Tamat Belajar'
+                    : 'Nilai '.implode(', ', $failedSubjects).' di bawah ambang batas ('.$minScore.')',
+            ];
+        }
+
+        // Grade 7-8: promoted vs repeated
+        return [
+            'passed' => $passed,
+            'failed_subjects' => $failedSubjects,
+            'reason' => $passed
+                ? 'Naik kelas'
+                : 'Nilai '.implode(', ', $failedSubjects).' di bawah ambang batas ('.$minScore.')',
+        ];
     }
 }

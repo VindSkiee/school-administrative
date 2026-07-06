@@ -164,8 +164,9 @@ Agent MUST auto-save context at these points:
 
 1. **After every milestone** (e.g., finished editing 1 file)
 2. **Before complex operations** (e.g., running migration, bulk edit)
-3. **When context looks long** (10+ tool calls already done)
-4. **When user pauses** (asked a question, thinking)
+3. **At tool call thresholds** (3, 6, 9 calls - see below)
+4. **When output is truncated** - Immediate save
+5. **When user pauses** (asked a question, thinking)
 
 ### Checkpoint Format
 
@@ -201,32 +202,79 @@ After each milestone, update session log with checkpoint:
 2. [Following action]
 ```
 
-### Auto-Save Trigger Points
+### Auto-Save Trigger Points (AGGRESSIVE)
 
 ```
 Tool Calls:  1   2   3   4   5   6   7   8   9  10  11  12 ...
              │   │   │   │   │   │   │   │   │   │   │   │
-Checkpoint:  ·   ·   ·   ·   ✓   ·   ·   ·   ✓   ·   ·   ✓
-                          ▲               ▲           ▲
-                          │               │           │
-                     Save here        Save here   Save here
-                     (5 calls)        (9 calls)   (12 calls)
+Checkpoint:  ·   ·   ✓   ·   ·   ✓   ·   ·   ✓   ·   ·   EMG
+                     ▲           ▲           ▲           ▲
+                     │           │           │           │
+                First save   Second    Third save   EMERGENCY
+                           save                    (save now!)
 ```
 
-### Context Warning Signs
+| Threshold | Aksi | Keterangan |
+|-----------|------|------------|
+| **3 tool calls** | Save checkpoint | First save - minimal summary |
+| **6 tool calls** | Save checkpoint | Second save - update semua progress |
+| **9 tool calls** | **EMERGENCY SAVE** | Save SEKARANG - compaction sudah dekat |
+| **10+ tool calls** | **STOP & SAVE** | Jangan lanjut kerja sampai save selesai |
 
-Agent should recognize these signs that context is getting full:
+### Context Budget Awareness
 
-1. **Many tool calls** - More than 10 tool calls in sequence
-2. **Large outputs** - Tool outputs are getting truncated
-3. **Repetitive actions** - Doing similar things multiple times
-4. **Long conversations** - Many back-and-forth messages
+Agent WAJIB memperhatikan context budget:
 
-When detected, agent MUST:
+**Signal 1: Tool Call Count**
+- 3+ tool calls → First checkpoint
+- 6+ tool calls → Second checkpoint
+- 9+ tool calls → Emergency save
+
+**Signal 2: Output Size**
+- Tool output mulai di-truncate → Save sekarang
+- Response terakhir sangat panjang → Save sekarang
+
+**Signal 3: Conversation Length**
+- Banyak back-and-forth messages → Save sekarang
+- User bertanya pertanyaan kompleks → Save sekarang
+
+**Signal 4: Work Complexity**
+- Selesai edit 1 file → Save checkpoint
+- Selesai running migration → Save checkpoint
+- Selesai refactor → Save checkpoint
+- Selesai debugging → Save checkpoint
+
+### Emergency Save Protocol
+
+Ketika context sudah sangat dekat dengan compaction (9+ tool calls atau output truncated):
+
 ```
-⚠️ Context getting long. Saving checkpoint...
-[Save current state to session log]
-Checkpoint saved. Continuing...
+⚠️ EMERGENCY SAVE - Context hampir habis!
+Menyimpan session log SEKARANG...
+[Save minimal session log]
+✅ Emergency save selesai.
+Melanjutkan kerja...
+```
+
+**Minimal Save Format (untuk emergency):**
+
+```markdown
+# Session: YYYY-MM-DD - [Topic] (EMERGENCY SAVE)
+
+## Summary
+[1 kalimat apa yang sedang dikerjakan]
+
+## Current State
+- Task: [nama task]
+- File sedang di-edit: [nama file]
+- Progress: [X/Y selesai]
+
+## Files Modified
+- `path/to/file1.php`: [status]
+- `path/to/file2.php`: [status]
+
+## Next Steps
+1. [Langkah paling krusial yang harus dilanjutkan]
 ```
 
 ## Compaction Recovery Protocol
@@ -282,25 +330,60 @@ ls -la path/to/modified/files
 ╚══════════════════════════════════════════════════════╝
 ```
 
-## Proactive Session Management
+## Proactive Session Management (AGGRESSIVE)
 
-### When Context Gets Long
+### Context Warning Signs - WAJIB DETEKSI
 
-If the conversation is getting long (many tool calls, large outputs), the agent should proactively suggest:
+Agent harus mendeteksi tanda-tanda context mau habis:
+
+1. **Tool call count tinggi** - 3+ tool calls sudah dilakukan
+2. **Output truncate** - Tool output terpotong (tanda context penuh)
+3. **Repetitive actions** - Melakukan hal yang sama berulang kali
+4. **Long conversations** - Banyak back-and-forth messages
+5. **Large file reads** - Membaca file besar (1000+ baris)
+6. **Multiple file edits** - Edit banyak file sekaligus
+
+### When Context Gets Long - IMMEDIATE ACTION
+
+Jika context sudah panjang (3+ tool calls), agent WAJIB:
 
 ```
-Context is getting long. Recommend saving session to preserve context.
-Type "save session" to save current progress.
+⚠️ Context getting long (X tool calls). Saving checkpoint...
+[Save current state to session log]
+✅ Checkpoint saved. Continuing...
 ```
+
+**JANGAN tunggu sampai 10+ tool calls. Mulai save di 3 tool calls.**
 
 ### Before Starting Complex Work
 
-Before starting a complex task, check if there's a recent session log to load:
+Sebelum memulai task kompleks, agent WAJIB:
+
+1. **Cek session log terakhir** - Apakah ada checkpoint?
+2. **Save current state** - Jika ada work in progress
+3. **Buat rencana** - Sebelum mulai banyak tool calls
 
 ```
 Found recent session from [date]. Loading context...
 [Summary of last session]
 Ready to continue or start fresh?
+```
+
+### Continuous Save Mindset
+
+```
+SETIAP SAAT = POTENTIAL SAVE POINT
+─────────────────────────────────────────────────────
+Work → Check: 3 calls yet? → Yes → SAVE
+  │
+  ▼
+Work → Check: milestone? → Yes → SAVE
+  │
+  ▼
+Work → Check: output truncated? → Yes → EMERGENCY SAVE
+  │
+  ▼
+Work → Check: 9 calls? → Yes → EMERGENCY SAVE
 ```
 
 ## Continuous Chain Concept

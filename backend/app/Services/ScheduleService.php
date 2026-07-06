@@ -347,6 +347,62 @@ class ScheduleService
     }
 
     /**
+     * Generate meeting sessions using preloaded AcademicYear and holidays.
+     * Optimized for bulk operations (e.g., semester migration) to avoid N+1 queries.
+     */
+    public function generateMeetingSessionsForYear(Schedule $schedule, AcademicYear $academicYear, array $holidayDates): void
+    {
+        $schoolClass = SchoolClass::query()->find($schedule->class_id);
+        if ($schoolClass && $schoolClass->is_published) {
+            return;
+        }
+
+        $startDate = $academicYear->start_date ? $academicYear->start_date->copy()->startOfDay() : null;
+        $endDate = $academicYear->end_date ? $academicYear->end_date->copy()->endOfDay() : null;
+
+        if (! $startDate || ! $endDate) {
+            return;
+        }
+
+        $dayOfWeek = $schedule->day_of_week;
+
+        $existingMax = MeetingSession::query()
+            ->where('schedule_id', $schedule->id)
+            ->max('meeting_number') ?? 0;
+
+        $meetingNumber = $existingMax + 1;
+        $current = $startDate->copy()->modify("next {$dayOfWeek}");
+
+        if ($current->lt($startDate)) {
+            $current->addWeek();
+        }
+
+        $sessionsToInsert = [];
+
+        while ($current->lte($endDate)) {
+            $dateString = $current->toDateString();
+            $status = in_array($dateString, $holidayDates) ? 'holiday' : 'scheduled';
+
+            $sessionsToInsert[] = [
+                'schedule_id' => $schedule->id,
+                'meeting_number' => $meetingNumber,
+                'date' => $dateString,
+                'status' => $status,
+                'notes' => null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+
+            $meetingNumber++;
+            $current->addWeek();
+        }
+
+        if ($sessionsToInsert !== []) {
+            DB::table('meeting_sessions')->insert($sessionsToInsert);
+        }
+    }
+
+    /**
      * Delete uncompleted sessions and regenerate from scratch.
      */
     public function regenerateMeetingSessions(Schedule $schedule): void

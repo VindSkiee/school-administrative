@@ -47,24 +47,55 @@
           <div>
             <label class="block text-sm font-semibold text-gray-700 mb-2">Jenis Penugasan <span class="text-red-500">*</span></label>
             <div class="flex flex-wrap gap-3">
-              <label class="flex-1 min-w-[120px] cursor-pointer">
+              <label class="flex-1 min-w-[100px] cursor-pointer">
                 <input type="radio" v-model="form.type" value="task" class="peer sr-only" required>
                 <div class="p-3 border-2 border-gray-200 rounded-xl text-center text-sm font-bold text-gray-500 peer-checked:border-blue-500 peer-checked:text-blue-600 peer-checked:bg-blue-50 transition-all">
                   Tugas Harian
                 </div>
               </label>
-              <label class="flex-1 min-w-[120px] cursor-pointer">
+              <label class="flex-1 min-w-[100px] cursor-pointer">
+                <input type="radio" v-model="form.type" value="ujian_harian" class="peer sr-only" required>
+                <div class="p-3 border-2 border-gray-200 rounded-xl text-center text-sm font-bold text-gray-500 peer-checked:border-green-500 peer-checked:text-green-600 peer-checked:bg-green-50 transition-all">
+                  Ujian Harian
+                </div>
+              </label>
+              <label class="flex-1 min-w-[100px] cursor-pointer">
                 <input type="radio" v-model="form.type" value="uts" class="peer sr-only" required>
                 <div class="p-3 border-2 border-gray-200 rounded-xl text-center text-sm font-bold text-gray-500 peer-checked:border-brand-orange peer-checked:text-brand-orange peer-checked:bg-orange-50 transition-all">
                   UTS
                 </div>
               </label>
-              <label class="flex-1 min-w-[120px] cursor-pointer">
+              <label class="flex-1 min-w-[100px] cursor-pointer">
                 <input type="radio" v-model="form.type" value="uas" class="peer sr-only" required>
                 <div class="p-3 border-2 border-gray-200 rounded-xl text-center text-sm font-bold text-gray-500 peer-checked:border-brand-red peer-checked:text-brand-red peer-checked:bg-red-50 transition-all">
                   UAS
                 </div>
               </label>
+            </div>
+          </div>
+
+          <div v-if="['ujian_harian', 'uts', 'uas'].includes(form.type)" class="bg-green-50 border border-green-200 rounded-xl p-4">
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" v-model="form.enable_remedial" class="w-4 h-4 text-green-600 rounded border-gray-300 focus:ring-green-500" />
+              <span class="text-sm font-bold text-green-800">Aktifkan Remedial</span>
+            </label>
+            <p class="text-xs text-green-600 mt-1 ml-7">Jika diaktifkan, remedial dapat diberikan kepada siswa yang nilainya di bawah KKM setelah ujian dinilai.</p>
+            <div v-if="form.enable_remedial" class="mt-3 ml-7">
+              <label class="block text-sm font-semibold text-green-800 mb-2">Skor Remedial</label>
+              <div class="flex gap-4">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" v-model="form.remedial_mode" value="replace" class="text-green-600 focus:ring-green-500" />
+                  <span class="text-sm text-gray-700">Ganti (max)</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" v-model="form.remedial_mode" value="average" class="text-green-600 focus:ring-green-500" />
+                  <span class="text-sm text-gray-700">Rata-rata</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" v-model="form.remedial_mode" value="custom" class="text-green-600 focus:ring-green-500" />
+                  <span class="text-sm text-gray-700">Custom</span>
+                </label>
+              </div>
             </div>
           </div>
 
@@ -214,7 +245,7 @@ const showForm = ref(false);
 const assignments = ref([]);
 const isLoading = ref(false);
 const isSubmitting = ref(false);
-const form = ref({ title: '', description: '', due_date: '', type: 'task' });
+const form = ref({ title: '', description: '', due_date: '', type: 'task', enable_remedial: false, remedial_mode: 'replace' });
 const selectedFiles = ref([]);
 
 // STATE DRAG & DROP (Ini yang sebelumnya memicu error)
@@ -223,6 +254,7 @@ const isDragging = ref(false);
 // Badge helper for assignment type
 const getTypeBadge = (type) => {
   switch (type) {
+    case 'ujian_harian': return { label: 'Ujian Harian', classes: 'bg-green-50 text-green-700' };
     case 'uts': return { label: 'UTS', classes: 'bg-brand-orange/10 text-brand-orange' };
     case 'uas': return { label: 'UAS', classes: 'bg-brand-red/10 text-brand-red' };
     default: return { label: 'Tugas Harian', classes: 'bg-blue-50 text-blue-700' };
@@ -310,12 +342,17 @@ const submitAssignment = async () => {
     const formattedDate = form.value.due_date.replace("T", " ") + ":00";
     formData.append("due_date", formattedDate);
 
+    if (form.value.enable_remedial) {
+      formData.append("enable_remedial", "1");
+      formData.append("remedial_mode", form.value.remedial_mode);
+    }
+
     selectedFiles.value.forEach((file) => formData.append("files[]", file));
 
     await assignmentService.createAssignment(formData);
     toastStore.success("Tugas berhasil disebarkan!");
 
-    form.value = { title: "", description: "", due_date: "", type: "task" };
+    form.value = { title: "", description: "", due_date: "", type: "task", enable_remedial: false, remedial_mode: "replace" };
     selectedFiles.value = [];
     fetchAssignments();
   } catch (error) {

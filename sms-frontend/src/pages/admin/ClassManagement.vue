@@ -11,25 +11,6 @@
         </p>
       </div>
       <button
-        @click="openMigrateModal()"
-        class="bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-5 py-2.5 rounded-lg text-sm font-semibold shadow-sm transition-colors flex items-center"
-      >
-        <svg
-          class="w-5 h-5 mr-2 text-brand-orange"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
-          ></path>
-        </svg>
-        {{ migrateButtonLabel }}
-      </button>
-      <button
         @click="exportClassDetailsCsv"
         :disabled="isExportingCsv || isLoading"
         class="bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-5 py-2.5 rounded-lg text-sm font-semibold shadow-sm transition-colors flex items-center disabled:opacity-70"
@@ -683,85 +664,6 @@
       @cancel="teacherConfirmModal.isOpen = false"
     />
 
-    <!-- MODAL: MIGRASI SEMESTER (Ganjil → Genap) -->
-    <BaseModal
-      v-if="isActiveYearOdd"
-      :isOpen="isMigrateModalOpen"
-      title="Migrasi Semester (Ganjil ke Genap)"
-      @close="isMigrateModalOpen = false"
-    >
-      <form id="migrateForm" @submit.prevent="executeMigration" class="space-y-4">
-        <div class="p-3 bg-blue-50 border border-blue-100 rounded-lg">
-          <p class="text-xs text-blue-700 font-medium leading-relaxed">
-            <strong class="font-bold">Info:</strong> Menduplikasi semua kelas dari semester Ganjil ke Genap beserta <strong class="font-bold">Wali Kelas</strong>, <strong class="font-bold">Siswa</strong>, dan <strong class="font-bold">Jadwal Pelajaran</strong>.
-          </p>
-        </div>
-
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1.5">Dari: Tahun Ajaran Asal (Ganjil)</label>
-          <BaseSelect
-            v-model="migrateForm.from_academic_year_id"
-            :options="academicYearOptions"
-            placeholder="Pilih Semester Ganjil..."
-            required
-          />
-        </div>
-
-        <div class="flex justify-center my-2 text-gray-400">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
-        </div>
-
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1.5">Ke: Tahun Ajaran Tujuan (Genap)</label>
-          <BaseSelect
-            v-model="migrateForm.to_academic_year_id"
-            :options="academicYearOptions"
-            placeholder="Pilih Semester Genap..."
-            required
-          />
-        </div>
-      </form>
-      <template #footer>
-        <div class="flex justify-end">
-          <button type="submit" form="migrateForm" :disabled="isSaving || !isMigrateFormDirty" class="px-5 py-2 bg-brand-orange hover:bg-brand-red text-white font-semibold rounded-lg disabled:opacity-70 flex items-center">
-            Mulai Migrasi Massal
-          </button>
-        </div>
-      </template>
-    </BaseModal>
-
-    <!-- MODAL: MIGRASI KELAS (Genap → Tahun Ajaran Baru) -->
-    <BaseModal
-      v-if="isActiveYearEven"
-      :isOpen="isClassMigrationModalOpen"
-      title="Migrasikan Kelas (Kenaikan Kelas)"
-      @close="isClassMigrationModalOpen = false"
-    >
-      <form id="classMigrateForm" @submit.prevent="executeClassMigration" class="space-y-4">
-        <div class="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-          <p class="text-xs text-amber-800 font-medium leading-relaxed">
-            <strong class="font-bold">Peringatan:</strong> Siswa kelas 7 naik ke 8, kelas 8 naik ke 9, dan <strong class="font-bold">kelas 9 akan diluluskan</strong>. Kelas baru dibuat <strong>tanpa</strong> wali kelas dan jadwal. Tahun ajaran baru akan otomatis aktif setelah migrasi berhasil.
-          </p>
-        </div>
-
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1.5">Tahun Ajaran Baru (Tujuan)</label>
-          <BaseSelect
-            v-model="classMigrateForm.to_academic_year_id"
-            :options="classMigrationTargetOptions"
-            placeholder="Pilih tahun ajaran baru..."
-            required
-          />
-        </div>
-      </form>
-      <template #footer>
-        <div class="flex justify-end">
-          <button type="submit" form="classMigrateForm" :disabled="isSaving || !isClassMigrateFormDirty" class="px-5 py-2 bg-brand-red hover:bg-brand-orange text-white font-semibold rounded-lg disabled:opacity-70 flex items-center">
-            {{ isSaving ? 'Memigrasi...' : 'Migrasikan Kelas' }}
-          </button>
-        </div>
-      </template>
-    </BaseModal>
   </div>
 </template>
 
@@ -771,7 +673,6 @@ import { ref, reactive, computed, onMounted, onActivated, watch } from "vue";
 import { useToastStore } from "../../stores/toast";
 import { useGlobalDropdownsStore } from "../../stores/globalDropdowns";
 import { classService } from "../../services/modules/admin/classService";
-import api from "../../services/api"; // Akses langsung untuk route yang belum ada servicenya
 
 // Shared Components
 import BaseSelect from "../../components/BaseSelect.vue";
@@ -803,7 +704,6 @@ const paginationMeta = reactive({
   per_page: 100,
 });
 const academicYearOptions = computed(() => dropdowns.academicYearOptions);
-const allAcademicYearsRaw = computed(() => dropdowns.academicYearsRaw);
 const teacherOptions = computed(() => dropdowns.teacherDropdownOptions);
 
 const classGradeFilter = ref("");
@@ -1007,18 +907,6 @@ const isStudentFormDirty = computed(() => {
     if (!currentSet.has(id)) return true;
   }
   return false;
-});
-
-// Modal 4: Migrasi Semester
-const isMigrateFormDirty = computed(() => {
-  return migrateForm.from_academic_year_id !== "" &&
-    migrateForm.to_academic_year_id !== "" &&
-    migrateForm.from_academic_year_id !== migrateForm.to_academic_year_id;
-});
-
-// Modal 5: Migrasi Kelas
-const isClassMigrateFormDirty = computed(() => {
-  return classMigrateForm.to_academic_year_id !== "";
 });
 
 // --- DATA FETCHING ---
@@ -1446,119 +1334,6 @@ const confirmRemoveStudent = () => {
 const cancelRemoveStudent = () => {
   // Biarkan tetap centang (sudah di-revert via event.target.checked = true)
   removeStudentConfirm.isOpen = false;
-};
-
-// --- MIGRATION MODE COMPUTED ---
-const activeAcademicYear = computed(() => {
-  return allAcademicYearsRaw.value.find(y => y.is_active) || null;
-});
-
-const isActiveYearOdd = computed(() => {
-  return activeAcademicYear.value?.semester === 'odd';
-});
-
-const isActiveYearEven = computed(() => {
-  return activeAcademicYear.value?.semester === 'even';
-});
-
-// Available target years for class migration (inactive years only)
-const classMigrationTargetOptions = computed(() => {
-  return allAcademicYearsRaw.value
-    .filter(y => !y.is_active && y.id !== activeAcademicYear.value?.id)
-    .map(y => ({
-      label: `${y.name} ${y.semester === 'odd' ? '(Ganjil)' : '(Genap)'}`,
-      value: y.id,
-    }));
-});
-
-const canMigrateClass = computed(() => {
-  return isActiveYearEven.value && classMigrationTargetOptions.value.length > 0;
-});
-
-const migrateButtonLabel = computed(() => {
-  if (isActiveYearOdd.value) return 'Migrasi Ganjil ➔ Genap';
-  if (isActiveYearEven.value) return 'Migrasikan Kelas';
-  return 'Migrasi';
-});
-
-// --- STATE MIGRASI ---
-const isMigrateModalOpen = ref(false);
-const isClassMigrationModalOpen = ref(false);
-const migrateForm = reactive({
-  from_academic_year_id: "",
-  to_academic_year_id: ""
-});
-const classMigrateForm = reactive({
-  to_academic_year_id: ""
-});
-
-// --- FUNGSI MIGRASI ---
-const openMigrateModal = () => {
-  if (isActiveYearOdd.value) {
-    // Semester migration mode
-    migrateForm.from_academic_year_id = "";
-    migrateForm.to_academic_year_id = "";
-    isMigrateModalOpen.value = true;
-  } else if (isActiveYearEven.value) {
-    // Class promotion mode
-    if (!canMigrateClass.value) {
-      toastStore.error("Buat tahun ajaran baru terlebih dahulu sebelum melakukan migrasi kelas.");
-      return;
-    }
-    classMigrateForm.to_academic_year_id = "";
-    isClassMigrationModalOpen.value = true;
-  } else {
-    toastStore.error("Tidak ada tahun ajaran aktif untuk migrasi.");
-  }
-};
-
-const executeClassMigration = async () => {
-  if (!classMigrateForm.to_academic_year_id) {
-    toastStore.error("Pilih tahun ajaran tujuan.");
-    return;
-  }
-
-  isSaving.value = true;
-  try {
-    const response = await classService.migrateClass(classMigrateForm);
-    toastStore.success(response.data.message || "Migrasi kelas berhasil!");
-    isClassMigrationModalOpen.value = false;
-
-    // Refresh store for classes + years (migration creates new classes and activates new year)
-    await Promise.all([
-      dropdowns.refreshClasses(),
-      dropdowns.refreshAcademicYears(),
-    ]);
-    await fetchInitialData();
-  } catch (error) {
-    toastStore.error(error.response?.data?.message || "Gagal melakukan migrasi kelas.");
-  } finally {
-    isSaving.value = false;
-  }
-};
-
-const executeMigration = async () => {
-  if (migrateForm.from_academic_year_id === migrateForm.to_academic_year_id) {
-    toastStore.error("Tahun Ajaran asal dan tujuan tidak boleh sama.");
-    return;
-  }
-
-  isSaving.value = true;
-  try {
-    const response = await classService.migrateSemester(migrateForm);
-    toastStore.success(response.data.message || "Migrasi semester berhasil!");
-    isMigrateModalOpen.value = false;
-    // Refresh store for classes + years (semester migration changes both)
-    await Promise.all([
-      dropdowns.refreshClasses(),
-      dropdowns.refreshAcademicYears(),
-    ]);
-    await fetchInitialData();
-  } catch (error) {
-    toastStore.error(error.response?.data?.message || "Gagal melakukan migrasi semester.");
-  } finally {
-    isSaving.value = false;
-  }
 };
 
 onMounted(() => {

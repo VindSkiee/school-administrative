@@ -10,22 +10,30 @@
         </p>
       </div>
       <div
-        class="mt-4 sm:mt-0 px-4 py-2 bg-brand-orange/10 text-brand-orange rounded-lg font-semibold text-sm flex items-center"
+        class="mt-4 sm:mt-0 px-4 py-2 bg-brand-orange/10 text-brand-orange rounded-lg font-semibold text-sm flex flex-col items-start"
       >
-        <svg
-          class="w-4 h-4 mr-2"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
+        <div class="flex items-center">
+          <svg
+            class="w-4 h-4 mr-2"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+            ></path>
+          </svg>
+          T.A: {{ dashboardData.academicYear }}
+        </div>
+        <p
+          v-if="dashboardData.academicYearStartDate"
+          class="text-xs text-gray-500 mt-0.5 ml-6"
         >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-          ></path>
-        </svg>
-        T.A: {{ dashboardData.academicYear }}
+          {{ formatPeriodDate(dashboardData.academicYearStartDate) }} - {{ formatPeriodDate(dashboardData.academicYearEndDate) }}
+        </p>
       </div>
     </div>
 
@@ -262,9 +270,17 @@ const isLoading = ref(true);
 
 const dashboardData = ref({
   academicYear: "Memuat...",
+  academicYearStartDate: null,
+  academicYearEndDate: null,
   stats: { students: 0, teachers: 0, classes: 0 },
   recentActivities: [],
 });
+
+const formatPeriodDate = (dateStr) => {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+};
 
 const fetchDashboardData = async () => {
   isLoading.value = true;
@@ -277,6 +293,8 @@ const fetchDashboardData = async () => {
     // Lakukan mapping dari snake_case (Laravel) ke camelCase (Vue)
     dashboardData.value = {
       academicYear: payload.academic_year || "Tidak ada Tahun Ajaran aktif",
+      academicYearStartDate: payload.academic_year_start_date || null,
+      academicYearEndDate: payload.academic_year_end_date || null,
       stats: {
         students: payload.stats?.students || 0,
         teachers: payload.stats?.teachers || 0,

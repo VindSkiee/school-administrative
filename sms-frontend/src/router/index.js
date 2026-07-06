@@ -109,6 +109,16 @@ const routes = [
         name: "Laporan Akademik",
         component: () => import("../pages/admin/ReportManagement.vue"),
       },
+      {
+        path: "settings/grading",
+        name: "AdminGradingSettings",
+        component: () => import("../pages/principal/PrincipalGradingSettings.vue"),
+      },
+      {
+        path: "migration",
+        name: "AdminStudentMigration",
+        component: () => import("../pages/admin/StudentMigration.vue"),
+      },
     ],
   },
   // --- TEACHER ROUTES ---
@@ -163,6 +173,11 @@ const routes = [
         path: "attendance-recap",
         name: "TeacherAttendanceRecap",
         component: () => import("../pages/teacher/AttendanceRecap.vue"),
+      },
+      {
+        path: "report-management",
+        name: "TeacherReportManagement",
+        component: () => import("../pages/teacher/TeacherReportManagement.vue"),
       },
     ],
   },

@@ -95,6 +95,15 @@
         </span>
       </template>
 
+      <template #cell(period)="{ item }">
+        <div v-if="item.start_date || item.end_date" class="text-xs text-gray-600">
+          <span v-if="item.start_date">{{ formatPeriodDate(item.start_date) }}</span>
+          <span v-if="item.start_date && item.end_date"> - </span>
+          <span v-if="item.end_date">{{ formatPeriodDate(item.end_date) }}</span>
+        </div>
+        <span v-else class="text-xs text-gray-400">-</span>
+      </template>
+
       <template #cell(status)="{ item }">
         <div class="flex flex-col items-center gap-1.5">
           <span
@@ -322,6 +331,7 @@ const tableColumns = [
   { key: "name", label: "Tahun Ajaran" },
   { key: "semester", label: "Semester", align: "center" },
   { key: "phase", label: "Fase", align: "center" },
+  { key: "period", label: "Periode", align: "center" },
   { key: "status", label: "Status", align: "center" },
   { key: "actions", label: "Aksi", align: "center" },
 ];
@@ -354,6 +364,12 @@ const confirmModal = reactive({
 const hasActiveYear = computed(() =>
   academicYears.value.some((ay) => ay.is_active),
 );
+
+const formatPeriodDate = (dateStr) => {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+};
 
 const fetchAcademicYears = async (page = 1) => {
   isLoading.value = true;

@@ -2,13 +2,14 @@
 
 namespace App\Http\Controllers\API\Teacher;
 
-use App\Models\Teacher;
-use App\Models\Schedule;
-use App\Models\Student;
 use App\Models\AcademicYear;
 use App\Models\Assignment;
-use Illuminate\Http\JsonResponse;
+use App\Models\Schedule;
+use App\Models\Student;
+use App\Models\Teacher;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 
 class TeacherDashboardController
 {
@@ -21,8 +22,8 @@ class TeacherDashboardController
         // 1. Cek apakah Guru adalah Wali Kelas
         // PERF FIX: replaced N+1 — use withCount instead of loading all students
         $teacher = Teacher::with(['homeroomClass' => function ($q) {
-                // No additional constraint needed here, just load the relation
-            }])
+            // No additional constraint needed here, just load the relation
+        }])
             ->withCount(['homeroomClass as homeroom_student_count' => function ($q) {
                 // Count via the students pivot — SchoolClass uses belongsToMany
             }])
@@ -38,7 +39,7 @@ class TeacherDashboardController
                 'id' => $teacher->homeroomClass->id,
                 'name' => $teacher->homeroomClass->name,
                 'total_students' => $totalStudents,
-            'academic_year' => $activeYear ? $activeYear->name . ' ' . ($activeYear->semester === 'odd' ? 'Ganjil' : 'Genap') : null,
+                'academic_year' => $activeYear ? $activeYear->name.' '.($activeYear->semester === 'odd' ? 'Ganjil' : 'Genap') : null,
             ];
         }
 
@@ -57,8 +58,8 @@ class TeacherDashboardController
         $classIds = $todaySchedules->pluck('class_id')->unique()->filter();
         $studentCountsByClass = [];
         if ($classIds->isNotEmpty()) {
-            $studentCountsByClass = \Illuminate\Support\Facades\DB::table('class_student')
-                ->select('class_id', \Illuminate\Support\Facades\DB::raw('COUNT(student_id) as cnt'))
+            $studentCountsByClass = DB::table('class_student')
+                ->select('class_id', DB::raw('COUNT(student_id) as cnt'))
                 ->whereIn('class_id', $classIds)
                 ->groupBy('class_id')
                 ->pluck('cnt', 'class_id')
@@ -116,7 +117,9 @@ class TeacherDashboardController
 
         // 5. Kembalikan Response
         return response()->json([
-            'academic_year' => $activeYear ? $activeYear->name . ' ' . ($activeYear->semester === 'odd' ? 'Ganjil' : 'Genap') : null,
+            'academic_year' => $activeYear ? $activeYear->name.' '.($activeYear->semester === 'odd' ? 'Ganjil' : 'Genap') : null,
+            'academic_year_start_date' => $activeYear?->start_date?->format('Y-m-d'),
+            'academic_year_end_date' => $activeYear?->end_date?->format('Y-m-d'),
             'homeroom_class' => $homeroomClass,
             'stats' => [
                 'schedules_today' => $todaySchedulesMapped->count(),

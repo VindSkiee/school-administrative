@@ -6,7 +6,7 @@
           <h1 class="text-2xl md:text-3xl font-bold font-serif">Daftar Tugas</h1>
         </div>
         <p class="text-orange-100 text-sm mt-1 max-w-xl font-medium">
-          Pantau tenggat waktu (deadline) dan jangan sampai ada tugas yang terlewat!
+          Tugas dan Ujian yang ditampilkan adalah hanya pada semester aktif saat ini.
         </p>
       </div>
       <div class="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl items-center justify-center border border-white/30 shrink-0 hidden md:flex">
@@ -106,9 +106,15 @@
                 <span class="px-2 py-0.5 text-[10px] font-bold rounded-lg" :class="getTypeBadge(task.type).classes">
                   {{ getTypeBadge(task.type).label }}
                 </span>
+                <span v-if="task.is_remedial" class="px-2 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-bold rounded-lg uppercase tracking-wider">
+                  Remedial
+                </span>
                 <span class="text-xs font-semibold text-gray-500">Diunggah: {{ formatDate(task.created_at) }}</span>
               </div>
               <h3 class="text-xl font-bold text-gray-800">{{ task.title }}</h3>
+              <p v-if="task.is_remedial" class="text-xs text-amber-600 font-medium mt-1">
+                Tugas remedial ini dikhususkan untuk Anda karena nilai ujian sebelumnya di bawah KKM.
+              </p>
             </div>
             
             <div class="px-3 py-1.5 rounded-lg border flex items-center gap-1.5 text-xs font-bold shrink-0" :class="getDeadlineClass(task.due_date)">
@@ -239,12 +245,14 @@ const tabs = [
 const typeFilters = [
   { id: 'all', label: 'Semua' },
   { id: 'task', label: 'Tugas Harian' },
+  { id: 'ujian_harian', label: 'Ujian Harian' },
   { id: 'uts', label: 'UTS' },
   { id: 'uas', label: 'UAS' },
 ];
 
 const getTypeBadge = (type) => {
   switch (type) {
+    case 'ujian_harian': return { label: 'Ujian Harian', classes: 'bg-green-50 text-green-700' };
     case 'uts': return { label: 'UTS', classes: 'bg-brand-orange/10 text-brand-orange' };
     case 'uas': return { label: 'UAS', classes: 'bg-brand-red/10 text-brand-red' };
     default: return { label: 'Tugas Harian', classes: 'bg-blue-50 text-blue-700' };

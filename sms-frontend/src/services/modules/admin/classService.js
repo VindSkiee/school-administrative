@@ -35,5 +35,11 @@ export const classService = {
     },
     getStudentOptions(classId) {
         return api.get(`/v1/admin/classes/${classId}/student-options`);
+    },
+    getMigrationStudents(classId) {
+        return api.get(`/v1/admin/classes/${classId}/migration-students`);
+    },
+    getMigrationHistory(params = {}) {
+        return api.get('/v1/admin/classes/migration-history', { params });
     }
 };
