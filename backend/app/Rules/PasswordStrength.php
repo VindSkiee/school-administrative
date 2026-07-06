@@ -3,7 +3,7 @@
 namespace App\Rules;
 
 use Closure;
-use Illuminate\Contracts\Validation\ValidationAttribute;
+use Illuminate\Contracts\Validation\ValidationRule;
 
 /**
  * Validates password strength — medium level.
@@ -13,7 +13,7 @@ use Illuminate\Contracts\Validation\ValidationAttribute;
  * - At least 2 of 4 character categories: uppercase, lowercase, digits, special chars
  * - Not a common weak password
  */
-class PasswordStrength implements ValidationAttribute
+class PasswordStrength implements ValidationRule
 {
     private const COMMON_PASSWORDS = [
         'password', 'password123', '12345678', '123456789', '1234567890',
