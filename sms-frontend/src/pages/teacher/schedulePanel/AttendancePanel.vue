@@ -251,6 +251,7 @@ import BaseTable from "../../../components/BaseTable.vue";
 import { useToastStore } from "../../../stores/toast";
 import { attendanceService } from "../../../services/modules/teacher/attendanceService";
 import { useAttendanceDetailStore } from "../../../stores/attendanceDetail";
+import { getStorageUrl } from "../../../utils/fileHelper";
 
 const props = defineProps({
   scheduleId: { type: [String, Number], required: true },
@@ -424,9 +425,7 @@ const previewAttachment = (filePath) => {
     toastStore.error("Siswa tidak menyertakan file lampiran.");
     return;
   }
-  // Sesuaikan dengan URL backend Laravel Anda
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api';
-  window.open(`${baseUrl}/storage/${filePath}`, '_blank');
+  window.open(getStorageUrl(filePath), '_blank');
 };
 
 // Jika user ganti tanggal lewat dropdown/kalender di halaman Detail, kita harus memuat data lagi

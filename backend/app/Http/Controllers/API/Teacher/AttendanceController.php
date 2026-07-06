@@ -127,9 +127,14 @@ class AttendanceController
     {
         $teacherId = auth('api')->user()->id;
 
-        // Tarik jadwal beserta relasi kelas dan mapelnya
-        $schedule = Schedule::with(['schoolClass', 'subject'])
-            ->withCount('meetingSessions as meeting_total')
+        // Resolve active academic year for subject KKM
+        $activeYearId = AcademicYear::where('is_active', true)->value('id');
+
+        // Tarik jadwal beserta relasi kelas dan mapelnya (+ kompetensi/KKM)
+        $schedule = Schedule::with([
+            'schoolClass',
+            'subject' => fn ($q) => $q->with(['competencySettings' => fn ($cq) => $cq->where('academic_year_id', $activeYearId)]),
+        ])->withCount('meetingSessions as meeting_total')
             ->findOrFail($scheduleId);
 
         // Proteksi keamanan: pastikan guru yang mengakses adalah pemilik jadwal ini

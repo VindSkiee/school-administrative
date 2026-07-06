@@ -5,26 +5,26 @@ namespace App\Http\Controllers\Api\Student;
 use App\Http\Controllers\Controller;
 use App\Models\Material;
 use App\Models\Schedule;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class MaterialController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = auth('api')->user();
         $student = $user->student()->with('classes')->first();
 
         // Validasi Status & Kelas Siswa
-        if (!$student || strtolower($student->status) !== 'active') {
+        if (! $student || strtolower($student->status) !== 'active') {
             return response()->json(['error' => 'Akun siswa tidak aktif.'], 403);
         }
 
         $activeClass = $student->classes->first();
-        if (!$activeClass) {
+        if (! $activeClass) {
             return response()->json(['error' => 'Anda tidak terdaftar di kelas aktif manapun.'], 403);
         }
 
@@ -37,9 +37,9 @@ class MaterialController extends Controller
         // Single/double char searches with % prefix cause full table scan
         if ($request->filled('search') && mb_strlen($request->search) >= 3) {
             $search = $request->search;
-            $query->where(function($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('title', 'like', "%{$search}%")
-                  ->orWhere('description', 'like', "%{$search}%");
+                    ->orWhere('description', 'like', "%{$search}%");
             });
         }
 
@@ -70,14 +70,14 @@ class MaterialController extends Controller
 
     public function download(Request $request, string $id)
     {
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = auth('api')->user();
         $student = $user->student()->with('classes')->first();
         $activeClass = $student->classes->first();
 
         $material = Material::with('schedule')->findOrFail($id);
 
-        if (!$activeClass || $material->schedule->class_id !== $activeClass->id) {
+        if (! $activeClass || $material->schedule->class_id !== $activeClass->id) {
             return response()->json(['error' => 'Akses ditolak: Materi ini bukan untuk kelas Anda.'], 403);
         }
 
@@ -87,11 +87,18 @@ class MaterialController extends Controller
         // Pastikan materi memiliki attachments, dan file yang direquest ada di dalam array tersebut
         $attachments = is_string($material->attachments) ? json_decode($material->attachments, true) : $material->attachments;
 
-        if (!$filePath || !is_array($attachments) || !in_array($filePath, $attachments)) {
+        if (! $filePath || ! is_array($attachments) || ! in_array($filePath, $attachments)) {
             return response()->json(['error' => 'File tidak valid atau tidak ditemukan dalam materi ini.'], 404);
         }
 
-        if (!Storage::disk('public')->exists($filePath)) {
+        // Boundary check: ensure path stays within storage disk
+        $storagePath = Storage::disk('public')->path('');
+        $realFilePath = realpath(Storage::disk('public')->path($filePath));
+        if ($realFilePath === false || ! str_starts_with($realFilePath, $storagePath)) {
+            return response()->json(['error' => 'Akses file ditolak.'], 403);
+        }
+
+        if (! Storage::disk('public')->exists($filePath)) {
             return response()->json(['error' => 'File fisik tidak ditemukan di server.'], 404);
         }
 

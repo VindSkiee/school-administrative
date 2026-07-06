@@ -18,14 +18,19 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->configureRateLimiting();
 
-        // In AppServiceProvider::boot() — TEMPORARY, remove after tracing
+        // Slow query logger — redact bindings to prevent sensitive data leakage
         if (app()->environment('local')) {
             \DB::listen(function ($query) {
-                if ($query->time > 100) { // Log queries > 100ms
+                if ($query->time > 100) {
+                    // Redact bindings — replace values with type markers
+                    $redactedBindings = array_map(
+                        fn ($binding) => is_string($binding) ? '[redacted]' : $binding,
+                        $query->bindings
+                    );
                     \Log::warning('SLOW QUERY', [
                         'time_ms' => $query->time,
                         'sql' => $query->sql,
-                        'bindings' => $query->bindings,
+                        'bindings' => $redactedBindings,
                     ]);
                 }
             });

@@ -208,10 +208,11 @@ class ReportCardScenarioSeeder extends Seeder
                 'name' => $data['name'],
                 'email' => $data['email'],
                 'password' => $password,
-                'role' => 'teacher',
                 'is_active' => true,
                 'must_change_password' => false,
             ]);
+            $user->role = 'teacher';
+            $user->save();
 
             $teacher = Teacher::create([
                 'user_id' => $user->id,
@@ -253,10 +254,11 @@ class ReportCardScenarioSeeder extends Seeder
                     'name' => "Siswa {$number} Kelas {$class->name}",
                     'email' => "siswa{$number}@student.sekolah.com",
                     'password' => $password,
-                    'role' => 'student',
                     'is_active' => true,
                     'must_change_password' => false,
                 ]);
+                $user->role = 'student';
+                $user->save();
 
                 $student = Student::create([
                     'user_id' => $user->id,

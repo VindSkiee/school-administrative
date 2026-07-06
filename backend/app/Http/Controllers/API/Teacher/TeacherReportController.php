@@ -122,9 +122,9 @@ class TeacherReportController
                     COUNT(*) AS total
                 FROM attendances a
                 INNER JOIN meeting_sessions ms ON ms.id = a.meeting_session_id
-                WHERE ms.schedule_id IN ('.implode(',', $classScheduleIds->toArray()).')
+                WHERE ms.schedule_id IN ('.implode(',', array_fill(0, $classScheduleIds->count(), '?')).')
                 GROUP BY a.student_id, a.status
-            ');
+            ', $classScheduleIds->toArray());
             $attendanceSummary = collect($attendanceRows)->groupBy('student_id');
         }
 
@@ -138,10 +138,10 @@ class TeacherReportController
                 FROM submissions sub
                 INNER JOIN grades g ON g.submission_id = sub.id
                 INNER JOIN assignments a ON a.id = sub.assignment_id
-                WHERE a.schedule_id IN ('.implode(',', $classScheduleIds->toArray()).')
+                WHERE a.schedule_id IN ('.implode(',', array_fill(0, $classScheduleIds->count(), '?')).')
                 AND g.score IS NOT NULL
                 GROUP BY sub.student_id
-            ');
+            ', $classScheduleIds->toArray());
             $gradeSummary = collect($gradeRows)->keyBy('student_id');
         }
 

@@ -352,7 +352,7 @@ class UserController
         $validated = $request->validate([
             'name' => 'sometimes|string|max:255',
             'email' => 'sometimes|email|unique:users,email,'.$id,
-            'password' => 'sometimes|string|min:8',
+            'password' => ['sometimes', 'string', 'min:8', 'confirmed'],
             'is_active' => 'sometimes|boolean',
             'schedule_replacements' => 'sometimes|array',
             'schedule_replacements.*.schedule_id' => 'required_with:schedule_replacements|integer|exists:schedules,id',

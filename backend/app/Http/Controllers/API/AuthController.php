@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\API;
 
 use App\Models\AcademicYear;
+use App\Models\Schedule;
 use App\Models\User;
+use App\Rules\PasswordStrength;
 use App\Rules\RecaptchaV2;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -112,7 +114,36 @@ class AuthController
             if ($activeYear) {
                 $schedulesQuery->where('academic_year_id', $activeYear->id);
             }
-            $user->teacher->setRelation('schedules', $schedulesQuery->with(['subject', 'schoolClass'])->get());
+            $user->teacher->setRelation('schedules', $schedulesQuery->with(['subject', 'schoolClass', 'academicYear'])->get());
+        }
+
+        // Load student's schedules for the active academic year
+        $studentSchedules = [];
+        if ($user->role === 'student' && $user->student && $activeYear) {
+            $classIds = $user->student->classes()
+                ->where('classes.academic_year_id', $activeYear->id)
+                ->pluck('classes.id');
+
+            $dayOrder = ['monday' => 1, 'tuesday' => 2, 'wednesday' => 3, 'thursday' => 4, 'friday' => 5, 'saturday' => 6, 'sunday' => 7];
+
+            $studentSchedules = Schedule::with(['subject', 'teacher.user', 'schoolClass'])
+                ->where('academic_year_id', $activeYear->id)
+                ->whereIn('class_id', $classIds)
+                ->get()
+                ->sortBy(fn ($s) => [$dayOrder[$s->day_of_week] ?? 8, $s->start_time])
+                ->values()
+                ->map(static function (Schedule $schedule): array {
+                    return [
+                        'id' => $schedule->id,
+                        'day_of_week' => $schedule->day_of_week,
+                        'start_time' => $schedule->start_time,
+                        'end_time' => $schedule->end_time,
+                        'subject_name' => $schedule->subject?->name,
+                        'teacher_name' => $schedule->teacher?->user?->name,
+                        'teacher_id' => $schedule->teacher?->user_id,
+                        'class_name' => $schedule->schoolClass?->name,
+                    ];
+                });
         }
 
         $userData = [
@@ -134,6 +165,9 @@ class AuthController
             'teacher' => $user->teacher,
             'admin' => $user->admin,
             'principal' => $user->principal,
+
+            // Student schedules for active academic year
+            'student_schedules' => $studentSchedules,
         ];
 
         // Format 'grade_history' khusus untuk Role Siswa
@@ -201,9 +235,12 @@ class AuthController
             'email' => 'required|string',
         ]);
 
+        // Always return same response to prevent user enumeration
         $user = $this->resolveUserFromCredential($request->input('email'));
-
         $requiresCaptcha = $user && in_array($user->role, ['admin', 'principal']);
+
+        // Add random delay to prevent timing-based enumeration
+        usleep(random_int(50000, 150000)); // 50-150ms random delay
 
         return response()->json([
             'requires_captcha' => $requiresCaptcha,
@@ -214,7 +251,10 @@ class AuthController
     {
         $validated = $request->validate([
             'current_password' => 'required|string',
-            'new_password' => 'required|string|min:8|confirmed',
+            'new_password' => [
+                'required', 'string', 'min:8', 'confirmed',
+                new PasswordStrength,
+            ],
         ]);
 
         /** @var User $user */

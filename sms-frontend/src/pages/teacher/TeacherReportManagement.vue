@@ -26,18 +26,13 @@
           placeholder="Pilih Tahun Ajaran"
           @update:modelValue="onAcademicYearChange"
         />
-        <p
-          v-if="selectedAcademicYearData"
-          class="text-xs text-gray-500 mt-1"
-        >
-          Periode: {{ formatPeriodDate(selectedAcademicYearData.start_date) }} - {{ formatPeriodDate(selectedAcademicYearData.end_date) }}
+        <p v-if="selectedAcademicYearData" class="text-xs text-gray-500 mt-1">
+          Periode: {{ formatPeriodDate(selectedAcademicYearData.start_date) }} -
+          {{ formatPeriodDate(selectedAcademicYearData.end_date) }}
         </p>
       </div>
 
-      <div
-        v-if="homeroomClass"
-        class="flex items-center gap-2 shrink-0"
-      >
+      <div v-if="homeroomClass" class="flex items-center gap-2 shrink-0">
         <span
           class="px-3 py-2 bg-green-100 text-green-700 text-xs font-bold rounded-lg"
         >
@@ -78,9 +73,7 @@
           ></path>
         </svg>
       </div>
-      <h3 class="text-lg font-bold text-gray-800">
-        Pilih Tahun Ajaran
-      </h3>
+      <h3 class="text-lg font-bold text-gray-800">Pilih Tahun Ajaran</h3>
       <p class="text-gray-500 mt-1 text-sm max-w-md mx-auto">
         Silakan pilih tahun ajaran untuk mengisi catatan wali kelas.
       </p>
@@ -107,9 +100,7 @@
           ></path>
         </svg>
       </div>
-      <h3 class="text-lg font-bold text-gray-800">
-        Tidak Ada Kelas Perwalian
-      </h3>
+      <h3 class="text-lg font-bold text-gray-800">Tidak Ada Kelas Perwalian</h3>
       <p class="text-gray-500 mt-1 text-sm max-w-md mx-auto">
         Anda belum ditetapkan sebagai wali kelas pada tahun ajaran ini.
       </p>
@@ -153,8 +144,12 @@
         </div>
       </div>
 
-      <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-        <div class="p-4 border-b border-gray-100 bg-gray-50/50 flex flex-wrap items-center justify-between gap-3">
+      <div
+        class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden"
+      >
+        <div
+          class="p-4 border-b border-gray-100 bg-gray-50/50 flex flex-wrap items-center justify-between gap-3"
+        >
           <div class="flex items-center gap-2">
             <h3 class="text-sm font-bold text-gray-700">
               Daftar Siswa — {{ homeroomClass.name }}
@@ -167,7 +162,7 @@
               :disabled="isSaving || !hasChanges"
               class="px-4 py-2 bg-brand-red hover:bg-brand-orange text-white text-xs font-bold rounded-lg disabled:opacity-50 transition-colors shadow-sm"
             >
-              {{ isSaving ? 'Menyimpan...' : 'Simpan Semua' }}
+              {{ isSaving ? "Menyimpan..." : "Simpan Semua" }}
             </button>
           </div>
         </div>
@@ -176,25 +171,39 @@
           <table class="w-full text-sm">
             <thead>
               <tr class="bg-gray-50 border-b border-gray-200">
-                <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider w-10">
+                <th
+                  class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider w-10"
+                >
                   No
                 </th>
-                <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider w-24">
+                <th
+                  class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider w-24"
+                >
                   NIS
                 </th>
-                <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                <th
+                  class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider"
+                >
                   Nama Siswa
                 </th>
-                <th class="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase tracking-wider w-28">
+                <th
+                  class="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase tracking-wider w-28"
+                >
                   Rata-rata
                 </th>
-                <th class="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase tracking-wider w-28">
+                <th
+                  class="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase tracking-wider w-28"
+                >
                   Kehadiran
                 </th>
-                <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                <th
+                  class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider"
+                >
                   Catatan Wali Kelas
                 </th>
-                <th class="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase tracking-wider w-20">
+                <th
+                  class="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase tracking-wider w-20"
+                >
                   Aksi
                 </th>
               </tr>
@@ -218,7 +227,11 @@
                   <span
                     v-if="student.average_score != null"
                     class="font-bold"
-                    :class="student.average_score >= 75 ? 'text-green-600' : 'text-red-600'"
+                    :class="
+                      student.average_score >= 75
+                        ? 'text-green-600'
+                        : 'text-red-600'
+                    "
                   >
                     {{ student.average_score.toFixed(1) }}
                   </span>
@@ -239,15 +252,26 @@
                   </span>
                 </td>
                 <td class="px-4 py-3">
-                  <textarea
-                    v-model="student.note"
-                    :disabled="homeroomClass.is_published"
-                    rows="2"
-                    maxlength="500"
-                    placeholder="Tulis catatan untuk siswa ini..."
-                    class="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-red focus:border-brand-red resize-none disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    @input="markChanged(student.id)"
-                  ></textarea>
+                  <div
+                    class="border border-gray-200 bg-white shadow-sm transition hover:shadow-sm"
+                  >
+                    <textarea
+                      v-model="student.note"
+                      :disabled="homeroomClass.is_published"
+                      rows="2"
+                      maxlength="500"
+                      @keydown.enter.prevent
+                      placeholder="Tulis catatan untuk siswa ini..."
+                      class="w-full border-0 bg-transparent px-4 py-3 text-sm text-gray-700 placeholder:text-gray-400 resize-none focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-70"
+                      @input="markChanged(student.id)"
+                    ></textarea>
+
+                    <div class="flex justify-end px-4 pb-2">
+                      <span class="text-[11px] text-gray-400">
+                        {{ student.note?.length || 0 }}/500
+                      </span>
+                    </div>
+                  </div>
                 </td>
                 <td class="px-4 py-3 text-center">
                   <button
@@ -270,10 +294,7 @@
                       ></path>
                     </svg>
                   </button>
-                  <span
-                    v-else
-                    class="text-xs text-gray-400 italic"
-                  >
+                  <span v-else class="text-xs text-gray-400 italic">
                     Belum dipublikasi
                   </span>
                 </td>
@@ -311,13 +332,21 @@ const academicYearOptions = computed(() => {
 });
 
 const selectedAcademicYearData = computed(() => {
-  return academicYears.value.find((ay) => String(ay.id) === String(selectedAcademicYearId.value)) || null;
+  return (
+    academicYears.value.find(
+      (ay) => String(ay.id) === String(selectedAcademicYearId.value),
+    ) || null
+  );
 });
 
 const formatPeriodDate = (dateStr) => {
-  if (!dateStr) return '';
+  if (!dateStr) return "";
   const date = new Date(dateStr);
-  return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+  return date.toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
 };
 
 const hasChanges = computed(() => {
@@ -415,9 +444,7 @@ const downloadPdf = async (studentId) => {
 
     toastStore.success("PDF berhasil diunduh.");
   } catch (error) {
-    toastStore.error(
-      error.response?.data?.message || "Gagal mengunduh PDF.",
-    );
+    toastStore.error(error.response?.data?.message || "Gagal mengunduh PDF.");
   }
 };
 

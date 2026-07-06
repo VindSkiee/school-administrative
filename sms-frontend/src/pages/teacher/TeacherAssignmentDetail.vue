@@ -34,6 +34,9 @@
             <span class="inline-flex items-center mt-2 px-3 py-1 text-xs font-bold rounded-lg" :class="assignmentTypeBadge.classes">
               {{ assignmentTypeBadge.label }}
             </span>
+            <span v-if="isExamType && subjectKKM !== null" class="inline-flex items-center mt-2 ml-2 px-2.5 py-1 text-xs font-bold rounded-lg bg-amber-50 text-amber-700 border border-amber-200">
+              KKM: {{ subjectKKM }}
+            </span>
           </div>
           <div class="flex gap-4 bg-gray-50 p-3 rounded-xl border border-gray-100 w-full md:w-auto">
             <div class="text-center px-4 border-r border-gray-200">
@@ -75,6 +78,7 @@
                 <th class="p-4 font-semibold w-12 text-center">No</th>
                 <th class="p-4 font-semibold">Nama Siswa</th>
                 <th class="p-4 font-semibold">Waktu Pengumpulan</th>
+                <th class="p-4 font-semibold">Terakhir Diubah</th>
                 <th class="p-4 font-semibold text-center">Status</th>
                 <th class="p-4 font-semibold text-center w-32">Nilai</th>
                 <th class="p-4 font-semibold text-right w-40">Aksi</th>
@@ -82,14 +86,21 @@
             </thead>
             <tbody class="divide-y divide-gray-100">
               <tr v-if="!assignment.submissions || assignment.submissions.length === 0">
-                <td colspan="6" class="p-8 text-center text-gray-500">Belum ada siswa yang mengumpulkan tugas ini.</td>
+                <td colspan="7" class="p-8 text-center text-gray-500">Belum ada siswa yang mengumpulkan tugas ini.</td>
               </tr>
               <tr v-for="(sub, index) in assignment.submissions" :key="sub.id" class="hover:bg-gray-50/50 transition-colors">
                 <td class="p-4 text-center text-gray-500 font-medium">{{ index + 1 }}</td>
                 <td class="p-4 font-bold text-gray-800">{{ sub.student?.user?.name || 'Siswa NN' }}</td>
                 <td class="p-4 text-sm text-gray-600">
                   {{ formatDate(sub.submitted_at) }}
-                  <span v-if="isLate(sub.submitted_at)" class="ml-2 px-2 py-0.5 bg-red-100 text-red-600 text-xs font-bold rounded">Terlambat</span>
+                  <span v-if="sub.is_late" class="ml-2 px-2 py-0.5 bg-red-100 text-red-600 text-xs font-bold rounded">Terlambat</span>
+                </td>
+                <td class="p-4 text-sm text-gray-600">
+                  <span v-if="sub.edited_at">
+                    {{ formatDate(sub.edited_at) }}
+                    <span class="text-[10px] text-amber-600 font-semibold">(diedit)</span>
+                  </span>
+                  <span v-else class="text-gray-400">—</span>
                 </td>
                 <td class="p-4 text-center">
                   <span v-if="sub.grade" class="px-3 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full">Sudah Dinilai</span>
@@ -208,6 +219,7 @@
               Buka / Unduh Jawaban
             </a>
             <p class="text-xs text-blue-600 mt-2 text-center">Dikumpulkan: {{ formatDate(activeSubmission.submitted_at) }}</p>
+            <p v-if="activeSubmission.edited_at" class="text-xs text-amber-600 mt-1 text-center font-semibold">Terakhir diubah: {{ formatDate(activeSubmission.edited_at) }}</p>
           </div>
 
           <div>
@@ -254,6 +266,7 @@ import { useRoute } from 'vue-router';
 import { assignmentService } from '../../services/modules/teacher/assignmentService';
 import { useToastStore } from '../../stores/toast';
 import { useReportStatus } from '../../composables/useReportStatus';
+import { getStorageUrl } from '../../utils/fileHelper';
 
 const route = useRoute();
 const toastStore = useToastStore();
@@ -306,16 +319,10 @@ const assignmentTypeBadge = computed(() => {
 const isExamType = computed(() => ['ujian_harian', 'uts', 'uas'].includes(assignment.value?.type));
 const isRemedial = computed(() => assignment.value?.is_remedial === true || assignment.value?.is_remedial === 1);
 
-const isLate = (submitDate) => {
-  if (!assignment.value?.due_date || !submitDate) return false;
-  return new Date(submitDate) > new Date(assignment.value.due_date);
-};
-
-const getStorageUrl = (path) => {
-  if (!path) return '#';
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api';
-  return `${baseUrl}/storage/${path}`;
-};
+const subjectKKM = computed(() => {
+  const settings = assignment.value?.schedule?.subject?.competency_settings;
+  return (Array.isArray(settings) && settings.length > 0) ? settings[0]?.min_score ?? null : null;
+});
 
 const formatDate = (dateString) => {
   if (!dateString) return '-';

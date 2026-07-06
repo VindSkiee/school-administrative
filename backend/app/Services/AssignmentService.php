@@ -47,6 +47,7 @@ class AssignmentService
             throw new HttpException(403, 'Akses ditolak.');
         }
 
+        // Delete assignment attachments
         if (is_array($assignment->attachments)) {
             foreach ($assignment->attachments as $path) {
                 if (Storage::disk('public')->exists($path)) {
@@ -54,6 +55,15 @@ class AssignmentService
                 }
             }
         }
+
+        // Delete student submission files before cascade
+        $submissionPaths = $assignment->submissions()->pluck('file_path')->filter();
+        foreach ($submissionPaths as $path) {
+            if (Storage::disk('public')->exists($path)) {
+                Storage::disk('public')->delete($path);
+            }
+        }
+
         $assignment->delete();
     }
 
@@ -215,17 +225,26 @@ class AssignmentService
         }
 
         $path = $file->store('submissions', 'public');
+        $now = Carbon::now();
+        $isLate = $now->isAfter($assignment->due_date);
 
-        return Submission::query()->updateOrCreate(
-            [
-                'assignment_id' => $assignment->id,
-                'student_id' => $studentId,
-            ],
-            [
+        if ($existingSubmission) {
+            $existingSubmission->update([
                 'file_path' => $path,
-                'submitted_at' => now(),
-            ]
-        );
+                'edited_at' => $now,
+                'is_late' => $existingSubmission->is_late || $isLate,
+            ]);
+
+            return $existingSubmission;
+        }
+
+        return Submission::query()->create([
+            'assignment_id' => $assignment->id,
+            'student_id' => $studentId,
+            'file_path' => $path,
+            'submitted_at' => $now,
+            'is_late' => $isLate,
+        ]);
     }
 
     /**

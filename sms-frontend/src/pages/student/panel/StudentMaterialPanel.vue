@@ -38,7 +38,7 @@
     </div>
 
     <div
-      class="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 flex flex-col sm:flex-row gap-4"
+      class="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 flex flex-col sm:flex-row gap-4 items-center"
     >
       <div class="relative flex-1">
         <div
@@ -91,6 +91,19 @@
               stroke-width="2"
               d="M6 18L18 6M6 6l12 12"
             ></path>
+          </svg>
+        </button>
+      </div>
+
+      <div class="flex items-center gap-2 shrink-0">
+        <button
+          @click="refresh"
+          :disabled="isRefreshing"
+          class="p-2 rounded-xl hover:bg-gray-100 transition-colors disabled:opacity-50"
+          title="Refresh data"
+        >
+          <svg :class="{ 'animate-spin': isRefreshing }" class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
         </button>
       </div>
@@ -260,6 +273,8 @@ import { ref, onMounted } from "vue";
 import { studentMaterialService } from "../../../services/modules/student/materialService";
 import { useToastStore } from "../../../stores/toast";
 import BasePopoverInfo from "../../../components/BasePopoverInfo.vue";
+import { getStorageUrl } from "../../../utils/fileHelper";
+import { useAutoRefresh } from "../../../composables/useAutoRefresh";
 
 const props = defineProps({
   scheduleId: { type: [String, Number], required: true },
@@ -270,6 +285,17 @@ const toastStore = useToastStore();
 const materials = ref([]);
 const isLoading = ref(true);
 const isDownloading = ref(null);
+
+// AUTO REFRESH
+const formatTimeAgo = (date) => {
+  if (!date) return '';
+  const seconds = Math.floor((new Date() - date) / 1000);
+  if (seconds < 60) return `${seconds}d lalu`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m lalu`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}j lalu`;
+};
 
 // Fitur Filter
 const searchQuery = ref("");
@@ -288,8 +314,6 @@ const formatDate = (dateString) => {
 const fetchMaterials = async () => {
   isLoading.value = true;
   try {
-    // Meminta backend untuk mengambil materi spesifik untuk Mata Pelajaran ini
-    // KITA TIDAK LAGI mengirim `date: props.selectedDate` agar semua materi semester ini ditarik
     const params = {
       schedule_id: props.scheduleId,
       search: searchQuery.value || undefined,
@@ -299,8 +323,6 @@ const fetchMaterials = async () => {
     const res = await studentMaterialService.getMaterials(params);
     const dataList = res.data.data || res.data;
 
-    // PERF FIX: removed redundant client-side sort — backend already returns data ordered.
-    // Sort direction (DESC = newest first) is handled entirely by the backend ORDER BY clause.
     materials.value = dataList;
   } catch (error) {
     toastStore.error("Gagal memuat pustaka materi sesi ini.");
@@ -308,6 +330,9 @@ const fetchMaterials = async () => {
     isLoading.value = false;
   }
 };
+
+// AUTO REFRESH: refresh on tab focus + manual refresh
+const { refresh, lastRefreshed, isRefreshing } = useAutoRefresh(fetchMaterials);
 
 // DEBOUNCE PENCARIAN (Menunggu 500ms setelah user berhenti mengetik)
 const onSearchInput = () => {
@@ -330,8 +355,7 @@ const resetFilters = () => {
 
 const previewMaterial = (filePath) => {
   if (!filePath) return;
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api';
-  window.open(`${baseUrl}/storage/${filePath}`, "_blank");
+  window.open(getStorageUrl(filePath), "_blank");
 };
 
 // Aksi Download (Membutuhkan 4 parameter sekarang)

@@ -15,7 +15,7 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
         then: function () {
             // 1. Route Auth (Public & Semi-Protected)
-            Route::middleware('api')
+            Route::middleware(['api', 'throttle:auth-api'])
                 ->prefix('api/v1/auth')
                 ->group(base_path('routes/api/v1/auth.php'));
 

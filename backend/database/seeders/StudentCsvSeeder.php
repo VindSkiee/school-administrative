@@ -81,11 +81,14 @@ class StudentCsvSeeder extends Seeder
             $user = User::firstOrCreate(
                 ['email' => $email],
                 [
-                    'name' => $name, // Menggunakan nama random
+                    'name' => $name,
                     'password' => $defaultPassword,
-                    'role' => 'student',
                 ]
             );
+            if ($user->wasRecentlyCreated || $user->role !== 'student') {
+                $user->role = 'student';
+                $user->save();
+            }
 
             // 5. Buat Profil Student
             $student = Student::firstOrCreate(

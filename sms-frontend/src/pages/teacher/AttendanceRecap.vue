@@ -250,13 +250,14 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useToastStore } from "../../stores/toast";
 import { attendanceRecapService } from "../../services/modules/teacher/attendanceRecapService";
 import api from "../../services/api";
 import BaseSelect from "../../components/BaseSelect.vue";
 import BasePopoverInfo from "../../components/BasePopoverInfo.vue";
 
+const route = useRoute();
 const router = useRouter();
 const toastStore = useToastStore();
 
@@ -435,6 +436,15 @@ onMounted(async () => {
 watch(selectedAcademicYearId, () => {
   fetchRecap();
 });
+
+watch(
+  () => route.name,
+  (newName) => {
+    if (newName === "TeacherAttendanceRecap") {
+      fetchRecap();
+    }
+  },
+);
 </script>
 
 <style scoped>

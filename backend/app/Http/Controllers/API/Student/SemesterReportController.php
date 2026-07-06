@@ -36,12 +36,14 @@ class SemesterReportController
             ->orderBy('id', 'desc')
             ->get(['id', 'name', 'semester', 'is_active', 'is_report_published']);
 
-        // Attach per-class is_published status for the student
-        $years->each(function ($year) use ($student) {
-            $class = $student->classes()
-                ->where('classes.academic_year_id', $year->id)
-                ->first();
-            $year->is_class_published = $class?->is_published ?? false;
+        // PERF FIX: replaced N+1 — load all student classes in one query, then match in PHP
+        $classByYear = $student->classes()
+            ->select('classes.academic_year_id', 'classes.is_published')
+            ->get()
+            ->keyBy('academic_year_id');
+
+        $years->each(function ($year) use ($classByYear) {
+            $year->is_class_published = $classByYear->get($year->id)?->is_published ?? false;
         });
 
         return response()->json(['data' => $years]);

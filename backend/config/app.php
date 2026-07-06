@@ -56,6 +56,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Admin Secret Key
+    |--------------------------------------------------------------------------
+    |
+    | This key is required when creating a new admin user via the API.
+    | It prevents unauthorized admin account creation.
+    |
+    */
+
+    'admin_secret_key' => env('ADMIN_SECRET_KEY', ''),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

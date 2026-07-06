@@ -305,8 +305,9 @@ const downloadRapor = async () => {
 };
 
 onMounted(async () => {
-  await loadAcademicYears();
-  await loadPageData();
+  // PERF FIX: fire both requests in parallel — loadPageData defaults to active year on backend
+  loadAcademicYears();
+  loadPageData();
 });
 </script>
 

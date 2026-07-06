@@ -46,10 +46,6 @@ return [
             'driver' => 'sanctum',
             'provider' => 'users',
         ],
-        'sanctum' => [
-            'driver' => 'sanctum',
-            'provider' => 'users',
-        ],
     ],
 
     /*
@@ -122,6 +118,6 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
-    'default_user_password' => env('DEFAULT_USER_PASSWORD', 'password123'),
+    'default_user_password' => env('DEFAULT_USER_PASSWORD'),
 
 ];

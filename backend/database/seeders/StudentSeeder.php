@@ -45,8 +45,9 @@ class StudentSeeder extends Seeder
                     'name' => $name,
                     'email' => $email,
                     'password' => $defaultPassword,
-                    'role' => 'student',
                 ]);
+                $user->role = 'student';
+                $user->save();
 
                 // 4. Buat Profil Student (NIS & NISN Acak)
                 $student = Student::create([

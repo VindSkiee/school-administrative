@@ -35,7 +35,7 @@ class AssignmentController
 
         // 1. Ambil tugas berdasarkan kelas aktif siswa
         $query = Assignment::with([
-            'schedule.subject',
+            'schedule.subject' => fn ($q) => $q->with(['competencySettings' => fn ($cq) => $cq->where('academic_year_id', $activeYearId)]),
             'schedule.teacher.user',
             'submissions' => function ($q) use ($student) {
                 $q->where('student_id', $student->user_id)->with('grade');

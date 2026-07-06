@@ -51,7 +51,7 @@
       </div>
     </div>
 
-    <div class="flex overflow-x-auto hide-scrollbar gap-2 pb-2">
+    <div class="flex overflow-x-auto hide-scrollbar gap-2 pb-2 items-center">
       <button 
         v-for="tf in typeFilters" :key="tf.id"
         @click="filterType = tf.id"
@@ -60,6 +60,21 @@
       >
         {{ tf.label }}
       </button>
+
+      <div class="flex-1"></div>
+
+      <div class="flex items-center gap-2 shrink-0">
+        <button
+          @click="refresh"
+          :disabled="isRefreshing"
+          class="p-2 rounded-xl hover:bg-gray-100 transition-colors disabled:opacity-50"
+          title="Refresh data"
+        >
+          <svg :class="{ 'animate-spin': isRefreshing }" class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </button>
+      </div>
     </div>
 
     <div class="flex overflow-x-auto hide-scrollbar gap-2 pb-2">
@@ -105,6 +120,9 @@
                 </span>
                 <span class="px-2 py-0.5 text-[10px] font-bold rounded-lg" :class="getTypeBadge(task.type).classes">
                   {{ getTypeBadge(task.type).label }}
+                </span>
+                <span v-if="['ujian_harian', 'uts', 'uas'].includes(task.type) && getSubjectKKM(task) !== null" class="px-2 py-0.5 bg-amber-50 text-amber-700 text-[10px] font-bold rounded-lg border border-amber-200">
+                  KKM: {{ getSubjectKKM(task) }}
                 </span>
                 <span v-if="task.is_remedial" class="px-2 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-bold rounded-lg uppercase tracking-wider">
                   Remedial
@@ -186,18 +204,29 @@
             <div v-if="!selectedFile" class="pointer-events-none">
               <div class="w-12 h-12 bg-white rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-gray-400"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg></div>
               <p class="text-sm text-gray-600 font-medium mb-1"><span class="text-brand-orange font-bold">Pilih File</span> atau seret ke sini</p>
-              <p class="text-xs text-gray-400">Maks 10MB</p>
+              <p class="text-xs text-gray-400">PDF, DOC, DOCX, ZIP, PNG, JPG, JPEG (Maks 10MB)</p>
             </div>
             <div v-else class="pointer-events-none flex flex-col items-center">
               <div class="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3 text-brand-orange"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
               <p class="text-sm font-bold text-gray-800 break-all">{{ selectedFile.name }}</p>
             </div>
           </div>
+          <!-- Upload Progress Bar -->
+          <div v-if="isSubmitting && uploadProgress > 0" class="mt-4">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-semibold text-gray-600">Mengunggah jawaban...</span>
+              <span class="text-xs font-bold text-brand-orange">{{ uploadProgress }}%</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-1.5">
+              <div class="bg-brand-orange h-1.5 rounded-full transition-all duration-300" :style="{ width: uploadProgress + '%' }"></div>
+            </div>
+          </div>
+
           <div class="mt-6 flex justify-end gap-3">
             <button @click="closeModal" class="px-5 py-2.5 text-sm font-bold text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">Batal</button>
             <button @click="submitTask" :disabled="!selectedFile || isSubmitting" class="px-6 py-2.5 bg-brand-orange hover:bg-orange-600 text-white text-sm font-bold rounded-xl shadow-sm disabled:opacity-50 flex items-center gap-2">
               <svg v-if="isSubmitting" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
-              {{ isSubmitting ? 'Mengirim...' : 'Kirim Jawaban' }}
+              {{ isSubmitting ? (uploadProgress > 0 ? `Mengirim... ${uploadProgress}%` : 'Mengirim...') : 'Kirim Jawaban' }}
             </button>
           </div>
         </div>
@@ -214,6 +243,8 @@ import { useToastStore } from '../../stores/toast';
 import BaseSelect from '../../components/BaseSelect.vue';
 import BasePopoverInfo from '../../components/BasePopoverInfo.vue';
 import { useReportStatus } from '../../composables/useReportStatus';
+import { getStorageUrl } from '../../utils/fileHelper';
+import { useAutoRefresh } from '../../composables/useAutoRefresh';
 
 const router = useRouter();
 const route = useRoute();
@@ -223,6 +254,17 @@ const { isReportPublished, publishedAt } = useReportStatus('student');
 // STATE UTAMA
 const allAssignments = ref([]); // Data mentah dari API
 const isLoading = ref(true);
+
+// AUTO REFRESH
+const formatTimeAgo = (date) => {
+  if (!date) return '';
+  const seconds = Math.floor((new Date() - date) / 1000);
+  if (seconds < 60) return `${seconds}d lalu`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m lalu`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}j lalu`;
+};
 
 // FILTER STATE
 const searchQuery = ref('');
@@ -259,9 +301,15 @@ const getTypeBadge = (type) => {
   }
 };
 
+const getSubjectKKM = (task) => {
+  const settings = task?.schedule?.subject?.competency_settings;
+  return (Array.isArray(settings) && settings.length > 0) ? settings[0]?.min_score ?? null : null;
+};
+
 // MODAL STATE
 const showModal = ref(false);
 const isSubmitting = ref(false);
+const uploadProgress = ref(0);
 const activeTask = ref(null);
 const selectedFile = ref(null);
 
@@ -304,6 +352,9 @@ const fetchAssignments = async () => {
     isLoading.value = false;
   }
 };
+
+// AUTO REFRESH: refresh on tab focus + manual refresh
+const { refresh, lastRefreshed, isRefreshing } = useAutoRefresh(fetchAssignments);
 
 const onSearchInput = () => { clearTimeout(searchTimeout); searchTimeout = setTimeout(fetchAssignments, 500); };
 const clearDate = () => { filterDate.value = ''; fetchAssignments(); };
@@ -365,7 +416,7 @@ const goToMaterial = (scheduleId) => {
 };
 
 // MODAL UPLOAD ACTIONS
-const previewAttachment = (filePath) => window.open(`${import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api'}/storage/${filePath}`, '_blank');
+const previewAttachment = (filePath) => window.open(getStorageUrl(filePath), '_blank');
 const openModal = (task) => { activeTask.value = task; selectedFile.value = null; showModal.value = true; };
 const closeModal = () => { showModal.value = false; activeTask.value = null; selectedFile.value = null; };
 
@@ -379,16 +430,26 @@ const handleFileUpload = (e) => {
 const submitTask = async () => {
   if (!selectedFile.value || !activeTask.value) return;
   isSubmitting.value = true;
+  uploadProgress.value = 0;
   try {
-    const fd = new FormData(); fd.append('file', selectedFile.value);
-    await studentAssignmentService.submitAssignment(activeTask.value.id, fd);
+    const fd = new FormData();
+    fd.append('file', selectedFile.value);
+    await studentAssignmentService.submitAssignment(activeTask.value.id, fd, {
+      onUploadProgress: (e) => {
+        if (e.total) {
+          uploadProgress.value = Math.round((e.loaded * 100) / e.total);
+        }
+      },
+    });
     toastStore.success("Jawaban tugas berhasil dikirim!");
     closeModal();
     fetchAssignments();
   } catch (error) {
-    toastStore.error(error.response?.data?.error || "Gagal mengirim jawaban.");
+    const msg = error.response?.data?.error || error.response?.data?.message || "Gagal mengirim jawaban. Periksa koneksi dan coba lagi.";
+    toastStore.error(msg);
   } finally {
     isSubmitting.value = false;
+    uploadProgress.value = 0;
   }
 };
 

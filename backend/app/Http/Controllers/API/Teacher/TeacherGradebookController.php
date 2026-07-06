@@ -12,6 +12,8 @@ use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\Subject;
 use App\Models\Submission;
+use App\Models\User;
+use App\Notifications\SubmissionGraded;
 use App\Services\GradeAggregationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -393,6 +395,12 @@ class TeacherGradebookController
                 'graded_by' => $teacherId,
             ]
         );
+
+        // Send notification to student
+        $studentUser = User::find($studentId);
+        if ($studentUser && $score !== null) {
+            $studentUser->notify(new SubmissionGraded($assignment, $score));
+        }
 
         // PERF FIX: Invalidate gradebook cache for this schedule
         Cache::forget("gradebook_{$assignment->schedule_id}_{$assignment->schedule->academic_year_id}");

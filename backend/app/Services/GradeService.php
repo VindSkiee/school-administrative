@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Grade;
 use App\Models\Submission;
 use App\Notifications\SubmissionGraded;
+use Illuminate\Support\Facades\Cache;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class GradeService
@@ -38,6 +39,12 @@ class GradeService
 
         $studentUser = $submission->student->user;
         $studentUser->notify(new SubmissionGraded($submission->assignment, $data['score']));
+
+        // Invalidate gradebook cache for this schedule
+        Cache::forget("gradebook_{$schedule->id}_{$schedule->academic_year_id}");
+
+        // Invalidate homeroom recap cache for this class
+        Cache::forget("homeroom_recap_{$schedule->class_id}_{$schedule->academic_year_id}");
 
         return $grade;
     }

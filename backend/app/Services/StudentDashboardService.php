@@ -49,11 +49,12 @@ class StudentDashboardService
                 ];
             });
 
-        // 3. Tugas dengan Tenggat Waktu Terdekat (Belum dikerjakan)
+        // 3. Tugas dengan Tenggat Waktu Terdekat (Belum dikerjakan, exclude remedial)
         $deadlineAssignments = Assignment::with(['schedule.subject'])
             ->whereHas('schedule', function ($query) use ($activeClassId) {
                 $query->where('class_id', $activeClassId);
             })
+            ->whereNull('linked_assignment_id')
             ->where('due_date', '>', now())
             ->whereDoesntHave('submissions', function ($query) use ($student) {
                 $query->where('student_id', $student->user_id);

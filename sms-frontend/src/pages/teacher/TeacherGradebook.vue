@@ -337,6 +337,7 @@
           :suppressMovableColumns="false"
           :rowSelection="'single'"
           :getRowClass="getRowClass"
+          :components="{ RemedialCellRenderer }"
           @cell-value-changed="onCellValueChanged"
           @grid-ready="onGridReady"
           style="width: 100%; height: 100%"
@@ -376,6 +377,7 @@ import {
   ColumnAutoSizeModule, 
   RowSelectionModule,
   NumberEditorModule,
+  RowStyleModule,
 } from 'ag-grid-community';
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
@@ -384,6 +386,7 @@ import { useToastStore } from "../../stores/toast";
 import { useReportStatus } from "../../composables/useReportStatus";
 import BaseSelect from "../../components/BaseSelect.vue";
 import BasePopoverInfo from "../../components/BasePopoverInfo.vue";
+import RemedialCellRenderer from "../../components/RemedialCellRenderer.vue";
 import api from "../../services/api";
 
 ModuleRegistry.registerModules([
@@ -392,6 +395,7 @@ ModuleRegistry.registerModules([
   ColumnAutoSizeModule, 
   RowSelectionModule,
   NumberEditorModule,
+  RowStyleModule,
 ]);
 
 const toastStore = useToastStore();
@@ -668,22 +672,17 @@ const columnDefs = computed(() => {
         if (val >= 75) return { textAlign: "center", color: "#16a34a" };
         return { textAlign: "center", color: "#E02E2B" };
       },
+      // Cell renderer: tampilan remedial dengan nilai asli sebagai sub-text
+      ...(hasRemedial ? {
+        cellRenderer: "RemedialCellRenderer",
+        cellRendererParams: {
+          assignment,
+          remedialByParent: remedialByParent.value,
+        },
+      } : {}),
       valueFormatter: (params) => {
         const val = params.value;
         if (val == null) return "—";
-        // Tampilkan nilai asli jika ada remedial
-        if (hasRemedial) {
-          const remedialAssignments = remedialByParent.value[assignment.id] || [];
-          const rem = remedialAssignments[0];
-          if (rem) {
-            const remScore = params.data?.assignments?.[rem.id];
-            if (remScore != null) {
-              const mode = params.data?.remedial_modes?.[assignment.id] || "replace";
-              const modeLabel = mode === "replace" ? "Ganti" : mode === "average" ? "Rata-rata" : "Manual";
-              return `${val} (remedial: ${modeLabel})`;
-            }
-          }
-        }
         return String(val);
       },
       cellEditorSelector: () => {

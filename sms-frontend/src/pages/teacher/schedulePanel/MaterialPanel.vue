@@ -192,13 +192,24 @@
             </div>
           </div>
 
+          <!-- Upload Progress Bar -->
+          <div v-if="isSubmitting && uploadProgress > 0" class="pt-2">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-semibold text-gray-600">Mengunggah materi...</span>
+              <span class="text-xs font-bold text-brand-red">{{ uploadProgress }}%</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-1.5">
+              <div class="bg-brand-red h-1.5 rounded-full transition-all duration-300" :style="{ width: uploadProgress + '%' }"></div>
+            </div>
+          </div>
+
           <div class="flex justify-end pt-2">
             <button
               type="submit"
               :disabled="isSubmitting || selectedFiles.length === 0"
               class="px-6 py-2.5 bg-brand-red hover:bg-brand-orange text-white rounded-xl text-sm font-bold shadow-sm transition-colors disabled:opacity-50"
             >
-              {{ isSubmitting ? "Mengunggah..." : "🚀 Unggah Materi" }}
+              {{ isSubmitting ? (uploadProgress > 0 ? `Mengunggah... ${uploadProgress}%` : "Mengunggah...") : "🚀 Unggah Materi" }}
             </button>
           </div>
         </form>
@@ -296,6 +307,7 @@
 import { ref, onMounted, watch } from "vue";
 import { materialService } from "../../../services/modules/teacher/materialService";
 import { useToastStore } from "../../../stores/toast";
+import { getStorageUrl } from "../../../utils/fileHelper";
 
 const props = defineProps({
   scheduleId: { type: [String, Number], required: true },
@@ -309,6 +321,7 @@ const showForm = ref(false);
 const materials = ref([]);
 const isLoading = ref(false);
 const isSubmitting = ref(false);
+const uploadProgress = ref(0);
 
 const form = ref({
   title: "",
@@ -353,10 +366,6 @@ const removeFile = (index) => {
 };
 
 // ----------------- HELPER -----------------
-const getStorageUrl = (path) => {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api';
-  return `${baseUrl}/storage/${path}`;
-};
 
 const getFileName = (path) => {
   if (!path) return "Dokumen";
@@ -384,6 +393,7 @@ const submitMaterial = async () => {
   if (selectedFiles.value.length === 0) return;
 
   isSubmitting.value = true;
+  uploadProgress.value = 0;
   try {
     const formData = new FormData();
     formData.append("schedule_id", props.scheduleId);
@@ -397,7 +407,13 @@ const submitMaterial = async () => {
       formData.append("files[]", file);
     });
 
-    await materialService.uploadMaterial(formData);
+    await materialService.uploadMaterial(formData, {
+      onUploadProgress: (e) => {
+        if (e.total) {
+          uploadProgress.value = Math.round((e.loaded * 100) / e.total);
+        }
+      },
+    });
 
     toastStore.success("Materi berhasil diunggah!");
 
@@ -407,11 +423,11 @@ const submitMaterial = async () => {
 
     fetchMaterials();
   } catch (error) {
-    toastStore.error(
-      error.response?.data?.message || "Gagal mengunggah materi.",
-    );
+    const msg = error.response?.data?.message || error.response?.data?.error || "Gagal mengunggah materi. Periksa koneksi dan coba lagi.";
+    toastStore.error(msg);
   } finally {
     isSubmitting.value = false;
+    uploadProgress.value = 0;
   }
 };
 

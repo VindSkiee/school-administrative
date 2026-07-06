@@ -19,26 +19,39 @@
     </div>
 
     <div class="bg-white p-2 rounded-2xl shadow-sm border border-gray-200">
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-        <button
-          v-for="tab in tabs"
-          :key="tab.id"
-          @click="currentFilter = tab.id"
-          class="w-full px-6 py-2 rounded-xl text-sm font-semibold transition-all"
-          :class="
-            currentFilter === tab.id
-              ? 'bg-brand-red text-white shadow-sm'
-              : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
-          "
-        >
-          <div class="flex flex-col items-center">
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+        <div class="flex flex-1 overflow-x-auto hide-scrollbar gap-2">
+          <button
+            v-for="tab in tabs"
+            :key="tab.id"
+            @click="currentFilter = tab.id"
+            class="px-5 py-2 rounded-xl text-sm font-semibold transition-all whitespace-nowrap"
+            :class="
+              currentFilter === tab.id
+                ? 'bg-brand-red text-white shadow-sm'
+                : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+            "
+          >
             <span>{{ tab.label }}</span>
-
-            <span v-if="tab.id !== 'all'" class="text-xs mt-1 opacity-80">
-              {{ getCountByFilter(tab.id) }}
+            <span v-if="tab.id !== 'all'" class="ml-1.5 text-xs opacity-80">
+              ({{ getCountByFilter(tab.id) }})
             </span>
-          </div>
-        </button>
+          </button>
+        </div>
+        <div class="flex gap-2 shrink-0">
+          <BaseSelect
+            v-model="filterType"
+            :options="typeOptions"
+            placeholder="Semua Tipe"
+            class="w-40"
+          />
+          <BaseSelect
+            v-model="filterClass"
+            :options="classOptions"
+            placeholder="Semua Kelas"
+            class="w-40"
+          />
+        </div>
       </div>
     </div>
 
@@ -72,10 +85,10 @@
       <h3 class="text-xl font-bold text-gray-800 mb-2">Tidak Ada Tugas</h3>
       <p class="text-gray-500">
         {{
-          currentFilter === "active"
-            ? "Tidak ada tugas yang sedang berjalan saat ini."
-            : currentFilter === "closed"
-              ? "Belum ada riwayat tugas yang sudah ditutup."
+          currentFilter === "belum_graded"
+            ? "Semua tugas sudah dinilai."
+            : currentFilter === "sudah_graded"
+              ? "Belum ada tugas yang semua pengumpulannya sudah dinilai."
               : "Anda belum menyebarkan tugas apa pun ke kelas-kelas Anda."
         }}
       </p>
@@ -85,12 +98,7 @@
       <div
         v-for="item in filteredAssignments"
         :key="item.id"
-        class="bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-lg transition-all flex flex-col overflow-hidden group"
-        :class="
-          isClosed(item.due_date)
-            ? 'opacity-90 hover:opacity-100'
-            : 'hover:border-brand-red/30'
-        "
+        class="bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-lg hover:border-brand-red/30 transition-all flex flex-col overflow-hidden group"
       >
         <div
           class="p-5 border-b border-gray-100 bg-gray-50/50 flex justify-between items-start gap-2"
@@ -114,14 +122,22 @@
             </div>
           </div>
           <span
-            :class="
-              isClosed(item.due_date)
-                ? 'bg-gray-100 text-gray-600 border-gray-200'
-                : 'bg-green-50 text-green-600 border-green-200'
-            "
-            class="px-2.5 py-1 text-[10px] font-bold uppercase rounded-lg border whitespace-nowrap"
+            v-if="item.submissions_count > 0 && (item.submissions_graded_count || 0) >= item.submissions_count"
+            class="px-2.5 py-1 text-[10px] font-bold uppercase rounded-lg border whitespace-nowrap bg-green-50 text-green-600 border-green-200"
           >
-            {{ isClosed(item.due_date) ? "Selesai / Ditutup" : "Aktif" }}
+            Selesai
+          </span>
+          <span
+            v-else-if="item.submissions_count > 0"
+            class="px-2.5 py-1 text-[10px] font-bold uppercase rounded-lg border whitespace-nowrap bg-amber-50 text-amber-600 border-amber-200"
+          >
+            Perlu Nilai
+          </span>
+          <span
+            v-else
+            class="px-2.5 py-1 text-[10px] font-bold uppercase rounded-lg border whitespace-nowrap bg-blue-50 text-blue-600 border-blue-200"
+          >
+            Belum Ada
           </span>
         </div>
 
@@ -136,20 +152,6 @@
           <div
             class="mt-4 bg-gray-50 p-3 rounded-xl border border-gray-100 flex-1 flex flex-col justify-center"
           >
-            <div class="flex justify-between items-center text-sm mb-2">
-              <span class="text-gray-500">Tenggat Waktu:</span>
-              <span
-                class="font-bold"
-                :class="
-                  isClosed(item.due_date) ? 'text-red-600' : 'text-gray-800'
-                "
-              >
-                {{ formatDate(effectiveDeadline(item.due_date)) }}
-              </span>
-              <p v-if="isReportPublished" class="text-[10px] text-amber-600 font-semibold mt-1">
-                Dikunci saat penerbitan rapor
-              </p>
-            </div>
             <div class="flex justify-between items-center text-sm">
               <span class="text-gray-500">Terkumpul:</span>
               <span
@@ -163,35 +165,28 @@
                 {{ item.submissions_count || 0 }} Siswa
               </span>
             </div>
+            <div v-if="item.submissions_count > 0" class="flex justify-between items-center text-sm mt-1.5">
+              <span class="text-gray-500">Dinilai:</span>
+              <span
+                class="font-bold"
+                :class="
+                  (item.submissions_graded_count || 0) >= item.submissions_count
+                    ? 'text-green-600'
+                    : 'text-amber-600'
+                "
+              >
+                {{ item.submissions_graded_count || 0 }} / {{ item.submissions_count }}
+              </span>
+            </div>
           </div>
         </div>
 
         <div class="p-5 pt-0 mt-auto">
           <button
             @click="goToDetail(item.id)"
-            :class="
-              isClosed(item.due_date)
-                ? 'bg-gray-800 hover:bg-gray-900'
-                : 'bg-brand-red hover:bg-brand-orange'
-            "
-            class="w-full py-2.5 text-white text-sm font-bold rounded-xl shadow-sm transition-colors flex justify-center items-center gap-2"
+            class="w-full py-2.5 bg-brand-red hover:bg-brand-orange text-white text-sm font-bold rounded-xl shadow-sm transition-colors flex justify-center items-center gap-2"
           >
             <svg
-              v-if="isClosed(item.due_date)"
-              class="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
-              ></path>
-            </svg>
-            <svg
-              v-else
               class="w-4 h-4"
               fill="none"
               stroke="currentColor"
@@ -210,10 +205,7 @@
                 d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
               ></path>
             </svg>
-
-            {{
-              isClosed(item.due_date) ? "Lihat Rekap Nilai" : "Periksa & Nilai"
-            }}
+            Periksa & Nilai
           </button>
         </div>
       </div>
@@ -222,64 +214,108 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
-import { useRouter } from "vue-router";
+import { ref, computed, onMounted, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { assignmentService } from "../../services/modules/teacher/assignmentService";
 import { useToastStore } from "../../stores/toast";
-import { useReportStatus } from '../../composables/useReportStatus';
+import BaseSelect from "../../components/BaseSelect.vue";
 
+const route = useRoute();
 const router = useRouter();
 const toastStore = useToastStore();
-const { isReportPublished, publishedAt } = useReportStatus('teacher');
 
 const assignments = ref([]);
 const isLoading = ref(true);
 
-// Sistem Tab Filter
-const currentFilter = ref("active"); // Default langsung ke tugas aktif
+// Tab Filter — default ke "Belum Dinilai"
+const currentFilter = ref("belum_graded");
 const tabs = [
-  { id: "all", label: "Semua Tugas" },
-  { id: "active", label: "Aktif" },
-  { id: "closed", label: "Tenggat Selesai" },
+  { id: "belum_graded", label: "Belum Dinilai" },
+  { id: "sudah_graded", label: "Sudah Dinilai" },
+  { id: "all", label: "Semua" },
 ];
 
-// Helper Pendeteksi Waktu — when report is published, all assignments are treated as closed
-const isClosed = (dueDate) => {
-  if (isReportPublished.value) return true;
-  if (!dueDate) return false;
-  return new Date() > new Date(dueDate);
-};
+// Filter state
+const filterType = ref("");
+const filterClass = ref("");
+
+const typeOptions = [
+  { value: "task", label: "Tugas" },
+  { value: "ujian_harian", label: "Ujian Harian" },
+  { value: "uts", label: "UTS" },
+  { value: "uas", label: "UAS" },
+];
+
+const classOptions = computed(() => {
+  const classes = new Map();
+  assignments.value.forEach((a) => {
+    const name = a.schedule?.school_class?.name;
+    if (name) classes.set(name, name);
+  });
+  return Array.from(classes, ([value, label]) => ({ value, label }));
+});
 
 const getTypeBadge = (type) => {
   switch (type) {
-    case 'ujian_harian': return { label: 'UH', classes: 'bg-green-50 text-green-700' };
-    case 'uts': return { label: 'UTS', classes: 'bg-brand-orange/10 text-brand-orange' };
-    case 'uas': return { label: 'UAS', classes: 'bg-brand-red/10 text-brand-red' };
-    default: return { label: 'Tugas', classes: 'bg-blue-50 text-blue-700' };
+    case "ujian_harian":
+      return { label: "UH", classes: "bg-green-50 text-green-700" };
+    case "uts":
+      return { label: "UTS", classes: "bg-brand-orange/10 text-brand-orange" };
+    case "uas":
+      return { label: "UAS", classes: "bg-brand-red/10 text-brand-red" };
+    default:
+      return { label: "Tugas", classes: "bg-blue-50 text-blue-700" };
   }
-};
-
-// Effective deadline: when report is published, show published date as the cutoff
-const effectiveDeadline = (dueDate) => {
-  if (isReportPublished.value && publishedAt.value) return publishedAt.value;
-  return dueDate;
 };
 
 // Filter Otomatis Data Tugas
 const filteredAssignments = computed(() => {
-  if (currentFilter.value === "active")
-    return assignments.value.filter((a) => !isClosed(a.due_date));
-  if (currentFilter.value === "closed")
-    return assignments.value.filter((a) => isClosed(a.due_date));
-  return assignments.value; // 'all'
+  let result = assignments.value;
+
+  // Tab filter
+  if (currentFilter.value === "belum_graded") {
+    result = result.filter(
+      (a) =>
+        a.submissions_count > 0 &&
+        (a.submissions_graded_count || 0) < a.submissions_count,
+    );
+  } else if (currentFilter.value === "sudah_graded") {
+    result = result.filter(
+      (a) =>
+        a.submissions_count > 0 &&
+        (a.submissions_graded_count || 0) >= a.submissions_count,
+    );
+  }
+
+  // Type filter
+  if (filterType.value !== "") {
+    result = result.filter((a) => a.type === filterType.value);
+  }
+
+  // Class filter
+  if (filterClass.value !== "") {
+    result = result.filter(
+      (a) => a.schedule?.school_class?.name === filterClass.value,
+    );
+  }
+
+  return result;
 });
 
 // Hitung jumlah tugas untuk angka di dalam Tab
 const getCountByFilter = (filterId) => {
-  if (filterId === "active")
-    return assignments.value.filter((a) => !isClosed(a.due_date)).length;
-  if (filterId === "closed")
-    return assignments.value.filter((a) => isClosed(a.due_date)).length;
+  if (filterId === "belum_graded")
+    return assignments.value.filter(
+      (a) =>
+        a.submissions_count > 0 &&
+        (a.submissions_graded_count || 0) < a.submissions_count,
+    ).length;
+  if (filterId === "sudah_graded")
+    return assignments.value.filter(
+      (a) =>
+        a.submissions_count > 0 &&
+        (a.submissions_graded_count || 0) >= a.submissions_count,
+    ).length;
   return 0;
 };
 
@@ -287,7 +323,6 @@ const fetchGlobalAssignments = async () => {
   isLoading.value = true;
   try {
     const res = await assignmentService.getAllAssignments();
-    // PERF FIX: paginated response wraps data in { data: [...], total: ..., ... }
     assignments.value = res.data.data || res.data || [];
   } catch (error) {
     toastStore.error("Gagal memuat daftar tugas global.");
@@ -295,18 +330,6 @@ const fetchGlobalAssignments = async () => {
   } finally {
     isLoading.value = false;
   }
-};
-
-const formatDate = (dateString) => {
-  if (!dateString) return "-";
-  const options = {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  };
-  return new Date(dateString).toLocaleDateString("id-ID", options);
 };
 
 const goToDetail = (assignmentId) => {
@@ -319,6 +342,15 @@ const goToDetail = (assignmentId) => {
 onMounted(() => {
   fetchGlobalAssignments();
 });
+
+watch(
+  () => route.name,
+  (newName) => {
+    if (newName === "TeacherAssignments") {
+      fetchGlobalAssignments();
+    }
+  },
+);
 </script>
 
 <style scoped>

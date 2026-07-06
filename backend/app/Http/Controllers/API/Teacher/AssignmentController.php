@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\API\Teacher;
 
 use App\Http\Requests\Teacher\StoreAssignmentRequest;
+use App\Models\AcademicYear;
 use App\Models\Assignment;
 use App\Services\AssignmentService;
 use Illuminate\Http\JsonResponse;
@@ -16,14 +17,17 @@ class AssignmentController
     public function index(string $scheduleId): JsonResponse
     {
         $teacherId = auth('api')->user()->id;
+        $activeYearId = AcademicYear::where('is_active', true)->value('id');
 
-        $assignments = Assignment::withCount('submissions')
+        $assignments = Assignment::with([
+            'schedule.subject.competencySettings' => fn ($q) => $q->where('academic_year_id', $activeYearId),
+        ])->withCount('submissions')
             ->where('schedule_id', $scheduleId)
             ->whereHas('schedule', function ($query) use ($teacherId) {
                 $query->where('teacher_id', $teacherId);
             })
             ->orderBy('created_at', 'desc')
-            ->get(); // Ambil semua untuk kelas ini agar cross-week grading mudah
+            ->get();
 
         return response()->json($assignments);
     }
@@ -33,10 +37,14 @@ class AssignmentController
     public function globalIndex(Request $request): JsonResponse
     {
         $teacherId = auth('api')->user()->id;
+        $activeYearId = AcademicYear::where('is_active', true)->value('id');
         $perPage = min((int) $request->query('per_page', 20), 100);
 
-        $assignments = Assignment::with(['schedule.schoolClass', 'schedule.subject'])
-            ->withCount('submissions')
+        $assignments = Assignment::with([
+            'schedule.schoolClass',
+            'schedule.subject' => fn ($q) => $q->with(['competencySettings' => fn ($cq) => $cq->where('academic_year_id', $activeYearId)]),
+        ])->withCount('submissions')
+            ->withCount(['submissions as submissions_graded_count' => fn ($q) => $q->whereHas('grade')])
             ->whereHas('schedule', function ($query) use ($teacherId) {
                 $query->where('teacher_id', $teacherId);
             })
@@ -78,9 +86,14 @@ class AssignmentController
     public function submissions(string $id): JsonResponse
     {
         $teacherId = auth('api')->user()->id;
+        $activeYearId = AcademicYear::where('is_active', true)->value('id');
 
-        // PERF FIX: eager load 'schedule' to avoid lazy-loading N+1
-        $assignment = Assignment::with(['submissions.student.user', 'submissions.grade', 'schedule'])->findOrFail($id);
+        $assignment = Assignment::with([
+            'submissions.student.user',
+            'submissions.grade',
+            'schedule',
+            'schedule.subject.competencySettings' => fn ($q) => $q->where('academic_year_id', $activeYearId),
+        ])->findOrFail($id);
 
         if ($assignment->schedule->teacher_id !== $teacherId) {
             return response()->json(['error' => 'Akses ditolak.'], 403);

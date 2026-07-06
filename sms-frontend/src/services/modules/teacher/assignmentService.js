@@ -4,9 +4,10 @@ export const assignmentService = {
   getAssignments(scheduleId) {
     return api.get(`/v1/teacher/schedules/${scheduleId}/assignments`);
   },
-  createAssignment(formData) {
+  createAssignment(formData, { onUploadProgress } = {}) {
     return api.post('/v1/teacher/assignments', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress,
     });
   },
   deleteAssignment(id) {

@@ -400,7 +400,7 @@ const saveAcademicYear = async () => {
       toastStore.success("Tahun ajaran berhasil dibuat.");
     }
     closeModal();
-    await dropdowns.refreshAcademicYears(); // Refresh store + clear dirty flag
+    await dropdowns.invalidateAcademicYears(); // Clear cache + set dirty flag for other pages
     fetchAcademicYears(paginationMeta.current_page);
   } catch (error) {
     toastStore.error(error.response?.data?.message || "Gagal menyimpan data.");
@@ -439,7 +439,7 @@ const executeConfirmAction = async () => {
       toastStore.success("Tahun ajaran berhasil dihapus.");
     }
     // Refresh global cache (clears dirty flag after fetch → no redundant re-fetch on re-activate)
-    await dropdowns.refreshAcademicYears();
+    await dropdowns.invalidateAcademicYears(); // Clear cache + set dirty flag for other pages
     fetchAcademicYears(paginationMeta.current_page);
   } catch (error) {
     toastStore.error(

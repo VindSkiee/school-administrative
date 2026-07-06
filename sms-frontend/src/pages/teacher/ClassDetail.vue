@@ -100,13 +100,6 @@
       </div>
 
       <div class="flex flex-wrap gap-3 w-full md:w-auto">
-        <input
-          v-if="activeTab === 'attendance'"
-          type="date"
-          v-model="filterDate"
-          class="px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-red/20 outline-none w-full md:w-auto text-gray-700"
-        />
-
         <BaseSelect
           v-if="activeTab === 'grades'"
           v-model="selectedSubject"
@@ -208,7 +201,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import BaseTable from "../../components/BaseTable.vue";
 import BaseSelect from "../../components/BaseSelect.vue";
@@ -228,7 +221,6 @@ const isModalOpen = ref(false);
 const selectedStudent = ref(null);
 
 // Konfigurasi Filter Select
-const filterDate = ref(""); // Filter Tanggal Baru
 const selectedSubject = ref("all");
 
 const tabs = [
@@ -243,7 +235,6 @@ const currentColumns = computed(() => {
       { key: "nis", label: "NIS" },
       { key: "name", label: "Nama Lengkap" }, // Akan di-override slot
       { key: "gender", label: "L/P", align: "center" },
-      { key: "status", label: "Status", align: "center" },
       // Kolom 'actions' dihapus karena nama sudah bisa diklik
     ];
   } else {
@@ -262,16 +253,11 @@ const currentColumns = computed(() => {
 const classInfo = ref({});
 const rawData = ref([]);
 
-const fetchClassDetail = async (dateFilter = null) => {
+const fetchClassDetail = async () => {
   isLoading.value = true;
 
   try {
-    // Kirim parameter tanggal ke Backend (Opsional, tergantung kesiapan Backend)
-    const params = {};
-    if (dateFilter) params.date = dateFilter;
-
-    // TODO: Sesuaikan homeroomService Anda agar bisa menerima parameter params
-    const { data } = await homeroomService.getHomeroomDetail({ params });
+    const { data } = await homeroomService.getHomeroomDetail();
 
     classInfo.value = data.class_info;
     rawData.value = data.students;
@@ -299,12 +285,6 @@ const filteredData = computed(() => {
   return result;
 });
 
-// Watcher: Saat guru mengubah tanggal, panggil API lagi dengan parameter tanggal
-watch(filterDate, (newDate) => {
-  if (activeTab.value === "attendance") {
-    fetchClassDetail(newDate);
-  }
-});
 
 // Helper Fungsi
 const getScoreColor = (score) => {

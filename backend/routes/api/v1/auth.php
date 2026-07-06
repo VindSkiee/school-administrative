@@ -13,6 +13,5 @@ Route::middleware('auth:api')->group(function () {
 });
 
 Route::middleware(['auth:api', 'password.changed'])->group(function () {
-    Route::post('refresh', [AuthController::class, 'refresh']);
     Route::get('me', [AuthController::class, 'me']);
 });

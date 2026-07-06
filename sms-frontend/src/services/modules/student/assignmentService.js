@@ -7,9 +7,10 @@ export const studentAssignmentService = {
   },
   
   // Submit jawaban tugas (Bisa untuk Insert baru atau Update/Edit)
-  submitAssignment(assignmentId, formData) {
+  submitAssignment(assignmentId, formData, { onUploadProgress } = {}) {
     return api.post(`/v1/student/assignments/${assignmentId}/submit`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress,
     });
   },
 
