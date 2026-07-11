@@ -7,7 +7,17 @@
     </div>
 
     <template v-else>
-      <div v-if="currentRequest" class="bg-gray-50 border border-gray-200 rounded-2xl p-6 md:p-8 text-center max-w-2xl mx-auto shadow-sm">
+      <div v-if="isHoliday" class="bg-yellow-50 border border-yellow-200 rounded-2xl p-8 text-center max-w-2xl mx-auto shadow-sm">
+        <div class="w-16 h-16 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mx-auto mb-4">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+        </div>
+        <h3 class="text-xl font-bold text-yellow-800 mb-2">Hari Libur</h3>
+        <p class="text-yellow-600 font-medium max-w-md mx-auto">
+          Hari ini adalah hari libur. Pengajuan izin atau sakit tidak tersedia.
+        </p>
+      </div>
+
+      <div v-else-if="currentRequest" class="bg-gray-50 border border-gray-200 rounded-2xl p-6 md:p-8 text-center max-w-2xl mx-auto shadow-sm">
         <div class="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
              :class="{
                'bg-orange-100 text-brand-orange': currentRequest.status === 'pending',
@@ -135,7 +145,8 @@ import { useReportStatus } from '../../../composables/useReportStatus';
 
 const props = defineProps({
   scheduleId: { type: [String, Number], required: true },
-  selectedDate: { type: String, required: true } // Tanggal dari URL YYYY-MM-DD
+  selectedDate: { type: String, required: true },
+  isHoliday: { type: Boolean, default: false }
 });
 
 const toastStore = useToastStore();
@@ -225,6 +236,11 @@ const fetchRequests = async () => {
 };
 
 const submitRequest = async () => {
+  if (props.isHoliday) {
+    toastStore.error("Pengajuan izin atau sakit tidak tersedia pada hari libur.");
+    return;
+  }
+
   if (isTimeLocked.value) {
     toastStore.error("Waktu pengajuan izin untuk sesi ini telah ditutup.");
     return;

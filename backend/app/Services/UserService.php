@@ -19,7 +19,7 @@ class UserService
         }
 
         if ($data['role'] === 'admin') {
-            if (! isset($data['admin_secret_key']) || $data['admin_secret_key'] !== env('ADMIN_SECRET_KEY')) {
+            if (! isset($data['admin_secret_key']) || $data['admin_secret_key'] !== config('app.admin_secret_key', '')) {
                 throw new HttpException(403, 'Akses ditolak: Admin Secret Key tidak valid.');
             }
         }
@@ -31,10 +31,13 @@ class UserService
                 'name' => $data['name'],
                 'email' => $data['email'],
                 'password' => Hash::make($defaultPassword),
-                'role' => $data['role'],
                 'is_active' => true,
                 'must_change_password' => true,
             ]);
+
+            // Set role explicitly — not mass-assigned for security
+            $user->role = $data['role'];
+            $user->save();
 
             if ($data['role'] === 'student') {
                 $user->student()->create([

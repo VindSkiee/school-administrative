@@ -34,6 +34,9 @@
             <span class="inline-flex items-center mt-2 px-3 py-1 text-xs font-bold rounded-lg" :class="assignmentTypeBadge.classes">
               {{ assignmentTypeBadge.label }}
             </span>
+            <span v-if="isExamType && subjectKKM !== null" class="inline-flex items-center mt-2 ml-2 px-2.5 py-1 text-xs font-bold rounded-lg bg-amber-50 text-amber-700 border border-amber-200">
+              KKM: {{ subjectKKM }}
+            </span>
           </div>
           <div class="flex gap-4 bg-gray-50 p-3 rounded-xl border border-gray-100 w-full md:w-auto">
             <div class="text-center px-4 border-r border-gray-200">
@@ -75,6 +78,7 @@
                 <th class="p-4 font-semibold w-12 text-center">No</th>
                 <th class="p-4 font-semibold">Nama Siswa</th>
                 <th class="p-4 font-semibold">Waktu Pengumpulan</th>
+                <th class="p-4 font-semibold">Terakhir Diubah</th>
                 <th class="p-4 font-semibold text-center">Status</th>
                 <th class="p-4 font-semibold text-center w-32">Nilai</th>
                 <th class="p-4 font-semibold text-right w-40">Aksi</th>
@@ -82,14 +86,21 @@
             </thead>
             <tbody class="divide-y divide-gray-100">
               <tr v-if="!assignment.submissions || assignment.submissions.length === 0">
-                <td colspan="6" class="p-8 text-center text-gray-500">Belum ada siswa yang mengumpulkan tugas ini.</td>
+                <td colspan="7" class="p-8 text-center text-gray-500">Belum ada siswa yang mengumpulkan tugas ini.</td>
               </tr>
               <tr v-for="(sub, index) in assignment.submissions" :key="sub.id" class="hover:bg-gray-50/50 transition-colors">
                 <td class="p-4 text-center text-gray-500 font-medium">{{ index + 1 }}</td>
                 <td class="p-4 font-bold text-gray-800">{{ sub.student?.user?.name || 'Siswa NN' }}</td>
                 <td class="p-4 text-sm text-gray-600">
                   {{ formatDate(sub.submitted_at) }}
-                  <span v-if="isLate(sub.submitted_at)" class="ml-2 px-2 py-0.5 bg-red-100 text-red-600 text-xs font-bold rounded">Terlambat</span>
+                  <span v-if="sub.is_late" class="ml-2 px-2 py-0.5 bg-red-100 text-red-600 text-xs font-bold rounded">Terlambat</span>
+                </td>
+                <td class="p-4 text-sm text-gray-600">
+                  <span v-if="sub.edited_at">
+                    {{ formatDate(sub.edited_at) }}
+                    <span class="text-[10px] text-amber-600 font-semibold">(diedit)</span>
+                  </span>
+                  <span v-else class="text-gray-400">—</span>
                 </td>
                 <td class="p-4 text-center">
                   <span v-if="sub.grade" class="px-3 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full">Sudah Dinilai</span>
@@ -111,6 +122,72 @@
               </tr>
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- Below KKM & Remedial Section -->
+      <div v-if="isExamType && !isRemedial && belowKKMStudents.length > 0" class="bg-white rounded-3xl shadow-sm border border-amber-200 overflow-hidden mt-6">
+        <div class="p-6 border-b border-amber-100 bg-amber-50/50">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center shrink-0">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"></path></svg>
+            </div>
+            <div>
+              <h3 class="text-lg font-bold text-amber-800">Siswa di Bawah KKM</h3>
+              <p class="text-xs text-amber-600">{{ belowKKMStudents.filter(s => !s.has_remedial).length }} siswa belum mendapat remedial</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-6">
+          <div class="space-y-2 mb-4">
+            <label v-for="student in belowKKMStudents" :key="student.id"
+              class="flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer"
+              :class="student.has_remedial ? 'bg-green-50 border-green-200 opacity-60' : selectedRemedialStudents.includes(student.id) ? 'bg-brand-red/5 border-brand-red/30' : 'bg-white border-gray-200 hover:border-gray-300'"
+            >
+              <input type="checkbox" :value="student.id"
+                :checked="selectedRemedialStudents.includes(student.id)"
+                :disabled="student.has_remedial"
+                @change="toggleRemedialStudent(student.id)"
+                class="w-4 h-4 rounded border-gray-300 text-brand-red focus:ring-brand-red"
+              />
+              <div class="flex-1">
+                <span class="text-sm font-bold text-gray-800">{{ student.name }}</span>
+                <span class="text-xs text-gray-500 ml-2">({{ student.nis }})</span>
+              </div>
+              <span class="text-sm font-black" :class="student.score < 40 ? 'text-red-500' : 'text-amber-600'">
+                {{ student.score }}
+              </span>
+              <span v-if="student.has_remedial" class="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded">Sudah Remedial</span>
+            </label>
+          </div>
+
+          <div v-if="!belowKKMStudents.every(s => s.has_remedial)" class="border-t border-gray-100 pt-4">
+            <div class="flex flex-wrap items-center gap-4 mb-3">
+              <div class="flex items-center gap-3">
+                <span class="text-sm font-semibold text-gray-700">Skor Remedial:</span>
+                <label class="flex items-center gap-1.5 cursor-pointer">
+                  <input type="radio" v-model="remedialMode" value="replace" class="text-brand-red focus:ring-brand-red" />
+                  <span class="text-sm text-gray-600">Ganti (max)</span>
+                </label>
+                <label class="flex items-center gap-1.5 cursor-pointer">
+                  <input type="radio" v-model="remedialMode" value="average" class="text-brand-red focus:ring-brand-red" />
+                  <span class="text-sm text-gray-600">Rata-rata</span>
+                </label>
+                <label class="flex items-center gap-1.5 cursor-pointer">
+                  <input type="radio" v-model="remedialMode" value="custom" class="text-brand-red focus:ring-brand-red" />
+                  <span class="text-sm text-gray-600">Custom</span>
+                </label>
+              </div>
+            </div>
+            <button
+              @click="createRemedial"
+              :disabled="isCreatingRemedial || selectedRemedialStudents.length === 0"
+              class="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl shadow-sm transition-colors disabled:opacity-50"
+            >
+              {{ isCreatingRemedial ? 'Membuat...' : `Buat Remedial (${selectedRemedialStudents.length} siswa)` }}
+            </button>
+          </div>
         </div>
       </div>
     </template>
@@ -142,6 +219,7 @@
               Buka / Unduh Jawaban
             </a>
             <p class="text-xs text-blue-600 mt-2 text-center">Dikumpulkan: {{ formatDate(activeSubmission.submitted_at) }}</p>
+            <p v-if="activeSubmission.edited_at" class="text-xs text-amber-600 mt-1 text-center font-semibold">Terakhir diubah: {{ formatDate(activeSubmission.edited_at) }}</p>
           </div>
 
           <div>
@@ -188,6 +266,7 @@ import { useRoute } from 'vue-router';
 import { assignmentService } from '../../services/modules/teacher/assignmentService';
 import { useToastStore } from '../../stores/toast';
 import { useReportStatus } from '../../composables/useReportStatus';
+import { getStorageUrl } from '../../utils/fileHelper';
 
 const route = useRoute();
 const toastStore = useToastStore();
@@ -200,6 +279,14 @@ const isLoading = ref(true);
 const activeSubmission = ref(null);
 const gradeForm = ref({ score: '', feedback: '' });
 const isGrading = ref(false);
+
+// State Remedial
+const belowKKMStudents = ref([]);
+const isLoadingBelowKKM = ref(false);
+const selectedRemedialStudents = ref([]);
+const remedialMode = ref('replace');
+const isCreatingRemedial = ref(false);
+const existingRemedialId = ref(null);
 
 const isClosed = computed(() => {
   // When report is published, all assignments are closed
@@ -222,22 +309,20 @@ const gradedCount = computed(() => {
 const assignmentTypeBadge = computed(() => {
   const type = assignment.value?.type;
   switch (type) {
+    case 'ujian_harian': return { label: 'Ujian Harian', classes: 'bg-green-50 text-green-700' };
     case 'uts': return { label: 'UTS', classes: 'bg-brand-orange/10 text-brand-orange' };
     case 'uas': return { label: 'UAS', classes: 'bg-brand-red/10 text-brand-red' };
     default: return { label: 'Tugas Harian', classes: 'bg-blue-50 text-blue-700' };
   }
 });
 
-const isLate = (submitDate) => {
-  if (!assignment.value?.due_date || !submitDate) return false;
-  return new Date(submitDate) > new Date(assignment.value.due_date);
-};
+const isExamType = computed(() => ['ujian_harian', 'uts', 'uas'].includes(assignment.value?.type));
+const isRemedial = computed(() => assignment.value?.is_remedial === true || assignment.value?.is_remedial === 1);
 
-const getStorageUrl = (path) => {
-  if (!path) return '#';
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api';
-  return `${baseUrl}/storage/${path}`;
-};
+const subjectKKM = computed(() => {
+  const settings = assignment.value?.schedule?.subject?.competency_settings;
+  return (Array.isArray(settings) && settings.length > 0) ? settings[0]?.min_score ?? null : null;
+});
 
 const formatDate = (dateString) => {
   if (!dateString) return '-';
@@ -251,10 +336,57 @@ const fetchDetail = async () => {
   try {
     const res = await assignmentService.getAssignmentDetail(route.params.id);
     assignment.value = res.data;
+    if (isExamType.value && !isRemedial.value) {
+      fetchBelowKKM();
+    }
   } catch (error) {
     toastStore.error("Gagal memuat detail tugas.");
   } finally {
     isLoading.value = false;
+  }
+};
+
+// ----------------- REMEDIAL LOGIC -----------------
+const fetchBelowKKM = async () => {
+  isLoadingBelowKKM.value = true;
+  try {
+    const res = await assignmentService.getBelowKKM(route.params.id);
+    belowKKMStudents.value = res.data?.data || res.data || [];
+  } catch (error) {
+    // Silent fail — section just won't show
+  } finally {
+    isLoadingBelowKKM.value = false;
+  }
+};
+
+const toggleRemedialStudent = (studentId) => {
+  const idx = selectedRemedialStudents.value.indexOf(studentId);
+  if (idx === -1) {
+    selectedRemedialStudents.value.push(studentId);
+  } else {
+    selectedRemedialStudents.value.splice(idx, 1);
+  }
+};
+
+const createRemedial = async () => {
+  if (selectedRemedialStudents.value.length === 0) {
+    toastStore.error("Pilih minimal 1 siswa untuk remedial.");
+    return;
+  }
+  isCreatingRemedial.value = true;
+  try {
+    const res = await assignmentService.createRemedial(route.params.id, {
+      student_ids: selectedRemedialStudents.value,
+      remedial_mode: remedialMode.value,
+    });
+    existingRemedialId.value = res.data?.data?.id;
+    toastStore.success("Remedial berhasil dibuat untuk " + selectedRemedialStudents.value.length + " siswa!");
+    selectedRemedialStudents.value = [];
+    fetchBelowKKM();
+  } catch (error) {
+    toastStore.error(error.response?.data?.message || "Gagal membuat remedial.");
+  } finally {
+    isCreatingRemedial.value = false;
   }
 };
 

@@ -38,8 +38,9 @@ class TeacherSeeder extends Seeder
                 'name' => $fullName,
                 'email' => $email,
                 'password' => $defaultPassword,
-                'role' => 'teacher',
             ]);
+            $user->role = 'teacher';
+            $user->save();
 
             // 2. Buat Profil Teacher
             $teacher = Teacher::create([

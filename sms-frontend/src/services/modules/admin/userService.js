@@ -49,6 +49,14 @@ export const userService = {
     return api.patch(`/v1/admin/users/${id}/reset-password`);
   },
 
+  /**
+   * Mengambil jadwal aktif & wali kelas guru (sebelum nonaktifkan)
+   * @param {Number|String} id ID pengguna guru
+   */
+  getTeacherActiveSchedules(id) {
+    return api.get(`/v1/admin/users/${id}/teacher-active-schedules`);
+  },
+
   uploadAvatar(id, formData) {
     return api.post(`/users/${id}/avatar`, formData, {
       headers: {

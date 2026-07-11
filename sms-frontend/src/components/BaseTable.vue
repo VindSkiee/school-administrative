@@ -15,7 +15,7 @@
         <thead class="bg-brand-red text-white">
           <tr class="text-sm tracking-wide">
             <th class="p-0 font-semibold w-16 align-middle border-b border-red-300 bg-brand-red">
-              <div class="relative px-4 py-4 flex items-center justify-center h-full w-full">
+              <div class="relative px-4 py-3 flex items-center justify-center h-full w-full">
                 No
               </div>
             </th>
@@ -26,7 +26,7 @@
               class="p-0 font-semibold align-middle border-b border-red-300 bg-brand-red"
             >
               <div
-                class="relative px-4 py-4 flex items-center h-full w-full"
+                class="relative px-4 py-3 flex items-center h-full w-full"
                 :class="{
                   'justify-start': !col.align || col.align === 'left',
                   'justify-center': col.align === 'center',

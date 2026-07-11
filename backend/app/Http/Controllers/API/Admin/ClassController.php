@@ -4,37 +4,48 @@ namespace App\Http\Controllers\API\Admin;
 
 use App\Http\Requests\Admin\AssignStudentRequest;
 use App\Http\Requests\Admin\StoreClassRequest;
+use App\Models\AcademicYear;
+use App\Models\ActivityLog;
+use App\Models\Holiday;
+use App\Models\Schedule;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Services\AdminSemesterReportService;
 use App\Services\ClassService;
+use App\Services\ScheduleService;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class ClassController
 {
-    public function __construct(protected ClassService $classService) {}
+    public function __construct(
+        protected ClassService $classService,
+        protected AdminSemesterReportService $reportService,
+        protected ScheduleService $scheduleService,
+    ) {}
 
     /** Flush all class option cache keys (all years + specific years) */
     private function flushClassOptionsCache(): void
     {
-        \Illuminate\Support\Facades\Cache::forget('admin_class_options_all');
+        Cache::forget('admin_class_options_all');
         // Flush year-specific keys for known years
-        $yearIds = \Illuminate\Support\Facades\DB::table('academic_years')->pluck('id');
+        $yearIds = DB::table('academic_years')->pluck('id');
         foreach ($yearIds as $yearId) {
-            \Illuminate\Support\Facades\Cache::forget('admin_class_options_year_' . $yearId);
+            Cache::forget('admin_class_options_year_'.$yearId);
         }
     }
 
     // PERF FIX: lightweight dropdown endpoint + 120s cache
     public function options(Request $request): JsonResponse
     {
-        $cacheKey = 'admin_class_options' . ($request->filled('academic_year_id') ? '_year_' . $request->academic_year_id : '_all');
+        $cacheKey = 'admin_class_options'.($request->filled('academic_year_id') ? '_year_'.$request->academic_year_id : '_all');
 
-        $classes = \Illuminate\Support\Facades\Cache::remember($cacheKey, 120, function () use ($request) {
-            $query = \Illuminate\Support\Facades\DB::table('classes')
+        $classes = Cache::remember($cacheKey, 120, function () use ($request) {
+            $query = DB::table('classes')
                 ->select('classes.id', 'classes.name', 'classes.academic_year_id');
 
             if ($request->filled('academic_year_id')) {
@@ -50,7 +61,7 @@ class ClassController
     // PERF FIX: single raw SQL with LEFT JOINs replaces 4 Eloquent queries (N+1 elimination)
     public function index(Request $request): JsonResponse
     {
-        $query = \Illuminate\Support\Facades\DB::table('classes as c')
+        $query = DB::table('classes as c')
             ->leftJoin('academic_years as ay', 'ay.id', '=', 'c.academic_year_id')
             ->leftJoin('teachers as ht', 'ht.user_id', '=', 'c.homeroom_teacher_id')
             ->leftJoin('users as hu', 'hu.id', '=', 'ht.user_id')
@@ -64,7 +75,8 @@ class ClassController
                 'ay.is_active as academic_year_is_active',
                 'hu.id as homeroom_teacher_user_id',
                 'hu.name as homeroom_teacher_name',
-                \Illuminate\Support\Facades\DB::raw('(SELECT COUNT(*) FROM class_student cs WHERE cs.class_id = c.id) as students_count')
+                DB::raw('(SELECT COUNT(*) FROM class_student cs WHERE cs.class_id = c.id) as students_count'),
+                DB::raw('(SELECT COUNT(*) FROM schedules s WHERE s.class_id = c.id) as schedules_count')
             );
 
         if ($request->filled('academic_year_id')) {
@@ -78,10 +90,10 @@ class ClassController
             if (isset($romanMap[$grade])) {
                 $roman = $romanMap[$grade];
                 $query->where(function ($subQuery) use ($grade, $roman) {
-                    $subQuery->where('c.name', 'like', $grade . '%')
-                             ->orWhere('c.name', 'like', 'KELAS ' . $grade . '%')
-                             ->orWhere('c.name', 'like', $roman . '%')
-                             ->orWhere('c.name', 'like', 'KELAS ' . $roman . '%');
+                    $subQuery->where('c.name', 'like', $grade.'%')
+                        ->orWhere('c.name', 'like', 'KELAS '.$grade.'%')
+                        ->orWhere('c.name', 'like', $roman.'%')
+                        ->orWhere('c.name', 'like', 'KELAS '.$roman.'%');
                 });
             }
         }
@@ -114,6 +126,8 @@ class ClassController
                         ],
                     ] : null,
                     'students_count' => (int) $row->students_count,
+                    'schedules_count' => (int) $row->schedules_count,
+                    'has_data' => ((int) $row->students_count > 0) || ((int) $row->schedules_count > 0),
                 ];
             });
 
@@ -209,6 +223,145 @@ class ClassController
         ]);
     }
 
+    /**
+     * GET /classes/{id}/student-options
+     * Returns class students + unassigned students for the class's academic year.
+     * Students in OTHER classes are excluded to minimize resource usage.
+     */
+    public function studentOptions(string $id): JsonResponse
+    {
+        $class = SchoolClass::findOrFail($id);
+        $academicYearId = $class->academic_year_id;
+
+        // 1. Students currently in this class
+        $classStudents = DB::table('class_student')
+            ->join('students', 'students.user_id', '=', 'class_student.student_id')
+            ->join('users', 'users.id', '=', 'students.user_id')
+            ->where('class_student.class_id', $id)
+            ->where('class_student.academic_year_id', $academicYearId)
+            ->where('students.status', 'active')
+            ->select('students.user_id AS id', 'users.name', 'students.nis')
+            ->orderBy('users.name')
+            ->get()
+            ->toArray();
+
+        // 2. Students not assigned to ANY class in this academic year
+        $assignedStudentIds = DB::table('class_student')
+            ->where('academic_year_id', $academicYearId)
+            ->pluck('student_id')
+            ->all();
+
+        $unassignedQuery = DB::table('students')
+            ->join('users', 'users.id', '=', 'students.user_id')
+            ->where('students.status', 'active')
+            ->select('students.user_id AS id', 'users.name', 'students.nis');
+
+        if (! empty($assignedStudentIds)) {
+            $unassignedQuery->whereNotIn('students.user_id', $assignedStudentIds);
+        }
+
+        $unassignedStudents = $unassignedQuery
+            ->orderBy('users.name')
+            ->get()
+            ->toArray();
+
+        return response()->json([
+            'class_students' => $classStudents,
+            'unassigned_students' => $unassignedStudents,
+        ]);
+    }
+
+    /**
+     * GET /classes/{id}/migration-students
+     * Returns students in a class with their weighted grades and grade index for migration preview.
+     */
+    public function migrationStudents(string $id): JsonResponse
+    {
+        $class = SchoolClass::with([
+            'academicYear.gradingSetting',
+            'schedules' => function ($query) {
+                $query->with([
+                    'subject',
+                    'attendances',
+                    'assignments.submissions.grade',
+                ]);
+            },
+            'students' => function ($query) {
+                $query->join('users', 'students.user_id', '=', 'users.id')
+                    ->select('students.*')
+                    ->orderBy('users.name');
+            },
+        ])->findOrFail($id);
+
+        $gradingSetting = $class->academicYear?->gradingSetting;
+        $weights = [
+            'task' => $gradingSetting?->task_weight ?? 40,
+            'uts' => $gradingSetting?->uts_weight ?? 25,
+            'uas' => $gradingSetting?->uas_weight ?? 25,
+            'attendance' => $gradingSetting?->attendance_weight ?? 10,
+        ];
+
+        $students = [];
+        foreach ($class->students as $student) {
+            $subjectScores = [];
+            foreach ($class->schedules as $schedule) {
+                $subjectName = $schedule->subject?->name ?? '-';
+                $scoresByType = ['task' => [], 'uts' => [], 'uas' => []];
+
+                foreach ($schedule->assignments as $assignment) {
+                    $submission = $assignment->submissions->firstWhere('student_id', $student->user_id);
+                    if ($submission?->grade?->score !== null) {
+                        $type = $assignment->type ?? 'task';
+                        $scoresByType[$type][] = (float) $submission->grade->score;
+                    }
+                }
+
+                $taskAvg = ! empty($scoresByType['task']) ? array_sum($scoresByType['task']) / count($scoresByType['task']) : null;
+                $utsAvg = ! empty($scoresByType['uts']) ? array_sum($scoresByType['uts']) / count($scoresByType['uts']) : null;
+                $uasAvg = ! empty($scoresByType['uas']) ? array_sum($scoresByType['uas']) / count($scoresByType['uas']) : null;
+
+                $stats = DB::table('attendances')
+                    ->where('schedule_id', $schedule->id)
+                    ->where('student_id', $student->user_id)
+                    ->selectRaw('COUNT(*) as total, SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as present_count', ['present'])
+                    ->first();
+                $attendanceRate = ($stats->total ?? 0) > 0 ? round(($stats->present_count / $stats->total) * 100, 2) : 100;
+
+                $activeWeight = 0;
+                $weightedSum = 0;
+                if ($taskAvg !== null) {
+                    $weightedSum += $taskAvg * $weights['task'];
+                    $activeWeight += $weights['task'];
+                }
+                if ($utsAvg !== null) {
+                    $weightedSum += $utsAvg * $weights['uts'];
+                    $activeWeight += $weights['uts'];
+                }
+                if ($uasAvg !== null) {
+                    $weightedSum += $uasAvg * $weights['uas'];
+                    $activeWeight += $weights['uas'];
+                }
+                $weightedSum += $attendanceRate * $weights['attendance'];
+                $activeWeight += $weights['attendance'];
+
+                $finalScore = $activeWeight > 0 ? round($weightedSum / $activeWeight, 2) : null;
+                $subjectScores[$subjectName] = $finalScore;
+            }
+
+            $validScores = array_filter($subjectScores);
+            $avgScore = ! empty($validScores) ? round(array_sum($validScores) / count($validScores), 2) : null;
+
+            $students[] = [
+                'student_id' => $student->user_id,
+                'name' => $student->user?->name ?? '-',
+                'avg_score' => $avgScore,
+                'grade_index' => $this->reportService->resolveGradeIndex($avgScore),
+            ];
+        }
+
+        return response()->json(['data' => $students]);
+    }
+
     // DELETE
     public function destroy(string $id): JsonResponse
     {
@@ -244,6 +397,13 @@ class ClassController
         $fromYearId = (int) $request->from_academic_year_id;
         $toYearId = (int) $request->to_academic_year_id;
 
+        $toYear = AcademicYear::findOrFail($toYearId);
+        if (! $toYear->start_date || ! $toYear->end_date) {
+            return response()->json([
+                'message' => 'Tahun ajaran tujuan belum memiliki tanggal mulai/akhir. Silakan set terlebih dahulu.',
+            ], 422);
+        }
+
         try {
             DB::beginTransaction();
 
@@ -251,6 +411,7 @@ class ClassController
             $classCount = DB::table('classes')->where('academic_year_id', $fromYearId)->count();
             if ($classCount === 0) {
                 DB::rollBack();
+
                 return response()->json(['message' => 'Tidak ada kelas di tahun ajaran asal.'], 404);
             }
 
@@ -258,7 +419,7 @@ class ClassController
 
             // PERF FIX: Bulk upsert classes using INSERT ... SELECT with ON DUPLICATE KEY
             // Step 1: Insert new classes that don't exist yet in target year
-            DB::statement("
+            DB::statement('
                 INSERT INTO classes (name, academic_year_id, homeroom_teacher_id, created_at, updated_at)
                 SELECT c.name, ?, c.homeroom_teacher_id, ?, ?
                 FROM classes c
@@ -267,10 +428,10 @@ class ClassController
                     SELECT 1 FROM classes c2
                     WHERE c2.name = c.name AND c2.academic_year_id = ?
                 )
-            ", [$toYearId, $now, $now, $fromYearId, $toYearId]);
+            ', [$toYearId, $now, $now, $fromYearId, $toYearId]);
 
             // Step 2: Update homeroom_teacher_id where target class has NULL but source has value
-            DB::statement("
+            DB::statement('
                 UPDATE classes target
                 INNER JOIN classes source ON source.name = target.name
                     AND source.academic_year_id = ?
@@ -279,39 +440,161 @@ class ClassController
                 WHERE target.academic_year_id = ?
                 AND target.homeroom_teacher_id IS NULL
                 AND source.homeroom_teacher_id IS NOT NULL
-            ", [$fromYearId, $now, $toYearId]);
+            ', [$fromYearId, $now, $toYearId]);
 
             $migratedClassCount = DB::table('classes')->where('academic_year_id', $toYearId)->count();
 
             // PERF FIX: Bulk insert student pivots using INSERT ... SELECT (single query)
-            DB::statement("
+            DB::statement('
                 INSERT IGNORE INTO class_student (class_id, student_id, academic_year_id, created_at, updated_at)
                 SELECT target.id, cs.student_id, ?, ?, ?
                 FROM class_student cs
                 INNER JOIN classes source ON source.id = cs.class_id AND source.academic_year_id = ?
                 INNER JOIN classes target ON target.name = source.name AND target.academic_year_id = ?
-            ", [$toYearId, $now, $now, $fromYearId, $toYearId]);
+            ', [$toYearId, $now, $now, $fromYearId, $toYearId]);
 
             $migratedStudentCount = DB::table('class_student')
                 ->where('academic_year_id', $toYearId)
                 ->count();
 
-            // PERF FIX: Bulk duplicate schedules using INSERT ... SELECT (single query)
-            DB::statement("
-                INSERT INTO schedules (class_id, subject_id, teacher_id, academic_year_id, day_of_week, start_time, end_time, created_at, updated_at)
+            // PERF FIX: Bulk duplicate schedules using INSERT IGNORE ... SELECT (skip existing)
+            DB::statement('
+                INSERT IGNORE INTO schedules (class_id, subject_id, teacher_id, academic_year_id, day_of_week, start_time, end_time, created_at, updated_at)
                 SELECT target.id, s.subject_id, s.teacher_id, ?, s.day_of_week, s.start_time, s.end_time, ?, ?
                 FROM schedules s
                 INNER JOIN classes source ON source.id = s.class_id AND source.academic_year_id = ?
                 INNER JOIN classes target ON target.name = source.name AND target.academic_year_id = ?
-            ", [$toYearId, $now, $now, $fromYearId, $toYearId]);
+            ', [$toYearId, $now, $now, $fromYearId, $toYearId]);
+
+            // Generate meeting sessions for newly duplicated schedules (skip those that already have sessions)
+            $holidayDates = Holiday::query()->pluck('date')->map->toDateString()->toArray();
+            $newScheduleIds = Schedule::where('academic_year_id', $toYearId)
+                ->whereDoesntHave('meetingSessions')
+                ->pluck('id');
+
+            foreach ($newScheduleIds as $scheduleId) {
+                $schedule = Schedule::find($scheduleId);
+                if ($schedule) {
+                    $this->scheduleService->generateMeetingSessionsForYear($schedule, $toYear, $holidayDates);
+                }
+            }
 
             DB::commit();
 
+            // Log migration activity
+            $fromYear = AcademicYear::find($fromYearId);
+            ActivityLog::create([
+                'user_id' => $request->user()->id,
+                'action' => 'Migrasi Semester',
+                'loggable_type' => AcademicYear::class,
+                'loggable_id' => $toYearId,
+                'new_values' => [
+                    'from_year_id' => $fromYearId,
+                    'from_year_name' => $fromYear->name ?? '-',
+                    'to_year_name' => $toYear->name ?? '-',
+                    'classes_migrated' => $migratedClassCount,
+                    'students_migrated' => $migratedStudentCount,
+                ],
+                'ip_address' => $request->ip(),
+            ]);
+
+            // Build all_students response: fetch students with grades from source year
+            $sourceClasses = SchoolClass::where('academic_year_id', $fromYearId)
+                ->with([
+                    'schedules' => function ($query) use ($fromYearId) {
+                        $query->where('academic_year_id', $fromYearId)
+                            ->with([
+                                'subject',
+                                'attendances',
+                                'assignments.submissions.grade',
+                            ]);
+                    },
+                    'students' => function ($query) {
+                        $query->join('users', 'students.user_id', '=', 'users.id')
+                            ->select('students.*')
+                            ->orderBy('users.name');
+                    },
+                ])
+                ->get();
+
+            $allStudents = [];
+            foreach ($sourceClasses as $class) {
+                $classStudents = [];
+                foreach ($class->students as $student) {
+                    $subjectScores = [];
+                    foreach ($class->schedules as $schedule) {
+                        $subjectName = $schedule->subject?->name ?? '-';
+                        $scoresByType = ['task' => [], 'uts' => [], 'uas' => []];
+
+                        foreach ($schedule->assignments as $assignment) {
+                            $submission = $assignment->submissions->firstWhere('student_id', $student->user_id);
+                            if ($submission?->grade?->score !== null) {
+                                $type = $assignment->type ?? 'task';
+                                $scoresByType[$type][] = (float) $submission->grade->score;
+                            }
+                        }
+
+                        $taskAvg = ! empty($scoresByType['task']) ? array_sum($scoresByType['task']) / count($scoresByType['task']) : null;
+                        $utsAvg = ! empty($scoresByType['uts']) ? array_sum($scoresByType['uts']) / count($scoresByType['uts']) : null;
+                        $uasAvg = ! empty($scoresByType['uas']) ? array_sum($scoresByType['uas']) / count($scoresByType['uas']) : null;
+
+                        $stats = DB::table('attendances')
+                            ->where('schedule_id', $schedule->id)
+                            ->where('student_id', $student->user_id)
+                            ->selectRaw('COUNT(*) as total, SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as present_count', ['present'])
+                            ->first();
+                        $attendanceRate = ($stats->total ?? 0) > 0 ? round(($stats->present_count / $stats->total) * 100, 2) : 100;
+
+                        $activeWeight = 0;
+                        $weightedSum = 0;
+                        if ($taskAvg !== null) {
+                            $weightedSum += $taskAvg * 40;
+                            $activeWeight += 40;
+                        }
+                        if ($utsAvg !== null) {
+                            $weightedSum += $utsAvg * 25;
+                            $activeWeight += 25;
+                        }
+                        if ($uasAvg !== null) {
+                            $weightedSum += $uasAvg * 25;
+                            $activeWeight += 25;
+                        }
+                        $weightedSum += $attendanceRate * 10;
+                        $activeWeight += 10;
+
+                        $finalScore = $activeWeight > 0 ? round($weightedSum / $activeWeight, 2) : null;
+                        $subjectScores[$subjectName] = $finalScore;
+                    }
+
+                    $avgScore = ! empty($subjectScores)
+                        ? round(array_sum(array_filter($subjectScores)) / count(array_filter($subjectScores)), 2)
+                        : null;
+
+                    $classStudents[] = [
+                        'student_id' => $student->user_id,
+                        'name' => $student->user?->name ?? '-',
+                        'avg_score' => $avgScore,
+                        'grade_index' => $this->reportService->resolveGradeIndex($avgScore),
+                    ];
+                }
+
+                $allStudents[] = [
+                    'class_name' => $class->name,
+                    'students' => $classStudents,
+                ];
+            }
+
             return response()->json([
                 'message' => "Berhasil memigrasi $migratedClassCount kelas, menyalin $migratedStudentCount siswa, dan menduplikasi jadwal ke semester baru.",
+                'summary' => [
+                    'classes_migrated' => $migratedClassCount,
+                    'students_migrated' => $migratedStudentCount,
+                ],
+                'all_students' => $allStudents,
             ], 200);
         } catch (Exception $e) {
             DB::rollBack();
+
             return response()->json([
                 'message' => 'Terjadi kesalahan saat migrasi.',
                 'error' => $e->getMessage(),
@@ -322,9 +605,10 @@ class ClassController
     /**
      * POST /classes/migrate-class
      * Promote students to next grade level (7→8, 8→9, 9→alumni).
-     * Creates new classes for the next academic year WITHOUT homeroom teacher and schedules.
+     * Evaluates each student's grades from BOTH odd and even semesters using weighted scoring.
+     * Only students who pass the min_score_to_pass threshold are promoted.
+     * Failed students are marked as 'repeated' and left in the old year.
      * Only works when active year is EVEN semester. Auto-activates the new year after success.
-     * Uses raw queries for maximum performance.
      */
     public function migrateClass(Request $request)
     {
@@ -342,121 +626,302 @@ class ClassController
 
             if (! $activeYear) {
                 DB::rollBack();
+
                 return response()->json(['message' => 'Tidak ada tahun ajaran aktif.'], 422);
             }
 
             if ($activeYear->semester !== 'even') {
                 DB::rollBack();
+
                 return response()->json(['message' => 'Migrasi kelas hanya dapat dilakukan pada semester Genap.'], 422);
             }
 
-            // 2. Verify target year is not yet active and is different
+            // 2. Verify target year
             $targetYear = DB::table('academic_years')->where('id', $toYearId)->first();
 
             if (! $targetYear) {
                 DB::rollBack();
+
                 return response()->json(['message' => 'Tahun ajaran tujuan tidak ditemukan.'], 404);
             }
 
             if ($targetYear->is_active) {
                 DB::rollBack();
+
                 return response()->json(['message' => 'Tahun ajaran tujuan sudah aktif. Gunakan tahun ajaran yang belum aktif.'], 422);
             }
 
             if ($targetYear->id === $activeYear->id) {
                 DB::rollBack();
+
                 return response()->json(['message' => 'Tahun ajaran tujuan tidak boleh sama dengan tahun ajaran aktif.'], 422);
             }
 
             $now = now()->toDateTimeString();
             $fromYearId = $activeYear->id;
 
-            // 3. Check source classes exist
-            $classCount = DB::table('classes')->where('academic_year_id', $fromYearId)->count();
-            if ($classCount === 0) {
+            // 3. Load even semester academic year model + find odd semester year
+            $evenYear = AcademicYear::findOrFail($fromYearId);
+            $oddYear = $this->reportService->findOddSemesterYear($evenYear);
+
+            // 4. Load all even semester classes with students
+            $evenClasses = SchoolClass::where('academic_year_id', $fromYearId)
+                ->with(['students' => function ($query) {
+                    $query->join('users', 'students.user_id', '=', 'users.id')
+                        ->select('students.*')
+                        ->orderBy('users.name');
+                }])
+                ->get();
+
+            if ($evenClasses->isEmpty()) {
                 DB::rollBack();
+
                 return response()->json(['message' => 'Tidak ada kelas di tahun ajaran aktif.'], 404);
             }
 
-            // PERF FIX: Bulk mark grade 9 students as graduated (single query instead of loop)
-            // Extract grade from class name: if name starts with '9' or 'IX', it's grade 9
-            $graduatedCount = DB::statement("
-                UPDATE students s
-                INNER JOIN class_student cs ON cs.student_id = s.user_id
-                INNER JOIN classes c ON c.id = cs.class_id
-                SET s.status = 'graduated', s.updated_at = ?
-                WHERE c.academic_year_id = ?
-                AND (c.name REGEXP '^9' OR c.name REGEXP '^IX')
-            ", [$now, $fromYearId]);
+            // 5. Pre-load odd semester classes (for dual-semester evaluation)
+            $oddClassesByName = [];
+            if ($oddYear) {
+                $oddClasses = SchoolClass::where('academic_year_id', $oddYear->id)
+                    ->with([
+                        'schedules' => function ($query) use ($oddYear) {
+                            $query->where('academic_year_id', $oddYear->id)
+                                ->with([
+                                    'subject',
+                                    'teacher.user',
+                                    'attendances',
+                                    'assignments.submissions.grade',
+                                ]);
+                        },
+                    ])
+                    ->get()
+                    ->keyBy('name');
+                $oddClassesByName = $oddClasses->toArray();
+            }
 
-            // PERF FIX: Bulk create new classes for promoted students (grade 7→8, 8→9)
-            // Using CASE expression to map grade numbers in SQL
-            DB::statement("
-                INSERT INTO classes (name, academic_year_id, homeroom_teacher_id, created_at, updated_at)
-                SELECT
-                    CASE
-                        WHEN c.name REGEXP '^7' THEN CONCAT('8', SUBSTRING(c.name, 2))
-                        WHEN c.name REGEXP '^VII' THEN CONCAT('VIII', SUBSTRING(c.name, 4))
-                        WHEN c.name REGEXP '^8' THEN CONCAT('9', SUBSTRING(c.name, 2))
-                        WHEN c.name REGEXP '^VIII' THEN CONCAT('IX', SUBSTRING(c.name, 4))
-                    END,
-                    ?,
-                    NULL,
-                    ?,
-                    ?
-                FROM classes c
-                WHERE c.academic_year_id = ?
-                AND (
-                    c.name REGEXP '^7' OR c.name REGEXP '^VII'
-                    OR c.name REGEXP '^8' OR c.name REGEXP '^VIII'
-                )
-                AND NOT EXISTS (
-                    SELECT 1 FROM classes c2
-                    WHERE c2.academic_year_id = ?
-                    AND c2.name = CASE
-                        WHEN c.name REGEXP '^7' THEN CONCAT('8', SUBSTRING(c.name, 2))
-                        WHEN c.name REGEXP '^VII' THEN CONCAT('VIII', SUBSTRING(c.name, 4))
-                        WHEN c.name REGEXP '^8' THEN CONCAT('9', SUBSTRING(c.name, 2))
-                        WHEN c.name REGEXP '^VIII' THEN CONCAT('IX', SUBSTRING(c.name, 4))
-                    END
-                )
-            ", [$toYearId, $now, $now, $fromYearId, $toYearId]);
+            // 6. Evaluate each student's promotion status
+            $promotedStudents = [];      // student_id => ['class_name' => ..., 'next_class_name' => ...]
+            $repeatedStudents = [];      // ['student_id' => ..., 'name' => ..., 'class_name' => ..., 'reason' => ..., 'failed_subjects' => [...]]
+            $graduatedStudents = [];     // student_id
+            $allStudentsByClass = [];    // class_name => [{ student_id, name, avg_score, grade_index, status }]
+
+            foreach ($evenClasses as $evenClass) {
+                $oddClass = $oddClassesByName[$evenClass->name] ?? null;
+                $classStudentsList = [];
+
+                foreach ($evenClass->students as $student) {
+                    $evaluation = $this->reportService->evaluateStudentPromotion(
+                        $student,
+                        $evenClass,
+                        $evenYear,
+                        $oddClass,
+                        $oddYear,
+                    );
+
+                    // Compute average score for grade index
+                    $subjectScores = $this->reportService->calculateDualSemesterSubjectScores(
+                        $student,
+                        $evenClass,
+                        $evenYear,
+                        $oddClass,
+                        $oddYear,
+                    );
+                    $validScores = array_filter($subjectScores);
+                    $avgScore = ! empty($validScores) ? round(array_sum($validScores) / count($validScores), 2) : null;
+
+                    // Extract grade level from class name
+                    preg_match('/^(\d+)/', trim($evenClass->name), $gradeMatches);
+                    $currentGrade = isset($gradeMatches[1]) ? (int) $gradeMatches[1] : 0;
+
+                    if ($evaluation['passed']) {
+                        if ($currentGrade >= 9) {
+                            $status = 'graduated';
+                            $graduatedStudents[] = $student->user_id;
+                        } else {
+                            $status = 'promoted';
+                            $promotedStudents[$student->user_id] = [
+                                'even_class_name' => $evenClass->name,
+                                'current_grade' => $currentGrade,
+                            ];
+                        }
+                    } else {
+                        $status = 'repeated';
+                        $repeatedStudents[] = [
+                            'student_id' => $student->user_id,
+                            'name' => $student->user?->name ?? '-',
+                            'class_name' => $evenClass->name,
+                            'reason' => $evaluation['reason'],
+                            'failed_subjects' => $evaluation['failed_subjects'],
+                        ];
+                    }
+
+                    $classStudentsList[] = [
+                        'student_id' => $student->user_id,
+                        'name' => $student->user?->name ?? '-',
+                        'avg_score' => $avgScore,
+                        'grade_index' => $this->reportService->resolveGradeIndex($avgScore),
+                        'status' => $status,
+                    ];
+                }
+
+                $allStudentsByClass[] = [
+                    'class_name' => $evenClass->name,
+                    'students' => $classStudentsList,
+                ];
+            }
+
+            // 7. Mark graduated students (grade 9 passed)
+            if (! empty($graduatedStudents)) {
+                DB::table('students')
+                    ->whereIn('user_id', $graduatedStudents)
+                    ->update(['status' => 'graduated', 'updated_at' => $now]);
+            }
+
+            // 8. Mark repeated students
+            if (! empty($repeatedStudents)) {
+                $repeatedIds = array_column($repeatedStudents, 'student_id');
+                DB::table('students')
+                    ->whereIn('user_id', $repeatedIds)
+                    ->update(['status' => 'repeated', 'updated_at' => $now]);
+            }
+
+            $graduatedCount = count($graduatedStudents);
+            $repeatedCount = count($repeatedStudents);
+            $promotedCount = count($promotedStudents);
+
+            // 9. Create new classes for next grade (only classes that have promoted students)
+            $newClassNameMap = [];
+            foreach ($promotedStudents as $studentId => $info) {
+                $evenClassName = $info['even_class_name'];
+                if (isset($newClassNameMap[$evenClassName])) {
+                    continue;
+                }
+
+                // Extract suffix from class name (e.g. "7A" → "A", "VII-B" → "-B")
+                $grade = $info['current_grade'];
+                $suffix = substr($evenClassName, strlen((string) $grade));
+
+                $romanMap = [7 => 'VIII', 8 => 'IX'];
+                $nextGrade = $grade + 1;
+                $nextRoman = $romanMap[$grade] ?? (string) $nextGrade;
+
+                $newClassNameMap[$evenClassName] = $nextRoman.$suffix;
+            }
+
+            // Insert new classes
+            foreach ($newClassNameMap as $evenClassName => $newClassName) {
+                $exists = DB::table('classes')
+                    ->where('academic_year_id', $toYearId)
+                    ->where('name', $newClassName)
+                    ->exists();
+
+                if (! $exists) {
+                    DB::table('classes')->insert([
+                        'name' => $newClassName,
+                        'academic_year_id' => $toYearId,
+                        'homeroom_teacher_id' => null,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]);
+                }
+            }
 
             $newClassCount = DB::table('classes')->where('academic_year_id', $toYearId)->count();
 
-            // PERF FIX: Bulk copy student pivots to new classes (single query)
-            $promotedCount = DB::statement("
-                INSERT IGNORE INTO class_student (class_id, student_id, academic_year_id, created_at, updated_at)
-                SELECT target.id, cs.student_id, ?, ?, ?
-                FROM class_student cs
-                INNER JOIN classes source ON source.id = cs.class_id AND source.academic_year_id = ?
-                INNER JOIN classes target ON target.academic_year_id = ?
-                AND (
-                    -- Grade 7→8 mapping
-                    (source.name REGEXP '^7' AND target.name = CONCAT('8', SUBSTRING(source.name, 2)))
-                    OR (source.name REGEXP '^VII' AND target.name = CONCAT('VIII', SUBSTRING(source.name, 4)))
-                    -- Grade 8→9 mapping
-                    OR (source.name REGEXP '^8' AND target.name = CONCAT('9', SUBSTRING(source.name, 2)))
-                    OR (source.name REGEXP '^VIII' AND target.name = CONCAT('IX', SUBSTRING(source.name, 4)))
-                )
-            ", [$toYearId, $now, $now, $fromYearId, $toYearId]);
+            // 10. Copy promoted student pivots to new classes
+            $insertRows = [];
+            foreach ($promotedStudents as $studentId => $info) {
+                $newClassName = $newClassNameMap[$info['even_class_name']];
+                $targetClass = DB::table('classes')
+                    ->where('academic_year_id', $toYearId)
+                    ->where('name', $newClassName)
+                    ->first();
 
-            // 4. Auto-activate the target academic year, deactivate old year
+                if ($targetClass) {
+                    $insertRows[] = [
+                        'class_id' => $targetClass->id,
+                        'student_id' => $studentId,
+                        'academic_year_id' => $toYearId,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ];
+                }
+            }
+
+            if (! empty($insertRows)) {
+                DB::table('class_student')->insertOrIgnore($insertRows);
+            }
+
+            // 11. Auto-activate target year, deactivate old year
             DB::table('academic_years')->where('is_active', true)->update(['is_active' => false, 'updated_at' => $now]);
             DB::table('academic_years')->where('id', $toYearId)->update(['is_active' => true, 'updated_at' => $now]);
 
             DB::commit();
 
-            return response()->json([
-                'message' => "Migrasi kelas berhasil! $newClassCount kelas baru dibuat, $promotedCount siswa dinaikkan kelas, $graduatedCount siswa kelas 9 diluluskan. Tahun ajaran baru telah diaktifkan.",
-            ], 200);
+            // Log migration activity
+            ActivityLog::create([
+                'user_id' => $request->user()->id,
+                'action' => 'Migrasi Kelas',
+                'loggable_type' => AcademicYear::class,
+                'loggable_id' => $toYearId,
+                'new_values' => [
+                    'from_year_id' => $activeYear->id,
+                    'from_year_name' => $activeYear->name ?? '-',
+                    'to_year_name' => $targetYear->name ?? '-',
+                    'classes_created' => $newClassCount,
+                    'students_promoted' => $promotedCount,
+                    'students_graduated' => $graduatedCount,
+                    'students_repeated' => $repeatedCount,
+                ],
+                'ip_address' => $request->ip(),
+            ]);
+
+            // 12. Build response
+            $message = "Migrasi kelas berhasil! {$newClassCount} kelas baru dibuat, {$promotedCount} siswa dinaikkan kelas, {$graduatedCount} siswa kelas 9 diluluskan.";
+            if ($repeatedCount > 0) {
+                $message .= " {$repeatedCount} siswa tidak naik kelas (ulang).";
+            }
+
+            $response = [
+                'message' => $message,
+                'summary' => [
+                    'classes_created' => $newClassCount,
+                    'students_promoted' => $promotedCount,
+                    'students_graduated' => $graduatedCount,
+                    'students_repeated' => $repeatedCount,
+                ],
+                'all_students' => $allStudentsByClass,
+            ];
+
+            if ($repeatedCount > 0) {
+                $response['repeated_students'] = $repeatedStudents;
+            }
+
+            return response()->json($response, 200);
         } catch (Exception $e) {
             DB::rollBack();
+
             return response()->json([
                 'message' => 'Terjadi kesalahan saat migrasi kelas.',
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * GET /classes/migration-history
+     * List all semester and class migration activity logs.
+     */
+    public function migrationHistory(Request $request): JsonResponse
+    {
+        $logs = ActivityLog::query()
+            ->where('action', 'Migrasi Semester')
+            ->orWhere('action', 'Migrasi Kelas')
+            ->with('user:id,name')
+            ->orderByDesc('created_at')
+            ->paginate(20);
+
+        return response()->json($logs);
     }
 
     /**

@@ -2,10 +2,9 @@
 
 namespace App\Http\Controllers\API\Admin;
 
-use App\Models\User;
-use App\Models\SchoolClass;
 use App\Models\AcademicYear;
 use App\Models\ActivityLog;
+use App\Models\SchoolClass;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -44,14 +43,16 @@ class DashboardController
         return response()->json([
             'success' => true,
             'data' => [
-                'academic_year' => $activeYear ? $activeYear->name . ' (' . ($activeYear->semester === 'odd' ? 'Ganjil' : 'Genap') . ')' : 'Tidak ada yang aktif',
+                'academic_year' => $activeYear ? $activeYear->name.' ('.($activeYear->semester === 'odd' ? 'Ganjil' : 'Genap').')' : 'Tidak ada yang aktif',
+                'academic_year_start_date' => $activeYear?->start_date?->format('Y-m-d'),
+                'academic_year_end_date' => $activeYear?->end_date?->format('Y-m-d'),
                 'stats' => [
                     'students' => $stats['students'],
                     'teachers' => $stats['teachers'],
-                    'classes'  => $totalClasses,
+                    'classes' => $totalClasses,
                 ],
-                'recent_activities' => $recentActivities
-            ]
+                'recent_activities' => $recentActivities,
+            ],
         ]);
     }
 }

@@ -41,6 +41,7 @@ export const useGlobalDropdownsStore = defineStore('globalDropdowns', () => {
     students: false,
     classes: false,
     subjects: false,
+    competencies: false,
   });
 
   // ─── Formatted Options for BaseSelect ───
@@ -194,6 +195,10 @@ export const useGlobalDropdownsStore = defineStore('globalDropdowns', () => {
     dirtyFlags.value.subjects = true;
   }
 
+  function invalidateCompetencies() {
+    dirtyFlags.value.competencies = true;
+  }
+
   // ─── Dynamic Refresh (clear + force-fetch + clear dirty flag) ───
 
   async function refreshAcademicYears() {
@@ -258,6 +263,7 @@ export const useGlobalDropdownsStore = defineStore('globalDropdowns', () => {
     invalidateStudents,
     invalidateClasses,
     invalidateSubjects,
+    invalidateCompetencies,
     // Dynamic Refresh (clear + force-fetch + mark dirty)
     refreshAcademicYears,
     refreshTeacherOptions,

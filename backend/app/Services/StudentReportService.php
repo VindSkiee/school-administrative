@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use App\Models\AcademicYear;
-use App\Services\GradeAggregationService;
+use App\Models\SchoolClass;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class StudentReportService
@@ -14,13 +14,14 @@ class StudentReportService
     {
         $activeYear = AcademicYear::query()->where('is_active', true)->first();
 
-        if (!$activeYear) {
-            throw new HttpException(400, "Tidak ada Tahun Ajaran yang aktif.");
+        if (! $activeYear) {
+            throw new HttpException(400, 'Tidak ada Tahun Ajaran yang aktif.');
         }
 
-        // VALIDASI GERBANG PUBLIKASI
-        if (!$activeYear->is_report_published) {
-            throw new HttpException(403, "Rapor untuk semester ini belum diterbitkan oleh pihak sekolah. Harap tunggu pengumuman resmi.");
+        // VALIDASI GERBANG PUBLIKASI — per-class
+        $schoolClass = SchoolClass::findOrFail($classId);
+        if (! $schoolClass->is_published) {
+            throw new HttpException(403, 'Kelas ini belum dipublikasikan oleh pihak sekolah. Harap tunggu pengumuman resmi.');
         }
 
         // Kalkulasi nilai on-the-fly (Menggunakan service yang dibuat di modul sebelumnya)
@@ -30,8 +31,8 @@ class StudentReportService
             'student_id' => $studentId,
             'academic_year' => $activeYear->name,
             'semester' => $activeYear->semester,
-            'published_at' => $activeYear->updated_at,
-            'results' => $grades
+            'published_at' => $schoolClass->published_at,
+            'results' => $grades,
         ];
     }
 }

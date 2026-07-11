@@ -40,31 +40,73 @@
             </div>
             <div>
               <label class="block text-sm font-semibold text-gray-700 mb-1">Tenggat Waktu (Deadline) <span class="text-red-500">*</span></label>
-              <input v-model="form.due_date" type="datetime-local" required class="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-red/20 outline-none text-sm" />
+              <input v-model="form.due_date" type="datetime-local" required :min="minDateTime" :max="maxDateTime" class="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-red/20 outline-none text-sm" />
+              <p v-if="academicYearEndDate" class="text-xs text-gray-500 mt-1">Maksimal: {{ new Date(academicYearEndDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) }}</p>
             </div>
           </div>
 
           <div>
             <label class="block text-sm font-semibold text-gray-700 mb-2">Jenis Penugasan <span class="text-red-500">*</span></label>
             <div class="flex flex-wrap gap-3">
-              <label class="flex-1 min-w-[120px] cursor-pointer">
+              <label class="flex-1 min-w-[100px] cursor-pointer">
                 <input type="radio" v-model="form.type" value="task" class="peer sr-only" required>
                 <div class="p-3 border-2 border-gray-200 rounded-xl text-center text-sm font-bold text-gray-500 peer-checked:border-blue-500 peer-checked:text-blue-600 peer-checked:bg-blue-50 transition-all">
                   Tugas Harian
                 </div>
               </label>
-              <label class="flex-1 min-w-[120px] cursor-pointer">
+              <label class="flex-1 min-w-[100px] cursor-pointer">
+                <input type="radio" v-model="form.type" value="ujian_harian" class="peer sr-only" required>
+                <div class="p-3 border-2 border-gray-200 rounded-xl text-center text-sm font-bold text-gray-500 peer-checked:border-green-500 peer-checked:text-green-600 peer-checked:bg-green-50 transition-all">
+                  Ujian Harian
+                </div>
+              </label>
+              <label class="flex-1 min-w-[100px] cursor-pointer">
                 <input type="radio" v-model="form.type" value="uts" class="peer sr-only" required>
                 <div class="p-3 border-2 border-gray-200 rounded-xl text-center text-sm font-bold text-gray-500 peer-checked:border-brand-orange peer-checked:text-brand-orange peer-checked:bg-orange-50 transition-all">
                   UTS
                 </div>
               </label>
-              <label class="flex-1 min-w-[120px] cursor-pointer">
+              <label class="flex-1 min-w-[100px] cursor-pointer">
                 <input type="radio" v-model="form.type" value="uas" class="peer sr-only" required>
                 <div class="p-3 border-2 border-gray-200 rounded-xl text-center text-sm font-bold text-gray-500 peer-checked:border-brand-red peer-checked:text-brand-red peer-checked:bg-red-50 transition-all">
                   UAS
                 </div>
               </label>
+            </div>
+          </div>
+
+          <div v-if="['ujian_harian', 'uts', 'uas'].includes(form.type) && subjectKKM !== null" class="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-3">
+            <div class="w-8 h-8 bg-amber-100 text-amber-600 rounded-lg flex items-center justify-center shrink-0">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            </div>
+            <div>
+              <p class="text-xs font-bold text-amber-800">KKM Mata Pelajaran: <span class="text-sm font-black">{{ subjectKKM }}</span></p>
+              <p class="text-[11px] text-amber-600">Siswa dengan nilai di bawah KKM akan masuk daftar remedial.</p>
+            </div>
+          </div>
+
+          <div v-if="['ujian_harian', 'uts', 'uas'].includes(form.type)" class="bg-green-50 border border-green-200 rounded-xl p-4">
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" v-model="form.enable_remedial" class="w-4 h-4 text-green-600 rounded border-gray-300 focus:ring-green-500" />
+              <span class="text-sm font-bold text-green-800">Aktifkan Remedial</span>
+            </label>
+            <p class="text-xs text-green-600 mt-1 ml-7">Jika diaktifkan, remedial dapat diberikan kepada siswa yang nilainya di bawah KKM setelah ujian dinilai.</p>
+            <div v-if="form.enable_remedial" class="mt-3 ml-7">
+              <label class="block text-sm font-semibold text-green-800 mb-2">Skor Remedial</label>
+              <div class="flex gap-4">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" v-model="form.remedial_mode" value="replace" class="text-green-600 focus:ring-green-500" />
+                  <span class="text-sm text-gray-700">Ganti (max)</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" v-model="form.remedial_mode" value="average" class="text-green-600 focus:ring-green-500" />
+                  <span class="text-sm text-gray-700">Rata-rata</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" v-model="form.remedial_mode" value="custom" class="text-green-600 focus:ring-green-500" />
+                  <span class="text-sm text-gray-700">Custom</span>
+                </label>
+              </div>
             </div>
           </div>
 
@@ -97,9 +139,9 @@
                     <span v-if="isDragging">Lepaskan file di sini!</span>
                     <span v-else><span class="font-semibold text-brand-red">Klik untuk upload</span> atau seret file ke sini</span>
                   </p>
-                  <p class="text-xs text-gray-500" v-show="!isDragging">PDF, PPT, DOC, XLS, ZIP, PNG, JPG (Maks. 10MB/file)</p>
+                  <p class="text-xs text-gray-500" v-show="!isDragging">PDF, PPT, DOC, DOCX, XLS, XLSX, ZIP, PNG, JPG, JPEG (Maks. 10MB/file)</p>
                 </div>
-                <input type="file" multiple class="hidden" @change="handleFileSelect" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.mp4,.zip,.png,.jpg,.jpeg" />
+                <input type="file" multiple class="hidden" @change="handleFileSelect" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip,.png,.jpg,.jpeg" />
               </label>
             </div>
 
@@ -111,9 +153,20 @@
             </div>
           </div>
 
+          <!-- Upload Progress Bar -->
+          <div v-if="isSubmitting && uploadProgress > 0" class="pt-2">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-semibold text-gray-600">Mengunggah...</span>
+              <span class="text-xs font-bold text-brand-red">{{ uploadProgress }}%</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-1.5">
+              <div class="bg-brand-red h-1.5 rounded-full transition-all duration-300" :style="{ width: uploadProgress + '%' }"></div>
+            </div>
+          </div>
+
           <div class="flex justify-end pt-2">
             <button type="submit" :disabled="isSubmitting" class="px-6 py-2.5 bg-brand-red hover:bg-brand-orange text-white rounded-xl text-sm font-bold shadow-sm transition-colors disabled:opacity-50">
-              {{ isSubmitting ? 'Menyimpan...' : '📢 Kirim Tugas' }}
+              {{ isSubmitting ? (uploadProgress > 0 ? `Mengunggah... ${uploadProgress}%` : 'Menyimpan...') : '📢 Kirim Tugas' }}
             </button>
           </div>
         </form>
@@ -129,7 +182,7 @@
       
       <div v-else>
         <h3 class="text-lg font-bold text-gray-800 mb-3 border-b pb-2">Tugas Pertemuan Ini</h3>
-        <div v-if="currentAssignments.length === 0" class="bg-gray-50 p-4 rounded-xl text-center text-sm text-gray-500 border border-gray-200 mb-6">Tidak ada tugas yang ditambahkan pada pertemuan ini.</div>
+        <div v-if="currentAssignments.length === 0" class="bg-gray-50 p-12 rounded-xl text-center text-sm text-gray-500 border border-gray-200 mb-6">Tidak ada tugas yang ditambahkan pada pertemuan ini.</div>
         
         <div v-else class="space-y-3 mb-6">
           <div v-for="item in currentAssignments" :key="item.id" class="bg-white border border-gray-200 p-4 sm:p-5 rounded-2xl shadow-sm hover:shadow-md transition-shadow flex flex-col sm:flex-row justify-between gap-4">
@@ -137,6 +190,7 @@
               <div class="flex items-center gap-2 mb-1">
                 <span class="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded">Tenggat: {{ formatDateTime(item.due_date) }}</span>
                 <span class="px-2 py-0.5 text-xs font-bold rounded" :class="getTypeBadge(item.type).classes">{{ getTypeBadge(item.type).label }}</span>
+                <span v-if="['ujian_harian', 'uts', 'uas'].includes(item.type) && getAssignmentKKM(item) !== null" class="px-2 py-0.5 bg-amber-50 text-amber-700 text-[10px] font-bold rounded border border-amber-200">KKM: {{ getAssignmentKKM(item) }}</span>
               </div>
               <h4 class="text-lg font-bold text-gray-800">{{ item.title }}</h4>
               <p class="text-sm text-gray-600 mt-1 mb-3">{{ item.description }}</p>
@@ -151,7 +205,7 @@
               <button @click="goToDetail(item.id)" class="flex-1 px-4 py-2 bg-green-50 hover:bg-green-100 border border-green-200 text-green-700 font-bold text-sm rounded-xl transition-colors whitespace-nowrap">
                 Periksa Jawaban ({{ item.submissions_count || 0 }})
               </button>
-              <button @click="deleteAssignment(item.id)" class="px-4 py-2 bg-gray-50 hover:bg-red-50 text-gray-500 hover:text-red-600 border border-gray-200 font-bold text-sm rounded-xl transition-colors">
+              <button @click="deleteAssignment(item)" class="px-4 py-2 bg-gray-50 hover:bg-red-50 text-gray-500 hover:text-red-600 border border-gray-200 font-bold text-sm rounded-xl transition-colors">
                 Hapus
               </button>
             </div>
@@ -167,6 +221,7 @@
               <div class="flex items-center gap-2 mb-1">
                 <span class="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded">Tenggat: {{ formatDateTime(item.due_date) }}</span>
                 <span class="px-2 py-0.5 text-xs font-bold rounded" :class="getTypeBadge(item.type).classes">{{ getTypeBadge(item.type).label }}</span>
+                <span v-if="['ujian_harian', 'uts', 'uas'].includes(item.type) && getAssignmentKKM(item) !== null" class="px-2 py-0.5 bg-amber-50 text-amber-700 text-[10px] font-bold rounded border border-amber-200">KKM: {{ getAssignmentKKM(item) }}</span>
                 <span class="text-xs text-gray-500 font-medium">Tgl Dibuat: {{ item.date }}</span>
               </div>
               <h4 class="text-lg font-bold text-gray-800">{{ item.title }}</h4>
@@ -182,7 +237,7 @@
               <button @click="goToDetail(item.id)" class="flex-1 px-4 py-2 bg-green-50 hover:bg-green-100 border border-green-200 text-green-700 font-bold text-sm rounded-xl transition-colors whitespace-nowrap">
                 Periksa Jawaban ({{ item.submissions_count || 0 }})
               </button>
-              <button @click="deleteAssignment(item.id)" class="px-4 py-2 bg-gray-50 hover:bg-red-50 text-gray-500 hover:text-red-600 border border-gray-200 font-bold text-sm rounded-xl transition-colors">
+              <button @click="deleteAssignment(item)" class="px-4 py-2 bg-gray-50 hover:bg-red-50 text-gray-500 hover:text-red-600 border border-gray-200 font-bold text-sm rounded-xl transition-colors">
                 Hapus
               </button>
             </div>
@@ -191,14 +246,28 @@
       </div>
     </div>
 
+    <ConfirmModal
+      :isOpen="confirmModal.isOpen"
+      :isLoading="confirmModal.isLoading"
+      title="Hapus Tugas?"
+      :message="`Tugas ini beserta ${confirmModal.submissionCount} jawaban siswa dan seluruh lampiran akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.`"
+      confirmText="Ya, Hapus!"
+      @confirm="confirmDelete"
+      @cancel="confirmModal.isOpen = false"
+    />
+
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { assignmentService } from '../../../services/modules/teacher/assignmentService';
+import { attendanceService } from '../../../services/modules/teacher/attendanceService';
+import { teacherDashboardService } from '../../../services/modules/teacher/dashboardService';
 import { useToastStore } from '../../../stores/toast';
+import { getStorageUrl } from '../../../utils/fileHelper';
+import ConfirmModal from '../../../components/ConfirmModal.vue';
 
 const props = defineProps({
   scheduleId: { type: [String, Number], required: true },
@@ -214,8 +283,19 @@ const showForm = ref(false);
 const assignments = ref([]);
 const isLoading = ref(false);
 const isSubmitting = ref(false);
-const form = ref({ title: '', description: '', due_date: '', type: 'task' });
+const uploadProgress = ref(0);
+const form = ref({ title: '', description: '', due_date: '', type: 'task', enable_remedial: false, remedial_mode: 'replace' });
 const selectedFiles = ref([]);
+const subjectKKM = ref(null);
+const academicYearEndDate = ref(null);
+
+// CONFIRM MODAL STATE
+const confirmModal = reactive({
+  isOpen: false,
+  isLoading: false,
+  targetId: null,
+  submissionCount: 0,
+});
 
 // STATE DRAG & DROP (Ini yang sebelumnya memicu error)
 const isDragging = ref(false);
@@ -223,20 +303,36 @@ const isDragging = ref(false);
 // Badge helper for assignment type
 const getTypeBadge = (type) => {
   switch (type) {
+    case 'ujian_harian': return { label: 'Ujian Harian', classes: 'bg-green-50 text-green-700' };
     case 'uts': return { label: 'UTS', classes: 'bg-brand-orange/10 text-brand-orange' };
     case 'uas': return { label: 'UAS', classes: 'bg-brand-red/10 text-brand-red' };
     default: return { label: 'Tugas Harian', classes: 'bg-blue-50 text-blue-700' };
   }
 };
 
+const getAssignmentKKM = (item) => {
+  const settings = item?.schedule?.subject?.competency_settings;
+  return (Array.isArray(settings) && settings.length > 0) ? settings[0]?.min_score ?? null : null;
+};
+
+// Computed for datetime-local min/max
+const minDateTime = computed(() => {
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+  return now.toISOString().slice(0, 16);
+});
+
+const maxDateTime = computed(() => {
+  if (!academicYearEndDate.value) return '';
+  const endDate = new Date(academicYearEndDate.value);
+  endDate.setHours(23, 59, 0, 0);
+  endDate.setMinutes(endDate.getMinutes() - endDate.getTimezoneOffset());
+  return endDate.toISOString().slice(0, 16);
+});
+
 // Memisahkan data berdasarkan tanggal terpilih
 const currentAssignments = computed(() => assignments.value.filter(a => a.date === props.selectedDate));
 const pastAssignments = computed(() => assignments.value.filter(a => a.date !== props.selectedDate));
-
-const getStorageUrl = (path) => {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api';
-  return `${baseUrl}/storage/${path}`;
-};
 
 const formatDateTime = (dateString) => {
   if (!dateString) return '-';
@@ -285,6 +381,25 @@ const removeFile = (index) => {
 };
 
 // ----------------- MANAJEMEN TUGAS -----------------
+const fetchScheduleKKM = async () => {
+  try {
+    const res = await attendanceService.getScheduleDetail(props.scheduleId);
+    const settings = res.data?.subject?.competency_settings;
+    subjectKKM.value = (Array.isArray(settings) && settings.length > 0) ? settings[0]?.min_score : null;
+  } catch {
+    subjectKKM.value = null;
+  }
+};
+
+const fetchAcademicYearEndDate = async () => {
+  try {
+    const res = await teacherDashboardService.getStats();
+    academicYearEndDate.value = res.data?.academic_year_end_date || null;
+  } catch {
+    academicYearEndDate.value = null;
+  }
+};
+
 const fetchAssignments = async () => {
   isLoading.value = true;
   try {
@@ -298,7 +413,26 @@ const fetchAssignments = async () => {
 };
 
 const submitAssignment = async () => {
+  // Validasi deadline sebelum submit
+  if (form.value.due_date) {
+    const dueDate = new Date(form.value.due_date);
+    const now = new Date();
+    if (dueDate <= now) {
+      toastStore.error("Tenggat waktu harus di masa depan.");
+      return;
+    }
+    if (academicYearEndDate.value) {
+      const yearEnd = new Date(academicYearEndDate.value);
+      yearEnd.setHours(23, 59, 59, 999);
+      if (dueDate > yearEnd) {
+        toastStore.error(`Tenggat waktu melewati akhir tahun ajaran (${yearEnd.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}).`);
+        return;
+      }
+    }
+  }
+
   isSubmitting.value = true;
+  uploadProgress.value = 0;
   try {
     const formData = new FormData();
     formData.append("schedule_id", props.scheduleId);
@@ -310,29 +444,51 @@ const submitAssignment = async () => {
     const formattedDate = form.value.due_date.replace("T", " ") + ":00";
     formData.append("due_date", formattedDate);
 
+    if (form.value.enable_remedial) {
+      formData.append("enable_remedial", "1");
+      formData.append("remedial_mode", form.value.remedial_mode);
+    }
+
     selectedFiles.value.forEach((file) => formData.append("files[]", file));
 
-    await assignmentService.createAssignment(formData);
+    await assignmentService.createAssignment(formData, {
+      onUploadProgress: (e) => {
+        if (e.total) {
+          uploadProgress.value = Math.round((e.loaded * 100) / e.total);
+        }
+      },
+    });
     toastStore.success("Tugas berhasil disebarkan!");
 
-    form.value = { title: "", description: "", due_date: "", type: "task" };
+    form.value = { title: "", description: "", due_date: "", type: "task", enable_remedial: false, remedial_mode: "replace" };
     selectedFiles.value = [];
     fetchAssignments();
   } catch (error) {
-    toastStore.error(error.response?.data?.message || "Gagal membuat tugas.");
+    const msg = error.response?.data?.message || error.response?.data?.error || "Gagal membuat tugas. Periksa koneksi dan coba lagi.";
+    toastStore.error(msg);
   } finally {
     isSubmitting.value = false;
+    uploadProgress.value = 0;
   }
 };
 
-const deleteAssignment = async (id) => {
-  if (!confirm("Hapus tugas ini beserta seluruh jawaban siswa yang sudah terkumpul?")) return;
+const deleteAssignment = (item) => {
+  confirmModal.targetId = item.id;
+  confirmModal.submissionCount = item.submissions_count || 0;
+  confirmModal.isOpen = true;
+};
+
+const confirmDelete = async () => {
+  confirmModal.isLoading = true;
   try {
-    await assignmentService.deleteAssignment(id);
-    toastStore.success("Tugas dihapus.");
+    await assignmentService.deleteAssignment(confirmModal.targetId);
+    toastStore.success("Tugas dan seluruh data terkait berhasil dihapus.");
+    confirmModal.isOpen = false;
     fetchAssignments();
   } catch (error) {
     toastStore.error("Gagal menghapus tugas.");
+  } finally {
+    confirmModal.isLoading = false;
   }
 };
 
@@ -341,11 +497,16 @@ const goToDetail = (assignmentId) => {
   router.push({ name: 'TeacherAssignmentDetail', params: { id: assignmentId } });
 };
 
-onMounted(() => fetchAssignments());
+onMounted(() => {
+  fetchScheduleKKM();
+  fetchAssignments();
+  fetchAcademicYearEndDate();
+});
 
 // FIX: Watch scheduleId — re-fetch saat schedule berubah (A → B)
 watch(() => props.scheduleId, (newId, oldId) => {
   if (newId && String(newId) !== String(oldId)) {
+    fetchScheduleKKM();
     fetchAssignments();
   }
 });

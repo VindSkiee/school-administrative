@@ -149,6 +149,25 @@
         </div>
 
         <div
+          v-if="schedule.is_holiday"
+          class="mb-3 px-3 py-2 bg-yellow-50 border border-yellow-200 rounded-xl flex items-center gap-2"
+        >
+          <svg class="w-4 h-4 text-yellow-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+          </svg>
+          <span class="text-xs font-bold text-yellow-700">Hari Libur</span>
+        </div>
+
+        <div
+          v-else-if="schedule.meeting_session"
+          class="mb-3 flex items-center gap-2"
+        >
+          <span class="px-2.5 py-1 bg-gray-100 text-gray-700 font-mono text-xs font-bold rounded border border-gray-200">
+            Pertemuan {{ schedule.meeting_session.meeting_number }}/{{ schedule.meeting_total || 0 }}
+          </span>
+        </div>
+
+        <div
           class="mt-auto pt-4 border-t border-gray-100 flex items-center justify-between pl-2"
         >
           <div class="flex items-center gap-2">
@@ -223,7 +242,6 @@ const dayOptions = [
   { value: "wednesday", label: "Rabu" },
   { value: "thursday", label: "Kamis" },
   { value: "friday", label: "Jumat" },
-  { value: "saturday", label: "Sabtu" },
 ];
 
 const dayNamesEng = [

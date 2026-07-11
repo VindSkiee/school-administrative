@@ -3,18 +3,19 @@
 namespace App\Http\Controllers\Api\Student;
 
 use App\Http\Controllers\Controller;
+use App\Models\AcademicYear;
+use App\Models\Subject;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use App\Models\AcademicYear;
-use App\Models\Subject;
 
 class GradeAggregationController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
         $user = auth('api')->user();
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $student = $user->student()->with('classes')->first();
 
         // Accept optional academic_year_id — defaults to active year
@@ -27,7 +28,7 @@ class GradeAggregationController extends Controller
             ? $student->classes->firstWhere('academic_year_id', $year->id)
             : $student->classes->first();
 
-        if (!$activeClass) {
+        if (! $activeClass) {
             return response()->json(['error' => 'Anda tidak memiliki kelas aktif.'], 403);
         }
 
@@ -37,10 +38,11 @@ class GradeAggregationController extends Controller
             ->join('subjects', 'schedules.subject_id', '=', 'subjects.id')
             ->leftJoin('submissions', function ($join) use ($student) {
                 $join->on('assignments.id', '=', 'submissions.assignment_id')
-                     ->where('submissions.student_id', '=', $student->user_id);
+                    ->where('submissions.student_id', '=', $student->user_id);
             })
             ->leftJoin('grades', 'submissions.id', '=', 'grades.submission_id')
             ->where('schedules.class_id', $activeClass->id)
+            ->where('schedules.academic_year_id', $year->id)
             ->select(
                 'subjects.id as subject_id',
                 'subjects.name as subject_name',
@@ -61,19 +63,47 @@ class GradeAggregationController extends Controller
         foreach ($groupedBySubject as $subjectId => $assignments) {
             $first = $assignments->first();
 
-            $gradedTasks = $assignments->whereNotNull('assignment_score');
-            $finalGrade = $gradedTasks->count() > 0 ? round($gradedTasks->avg('assignment_score'), 2) : null;
+            // Weighted average — consistent with teacher's gradebook calculation
+            $weights = [
+                'task' => 30,
+                'ujian_harian' => 10,
+                'uts' => 25,
+                'uas' => 25,
+            ];
+
+            $typeScores = [];
+            foreach ($assignments as $a) {
+                if ($a->assignment_score !== null) {
+                    $type = $a->assignment_type;
+                    if (! isset($typeScores[$type])) {
+                        $typeScores[$type] = [];
+                    }
+                    $typeScores[$type][] = (float) $a->assignment_score;
+                }
+            }
+
+            $weightedSum = 0;
+            $activeWeight = 0;
+            foreach ($typeScores as $type => $scores) {
+                $avg = array_sum($scores) / count($scores);
+                $w = $weights[$type] ?? 0;
+                $weightedSum += $avg * $w;
+                $activeWeight += $w;
+            }
+
+            $finalGrade = $activeWeight > 0 ? round($weightedSum / $activeWeight, 2) : null;
+            $gradedCount = count($typeScores);
 
             $reportData[] = [
-                'subject_id'   => $subjectId,
+                'subject_id' => $subjectId,
                 'subject_name' => $first->subject_name,
                 'subject_code' => $first->subject_code,
-                'final_grade'  => $finalGrade,
-                'total_graded_assignments' => $gradedTasks->count(),
-                'details'      => $assignments->map(function ($a) {
+                'final_grade' => $finalGrade,
+                'total_graded_assignments' => $gradedCount,
+                'details' => $assignments->map(function ($a) {
                     return [
                         'title' => $a->assignment_title,
-                        'type'  => $a->assignment_type,
+                        'type' => $a->assignment_type,
                         'score' => $a->assignment_score !== null ? (float) $a->assignment_score : null,
                     ];
                 })->toArray(),
@@ -82,7 +112,7 @@ class GradeAggregationController extends Controller
 
         return response()->json([
             'success' => true,
-            'data'    => $reportData,
+            'data' => $reportData,
         ]);
     }
 }

@@ -60,7 +60,8 @@
       v-if="gradingWeights && !isHomeroomMode && selectedScheduleId"
       class="text-[10px] font-bold text-gray-400 bg-gray-50 px-3 py-2.5 rounded-lg border border-gray-100 text-center sm:text-left lg:whitespace-nowrap"
     >
-      Bobot: Tugas {{ gradingWeights.task }}% | UTS
+      Bobot Nilai Akhir: Tugas {{ gradingWeights.task }}% | UH
+      {{ gradingWeights.ujian_harian || 0 }}% | UTS
       {{ gradingWeights.uts }}% | UAS {{ gradingWeights.uas }}% | Kehadiran
       {{ gradingWeights.attendance }}%
     </span>
@@ -190,9 +191,20 @@
             </svg>
           </div>
           <div>
-            <h3 class="text-lg font-bold text-gray-800">
-              Rekap Kelas Wali — {{ homeroomClassDisplayName }}
-            </h3>
+            <div class="flex items-center gap-2">
+              <h3 class="text-lg font-bold text-gray-800">
+                Rekap Kelas Wali — {{ homeroomClassDisplayName }}
+              </h3>
+              <BasePopoverInfo>
+                <p class="font-bold text-gray-800 mb-2">Panduan Rekap Kelas Wali</p>
+                <ul class="space-y-1.5 list-disc list-inside">
+                  <li><strong>Mode baca:</strong> Tabel ini hanya untuk melihat rekap nilai per mapel. Tidak bisa diedit.</li>
+                  <li><strong>Filter mapel:</strong> Gunakan dropdown "Mata Pelajaran" di atas untuk fokus pada mapel tertentu.</li>
+                  <li><strong>Urutkan kolom:</strong> Klik header kolom untuk mengurutkan. Klik lagi untuk membalik urutan.</li>
+                  <li><strong>Rata-rata:</strong> Dihitung otomatis dari semua nilai per mata pelajaran siswa.</li>
+                </ul>
+              </BasePopoverInfo>
+            </div>
             <p class="text-xs text-gray-500">
               Nilai akhir per mata pelajaran. Mode ini hanya baca. Gunakan
               filter di atas untuk fokus pada mapel tertentu.
@@ -283,9 +295,22 @@
       <div
         class="p-4 border-b border-gray-100 bg-gray-50/50 flex flex-wrap items-center justify-between gap-3"
       >
-        <h3 class="text-sm font-bold text-gray-700">
-          Tabel Nilai — {{ selectedScheduleLabel }}
-        </h3>
+        <div class="flex items-center gap-2">
+          <h3 class="text-sm font-bold text-gray-700">
+            Tabel Nilai — {{ selectedScheduleLabel }}
+          </h3>
+          <BasePopoverInfo>
+            <p class="font-bold text-gray-800 mb-2">Panduan Buku Nilai</p>
+            <ul class="space-y-1.5 list-disc list-inside text-xs">
+              <li><strong>Edit nilai:</strong> Klik sel angka, lalu ketik nilai baru. Tekan Enter untuk simpan.</li>
+              <li><strong>Nilai 0–100:</strong> Hanya angka 0 hingga 100 yang diterima.</li>
+              <li><strong>Urutkan kolom:</strong> Klik header kolom untuk mengurutkan. Klik lagi untuk membalik urutan.</li>
+              <li><strong>Nilai Akhir:</strong> Dihitung otomatis berdasarkan bobot (Tugas, Ujian Harian, UTS, UAS, Kehadiran).</li>
+              <li class="text-amber-700"><strong>Kolom [REM]:</strong> Kolom remedial hanya bisa diedit untuk siswa yang mendapat remedial. Nilai asli tetap tersimpan.</li>
+              <li class="text-amber-700"><strong>Resolusi Remedial:</strong> Nilai akhir dihitung otomatis: Ganti (ambil tertinggi), Rata-rata, atau Manual sesuai pilihan guru.</li>
+            </ul>
+          </BasePopoverInfo>
+        </div>
         <div class="flex items-center gap-2">
           <span
             class="px-2.5 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded-lg"
@@ -312,6 +337,7 @@
           :suppressMovableColumns="false"
           :rowSelection="'single'"
           :getRowClass="getRowClass"
+          :components="{ RemedialCellRenderer }"
           @cell-value-changed="onCellValueChanged"
           @grid-ready="onGridReady"
           style="width: 100%; height: 100%"
@@ -351,6 +377,7 @@ import {
   ColumnAutoSizeModule, 
   RowSelectionModule,
   NumberEditorModule,
+  RowStyleModule,
 } from 'ag-grid-community';
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
@@ -358,6 +385,8 @@ import { assignmentService } from "../../services/modules/teacher/assignmentServ
 import { useToastStore } from "../../stores/toast";
 import { useReportStatus } from "../../composables/useReportStatus";
 import BaseSelect from "../../components/BaseSelect.vue";
+import BasePopoverInfo from "../../components/BasePopoverInfo.vue";
+import RemedialCellRenderer from "../../components/RemedialCellRenderer.vue";
 import api from "../../services/api";
 
 ModuleRegistry.registerModules([
@@ -366,6 +395,7 @@ ModuleRegistry.registerModules([
   ColumnAutoSizeModule, 
   RowSelectionModule,
   NumberEditorModule,
+  RowStyleModule,
 ]);
 
 const toastStore = useToastStore();
@@ -485,14 +515,31 @@ const filteredHomeroomSubjects = computed(() => {
 });
 
 const assignmentColumns = computed(() => {
-  const tasks = assignments.value.filter((a) => a.type === "task");
-  const uts = assignments.value.filter((a) => a.type === "uts");
-  const uas = assignments.value.filter((a) => a.type === "uas");
-  return [...tasks, ...uts, ...uas];
+  const list = Array.isArray(assignments.value) ? assignments.value : [];
+  const tasks = list.filter((a) => a.type === "task" && !a.is_remedial);
+  const uh = list.filter((a) => a.type === "ujian_harian" && !a.is_remedial);
+  const uts = list.filter((a) => a.type === "uts" && !a.is_remedial);
+  const uas = list.filter((a) => a.type === "uas" && !a.is_remedial);
+  return [...tasks, ...uh, ...uts, ...uas];
+});
+
+// Remedial assignments grouped by parent assignment ID
+const remedialByParent = computed(() => {
+  const map = {};
+  const list = Array.isArray(assignments.value) ? assignments.value : [];
+  list.filter((a) => a.is_remedial).forEach((a) => {
+    if (a.linked_assignment_id) {
+      if (!map[a.linked_assignment_id]) map[a.linked_assignment_id] = [];
+      map[a.linked_assignment_id].push(a);
+    }
+  });
+  return map;
 });
 
 const typeLabel = (type) => {
   switch (type) {
+    case "ujian_harian":
+      return "UH";
     case "uts":
       return "UTS";
     case "uas":
@@ -504,6 +551,8 @@ const typeLabel = (type) => {
 
 const typeColor = (type) => {
   switch (type) {
+    case "ujian_harian":
+      return "bg-green-50 text-green-700";
     case "uts":
       return "bg-brand-orange/10 text-brand-orange";
     case "uas":
@@ -568,16 +617,33 @@ const columnDefs = computed(() => {
 
   assignmentColumns.value.forEach((assignment) => {
     const colId = `assignment_${assignment.id}`;
+    const hasRemedial = !!remedialByParent.value[assignment.id];
+
+    // Header: [REM] prefix jika ada remedial
+    const headerPrefix = hasRemedial ? "[REM] " : "";
+    const headerLabel = `[${typeLabel(assignment.type)}] ${headerPrefix}${assignment.title}`;
+    const tooltipText = hasRemedial
+      ? `${typeLabel(assignment.type)}: ${assignment.title}\nMemiliki tugas remedial. Nilai akan diresolusi otomatis.`
+      : `${typeLabel(assignment.type)}: ${assignment.title}`;
+
     cols.push({
       colId,
-      // PERBAIKAN: Tambahkan label tipe di depan judul tugas
-      headerName: `[${typeLabel(assignment.type)}] ${assignment.title}`,
-      headerTooltip: `${typeLabel(assignment.type)}: ${assignment.title}`,
-      headerClass: typeColor(assignment.type),
+      headerName: headerLabel,
+      headerTooltip: tooltipText,
+      headerClass: hasRemedial ? "bg-amber-50 text-amber-700" : typeColor(assignment.type),
       width: 140,
-      editable,
+      // Kolom remedial: editable HANYA jika siswa punya submission (target remedial)
+      editable: (params) => {
+        if (!editable) return false;
+        if (!hasRemedial) return true;
+        // Cek apakah siswa ini punya nilai di remedial assignment
+        const remedialAssignments = remedialByParent.value[assignment.id] || [];
+        return remedialAssignments.some((rem) => {
+          const score = params.data?.assignments?.[rem.id];
+          return score != null;
+        });
+      },
       cellDataType: "number",
-      // ... (biarkan sisa konfigurasi di bawahnya tetap sama seperti valueGetter, cellStyle, dll)
       valueGetter: (params) => {
         const raw = params.data?.assignments?.[assignment.id];
         if (raw == null || raw === "") return null;
@@ -606,8 +672,19 @@ const columnDefs = computed(() => {
         if (val >= 75) return { textAlign: "center", color: "#16a34a" };
         return { textAlign: "center", color: "#E02E2B" };
       },
-      valueFormatter: (params) =>
-        params.value != null ? String(params.value) : "—",
+      // Cell renderer: tampilan remedial dengan nilai asli sebagai sub-text
+      ...(hasRemedial ? {
+        cellRenderer: "RemedialCellRenderer",
+        cellRendererParams: {
+          assignment,
+          remedialByParent: remedialByParent.value,
+        },
+      } : {}),
+      valueFormatter: (params) => {
+        const val = params.value;
+        if (val == null) return "—";
+        return String(val);
+      },
       cellEditorSelector: () => {
         return { component: "agNumberCellEditor", popup: false };
       },
@@ -744,34 +821,61 @@ const homeroomRowData = computed(() =>
 );
 
 // ==================== WEIGHTED AVERAGE CALCULATION ====================
+const resolveRemedialScore = (examScore, remedialScore, mode) => {
+  switch (mode) {
+    case "replace": return Math.max(examScore, remedialScore);
+    case "average": return Math.round(((examScore + remedialScore) / 2) * 100) / 100;
+    case "custom": return remedialScore;
+    default: return Math.max(examScore, remedialScore);
+  }
+};
+
 const calculateWeightedAverage = (studentData) => {
   if (!studentData?.assignments) return null;
 
   const weights = gradingWeights.value || {
-    task: 40,
+    task: 30,
+    ujian_harian: 10,
     uts: 25,
     uas: 25,
     attendance: 10,
   };
-  const cols = assignmentColumns.value;
 
-  const scoresByType = { task: [], uts: [], uas: [] };
+  const resolvedScores = { task: [], ujian_harian: [], uts: [], uas: [] };
 
-  cols.forEach((assignment) => {
+  assignmentColumns.value.forEach((assignment) => {
     const raw = studentData.assignments[assignment.id];
-    if (raw != null && raw !== "") {
-      const num = Number(raw);
-      if (!isNaN(num)) {
-        scoresByType[assignment.type].push(num);
+    if (raw == null || raw === "") return;
+    const num = Number(raw);
+    if (isNaN(num)) return;
+
+    // Cek apakah ada remedial untuk assignment ini
+    const remedialList = remedialByParent.value[assignment.id];
+    if (remedialList && remedialList.length > 0) {
+      // Ambil remedial pertama (seharusnya hanya 1)
+      const rem = remedialList[0];
+      const remRaw = studentData.assignments?.[rem.id];
+      if (remRaw != null && remRaw !== "") {
+        const remScore = Number(remRaw);
+        if (!isNaN(remScore)) {
+          const mode = studentData.remedial_modes?.[assignment.id] || "replace";
+          const resolved = resolveRemedialScore(num, remScore, mode);
+          resolvedScores[assignment.type].push(resolved);
+          return;
+        }
       }
     }
+
+    // Tidak ada remedial — pakai nilai asli
+    resolvedScores[assignment.type].push(num);
   });
 
   const avg = (arr) =>
     arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
-  const taskAvg = avg(scoresByType.task);
-  const utsAvg = avg(scoresByType.uts);
-  const uasAvg = avg(scoresByType.uas);
+  const taskAvg = avg(resolvedScores.task);
+  const uhAvg = avg(resolvedScores.ujian_harian);
+  const utsAvg = avg(resolvedScores.uts);
+  const uasAvg = avg(resolvedScores.uas);
 
   // Attendance rate — always available from the row data
   const attendanceRate = Number(studentData.attendance_rate) || 0;
@@ -782,6 +886,10 @@ const calculateWeightedAverage = (studentData) => {
   if (taskAvg !== null) {
     weightedSum += taskAvg * weights.task;
     activeWeight += weights.task;
+  }
+  if (uhAvg !== null) {
+    weightedSum += uhAvg * (weights.ujian_harian || 0);
+    activeWeight += (weights.ujian_harian || 0);
   }
   if (utsAvg !== null) {
     weightedSum += utsAvg * weights.uts;
@@ -923,13 +1031,14 @@ const loadGradebook = async () => {
       },
     });
     const payload = res.data?.data || res.data;
-    assignments.value = payload.assignments || [];
+    assignments.value = Array.isArray(payload.assignments) ? payload.assignments : [];
     students.value = (payload.students || []).map((s) => ({
       ...s,
       assignments: s.assignments || {},
     }));
     gradingWeights.value = payload.weights || {
-      task: 40,
+      task: 30,
+      ujian_harian: 10,
       uts: 25,
       uas: 25,
       attendance: 10,

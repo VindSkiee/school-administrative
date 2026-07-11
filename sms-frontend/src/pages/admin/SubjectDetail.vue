@@ -60,6 +60,27 @@
         </div>
 
         <form @submit.prevent="saveCompetency" class="p-5 space-y-5">
+          <div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center shrink-0">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"></path></svg>
+              </div>
+              <div class="flex-1">
+                <label class="block text-sm font-bold text-amber-800">KKM (Minimum Nilai Kelulusan)</label>
+                <p class="text-xs text-amber-600">Batas nilai minimum untuk tuntas pada mata pelajaran ini. Berlaku untuk semua ujian harian, UTS, dan UAS di mapel ini.</p>
+              </div>
+              <div class="w-24 shrink-0">
+                <input
+                  v-model.number="form.min_score"
+                  type="number"
+                  min="0"
+                  max="100"
+                  class="w-full px-3 py-2 border border-amber-300 rounded-lg text-center font-bold text-amber-800 focus:ring-1 focus:ring-amber-500 outline-none text-sm bg-white"
+                />
+              </div>
+            </div>
+          </div>
+
           <div v-for="(level, idx) in competencyLevels" :key="level.key" class="border border-gray-200 rounded-xl p-4"
                :class="level.borderColor">
             <div class="flex flex-col sm:flex-row gap-4">
@@ -92,14 +113,14 @@
           <div class="flex justify-end pt-2">
             <button
               type="submit"
-              :disabled="isSaving"
-              class="px-6 py-2.5 bg-brand-red hover:bg-brand-orange text-white rounded-xl text-sm font-bold shadow-md transition-colors disabled:opacity-50 flex items-center gap-2"
+              :disabled="isSaving || !hasChanges"
+              class="px-6 py-2.5 bg-brand-red hover:bg-brand-orange text-white rounded-xl text-sm font-bold shadow-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               <svg v-if="isSaving" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
               </svg>
-              {{ isSaving ? 'Menyimpan...' : 'Simpan Pengaturan' }}
+              {{ isSaving ? 'Menyimpan...' : (hasChanges ? 'Simpan Pengaturan' : 'Tidak Ada Perubahan') }}
             </button>
           </div>
         </form>
@@ -126,6 +147,7 @@ const isSaving = ref(false);
 const subject = ref(null);
 const teachers = ref([]);
 const selectedAcademicYearId = ref('');
+const formSnapshot = ref(null);
 
 const competencyLevels = [
   {
@@ -159,6 +181,7 @@ const competencyLevels = [
 ];
 
 const form = reactive({
+  min_score: 60,
   sangat_baik_min: 85,
   sangat_baik_text: 'Mencapai kompetensi dengan sangat baik dalam memahami materi pembelajaran.',
   baik_min: 75,
@@ -170,6 +193,22 @@ const form = reactive({
 });
 
 const academicYearOptions = computed(() => dropdowns.academicYearOptions);
+
+const hasChanges = computed(() => {
+  if (!formSnapshot.value) return false;
+  const snap = formSnapshot.value;
+  return (
+    form.min_score !== snap.min_score ||
+    form.sangat_baik_min !== snap.sangat_baik_min ||
+    form.sangat_baik_text !== snap.sangat_baik_text ||
+    form.baik_min !== snap.baik_min ||
+    form.baik_text !== snap.baik_text ||
+    form.kurang_min !== snap.kurang_min ||
+    form.kurang_text !== snap.kurang_text ||
+    form.sangat_kurang_min !== snap.sangat_kurang_min ||
+    form.sangat_kurang_text !== snap.sangat_kurang_text
+  );
+});
 
 // PERF FIX: use store for academic years instead of separate API call
 const fetchAcademicYears = async () => {
@@ -193,6 +232,7 @@ const fetchDetail = async () => {
     teachers.value = data.teachers || [];
 
     if (data.competency) {
+      form.min_score = data.competency.min_score ?? 60;
       form.sangat_baik_min = data.competency.sangat_baik_min;
       form.sangat_baik_text = data.competency.sangat_baik_text;
       form.baik_min = data.competency.baik_min;
@@ -201,7 +241,19 @@ const fetchDetail = async () => {
       form.kurang_text = data.competency.kurang_text;
       form.sangat_kurang_min = data.competency.sangat_kurang_min;
       form.sangat_kurang_text = data.competency.sangat_kurang_text;
+    } else {
+      form.min_score = 60;
+      form.sangat_baik_min = 85;
+      form.sangat_baik_text = 'Mencapai kompetensi dengan sangat baik dalam memahami materi pembelajaran.';
+      form.baik_min = 75;
+      form.baik_text = 'Mencapai kompetensi dengan baik dalam memahami materi pembelajaran.';
+      form.kurang_min = 60;
+      form.kurang_text = 'Perlu peningkatan dalam hal memahami materi pembelajaran.';
+      form.sangat_kurang_min = 0;
+      form.sangat_kurang_text = 'Perlu bimbingan intensif untuk mencapai ketuntasan belajar.';
     }
+
+    formSnapshot.value = { ...form };
   } catch {
     toastStore.error('Gagal memuat detail mata pelajaran.');
   } finally {
@@ -214,6 +266,7 @@ const saveCompetency = async () => {
   try {
     await subjectService.saveCompetency(subjectId, {
       academic_year_id: selectedAcademicYearId.value,
+      min_score: form.min_score,
       sangat_baik_min: form.sangat_baik_min,
       sangat_baik_text: form.sangat_baik_text,
       baik_min: form.baik_min,
@@ -224,6 +277,8 @@ const saveCompetency = async () => {
       sangat_kurang_text: form.sangat_kurang_text,
     });
     toastStore.success('Pengaturan capaian kompetensi berhasil disimpan.');
+    formSnapshot.value = { ...form };
+    dropdowns.invalidateCompetencies();
   } catch (error) {
     toastStore.error(error.response?.data?.message || 'Gagal menyimpan pengaturan.');
   } finally {

@@ -39,7 +39,7 @@
     </div>
 
     <div
-      class="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 flex flex-col sm:flex-row gap-4"
+      class="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 flex flex-col sm:flex-row gap-4 items-center"
     >
       <div class="relative flex-1">
         <div
@@ -92,6 +92,19 @@
               stroke-width="2"
               d="M6 18L18 6M6 6l12 12"
             ></path>
+          </svg>
+        </button>
+      </div>
+
+      <div class="flex items-center gap-2 shrink-0">
+        <button
+          @click="refresh"
+          :disabled="isRefreshing"
+          class="p-2 rounded-xl hover:bg-gray-100 transition-colors disabled:opacity-50"
+          title="Refresh data"
+        >
+          <svg :class="{ 'animate-spin': isRefreshing }" class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
         </button>
       </div>
@@ -432,7 +445,7 @@
                 seret ke sini
               </p>
               <p class="text-xs text-gray-400">
-                PDF, DOC/X, ZIP, PNG, JPG (Maks 10MB)
+                PDF, DOC, DOCX, ZIP, PNG, JPG, JPEG (Maks 10MB)
               </p>
             </div>
 
@@ -460,6 +473,17 @@
               <p class="text-xs text-gray-500 mt-1">
                 {{ (selectedFile.size / 1024 / 1024).toFixed(2) }} MB
               </p>
+            </div>
+          </div>
+
+          <!-- Upload Progress Bar -->
+          <div v-if="isSubmitting && uploadProgress > 0" class="mt-4">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-semibold text-gray-600">Mengunggah jawaban...</span>
+              <span class="text-xs font-bold text-brand-orange">{{ uploadProgress }}%</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-1.5">
+              <div class="bg-brand-orange h-1.5 rounded-full transition-all duration-300" :style="{ width: uploadProgress + '%' }"></div>
             </div>
           </div>
 
@@ -495,7 +519,7 @@
                   d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
                 ></path>
               </svg>
-              {{ isSubmitting ? "Mengirim..." : "Kirim Jawaban" }}
+              {{ isSubmitting ? (uploadProgress > 0 ? `Mengirim... ${uploadProgress}%` : "Mengirim...") : "Kirim Jawaban" }}
             </button>
           </div>
         </div>
@@ -510,6 +534,8 @@ import { studentAssignmentService } from "../../../services/modules/student/assi
 import { useToastStore } from "../../../stores/toast";
 import BasePopoverInfo from "../../../components/BasePopoverInfo.vue";
 import { useReportStatus } from '../../../composables/useReportStatus';
+import { getStorageUrl } from '../../../utils/fileHelper';
+import { useAutoRefresh } from '../../../composables/useAutoRefresh';
 
 // PROPS INI WAJIB SAMA SEPERTI MATERIAL
 const props = defineProps({
@@ -522,6 +548,17 @@ const { isReportPublished, publishedAt } = useReportStatus('student');
 const assignments = ref([]);
 const isLoading = ref(true);
 
+// AUTO REFRESH
+const formatTimeAgo = (date) => {
+  if (!date) return '';
+  const seconds = Math.floor((new Date() - date) / 1000);
+  if (seconds < 60) return `${seconds}d lalu`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m lalu`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}j lalu`;
+};
+
 // Filter Search & Date
 const searchQuery = ref("");
 const filterDate = ref("");
@@ -530,6 +567,7 @@ let searchTimeout = null;
 // Modal States
 const showModal = ref(false);
 const isSubmitting = ref(false);
+const uploadProgress = ref(0);
 const activeTask = ref(null);
 const selectedFile = ref(null);
 
@@ -637,6 +675,9 @@ const fetchAssignments = async () => {
   }
 };
 
+// AUTO REFRESH: refresh on tab focus + manual refresh
+const { refresh, lastRefreshed, isRefreshing } = useAutoRefresh(fetchAssignments);
+
 const onSearchInput = () => {
   clearTimeout(searchTimeout);
   searchTimeout = setTimeout(() => {
@@ -658,8 +699,7 @@ const resetFilters = () => {
 // Preview Lampiran dari Guru ATAU Jawaban dari Siswa
 const previewAttachment = (filePath) => {
   if (!filePath) return;
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api';
-  window.open(`${baseUrl}/storage/${filePath}`, "_blank");
+  window.open(getStorageUrl(filePath), "_blank");
 };
 
 // Modal Actions
@@ -692,6 +732,7 @@ const submitTask = async () => {
   if (!selectedFile.value || !activeTask.value) return;
 
   isSubmitting.value = true;
+  uploadProgress.value = 0;
   try {
     const formData = new FormData();
     formData.append("file", selectedFile.value);
@@ -699,6 +740,13 @@ const submitTask = async () => {
     await studentAssignmentService.submitAssignment(
       activeTask.value.id,
       formData,
+      {
+        onUploadProgress: (e) => {
+          if (e.total) {
+            uploadProgress.value = Math.round((e.loaded * 100) / e.total);
+          }
+        },
+      },
     );
 
     toastStore.success("Jawaban tugas berhasil dikirim!");
@@ -708,10 +756,11 @@ const submitTask = async () => {
     const msg =
       error.response?.data?.error ||
       error.response?.data?.message ||
-      "Gagal mengirim jawaban.";
+      "Gagal mengirim jawaban. Periksa koneksi dan coba lagi.";
     toastStore.error(msg);
   } finally {
     isSubmitting.value = false;
+    uploadProgress.value = 0;
   }
 };
 

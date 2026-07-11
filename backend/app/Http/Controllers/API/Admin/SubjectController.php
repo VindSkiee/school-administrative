@@ -23,6 +23,13 @@ class SubjectController
         $perPage = max(1, min($perPage, 100));
         $subjects = $query->orderBy('name', 'asc')->paginate($perPage);
 
+        $subjects->getCollection()->transform(function ($subject) {
+            $subject->has_data = $subject->schedules()->exists();
+            $subject->has_competency = $subject->competencySettings()->exists();
+
+            return $subject;
+        });
+
         return response()->json($subjects);
     }
 

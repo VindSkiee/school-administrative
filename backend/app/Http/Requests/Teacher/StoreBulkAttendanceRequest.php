@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Teacher;
 
+use App\Models\MeetingSession;
 use App\Models\Schedule;
 use App\Models\Student;
 use Illuminate\Foundation\Http\FormRequest;
@@ -13,14 +14,14 @@ class StoreBulkAttendanceRequest extends FormRequest
     public function authorize(): bool
     {
         return true;
-    } // Otorisasi detail dilakukan di Service
+    }
 
     public function rules(): array
     {
         return [
             'schedule_id' => ['required', 'exists:schedules,id'],
             'date' => ['required', 'date', 'date_format:Y-m-d'],
-            'attendances' => ['required', 'array', 'min:1'], // Array data kehadiran siswa
+            'attendances' => ['required', 'array', 'min:1'],
             'attendances.*.student_id' => ['required', 'exists:students,user_id'],
             'attendances.*.status' => ['required', Rule::in(['present', 'absent', 'sick', 'permission', 'late'])],
         ];
@@ -31,8 +32,26 @@ class StoreBulkAttendanceRequest extends FormRequest
         return [
             function (Validator $validator): void {
                 $scheduleId = $this->input('schedule_id');
+                $date = $this->input('date');
 
-                if (! $scheduleId) {
+                if (! $scheduleId || ! $date) {
+                    return;
+                }
+
+                $meetingSession = MeetingSession::query()
+                    ->where('schedule_id', $scheduleId)
+                    ->where('date', $date)
+                    ->first();
+
+                if (! $meetingSession) {
+                    $validator->errors()->add('date', 'Tidak ada sesi pertemuan untuk tanggal ini.');
+
+                    return;
+                }
+
+                if ($meetingSession->status === 'holiday') {
+                    $validator->errors()->add('date', 'Tanggal ini adalah hari libur. Absensi tidak dapat diisi.');
+
                     return;
                 }
 
@@ -53,7 +72,6 @@ class StoreBulkAttendanceRequest extends FormRequest
 
                 $validStudentIds = Student::query()
                     ->whereIn('user_id', $studentIds->all())
-                    // PERBAIKAN: Gunakan whereHas alih-alih where('class_id', ...)
                     ->whereHas('classes', function ($query) use ($schedule) {
                         $query->where('classes.id', $schedule->class_id);
                     })

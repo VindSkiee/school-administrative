@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers\API\Admin;
 
-use App\Models\Schedule;
 use App\Models\Subject;
 use App\Models\SubjectCompetencySetting;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class SubjectDetailController
 {
@@ -24,7 +24,7 @@ class SubjectDetailController
         $academicYearId = (int) $request->query('academic_year_id');
 
         // PERF FIX: use raw SQL with GROUP BY instead of loading all schedules + dedup in PHP
-        $teacherRows = \Illuminate\Support\Facades\DB::select("
+        $teacherRows = DB::select('
             SELECT DISTINCT
                 s.teacher_id,
                 u.name AS teacher_name,
@@ -36,7 +36,7 @@ class SubjectDetailController
             WHERE s.subject_id = ?
             AND s.academic_year_id = ?
             ORDER BY u.name, sc.name
-        ", [$subjectId, $academicYearId]);
+        ', [$subjectId, $academicYearId]);
 
         $teachers = collect($teacherRows)->map(fn ($row) => [
             'teacher_id' => $row->teacher_id,
@@ -51,6 +51,7 @@ class SubjectDetailController
 
         $competency = $setting ? [
             'id' => $setting->id,
+            'min_score' => $setting->min_score,
             'sangat_baik_min' => $setting->sangat_baik_min,
             'sangat_baik_text' => $setting->sangat_baik_text,
             'baik_min' => $setting->baik_min,
@@ -83,6 +84,7 @@ class SubjectDetailController
     {
         $validated = $request->validate([
             'academic_year_id' => 'required|integer|exists:academic_years,id',
+            'min_score' => 'required|integer|min:0|max:100',
             'sangat_baik_min' => 'required|integer|min:0|max:100',
             'sangat_baik_text' => 'required|string|max:500',
             'baik_min' => 'required|integer|min:0|max:100',
@@ -101,6 +103,7 @@ class SubjectDetailController
                 'academic_year_id' => $validated['academic_year_id'],
             ],
             [
+                'min_score' => $validated['min_score'],
                 'sangat_baik_min' => $validated['sangat_baik_min'],
                 'sangat_baik_text' => $validated['sangat_baik_text'],
                 'baik_min' => $validated['baik_min'],

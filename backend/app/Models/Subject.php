@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Models;
 
 use App\Traits\RecordsActivity;
@@ -14,5 +15,10 @@ class Subject extends Model
     public function schedules(): HasMany
     {
         return $this->hasMany(Schedule::class);
+    }
+
+    public function competencySettings(): HasMany
+    {
+        return $this->hasMany(SubjectCompetencySetting::class);
     }
 }

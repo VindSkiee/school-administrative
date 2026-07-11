@@ -13,7 +13,11 @@ class ClassSeeder extends Seeder
         // 1. Pastikan ada minimal 1 Tahun Ajaran Aktif
         $activeYear = AcademicYear::firstOrCreate(
             ['name' => '2025/2026', 'semester' => 'odd'],
-            ['is_active' => true]
+            [
+                'is_active' => true,
+                'start_date' => '2025-07-07',
+                'end_date' => '2025-12-19',
+            ]
         );
 
         // 2. Daftar kelas berdasarkan file Excel yang Anda berikan

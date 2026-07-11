@@ -30,9 +30,12 @@ class AdminSeeder extends Seeder
                     [
                         'name' => $data['name'],
                         'password' => $defaultPassword,
-                        'role' => 'admin',
                     ]
                 );
+                if ($user->wasRecentlyCreated || $user->role !== 'admin') {
+                    $user->role = 'admin';
+                    $user->save();
+                }
 
                 // Buat baris profile wajib di tabel admins
                 Admin::firstOrCreate(
@@ -48,9 +51,12 @@ class AdminSeeder extends Seeder
                 [
                     'name' => 'Dr. Kepala Sekolah, M.Pd.',
                     'password' => $defaultPassword,
-                    'role' => 'principal',
                 ]
             );
+            if ($principalUser->wasRecentlyCreated || $principalUser->role !== 'principal') {
+                $principalUser->role = 'principal';
+                $principalUser->save();
+            }
 
             Principal::firstOrCreate(
                 ['user_id' => $principalUser->id],

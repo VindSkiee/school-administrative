@@ -35,13 +35,28 @@ trait RecordsActivity
         }
 
         ActivityLog::create([
-            'user_id' => Auth::id(), // ID user yang sedang login
+            'user_id' => Auth::id(),
             'action' => $event,
             'loggable_type' => get_class($this),
             'loggable_id' => $this->getKey(),
-            'old_values' => $oldValues,
-            'new_values' => $newValues,
+            'old_values' => $this->filterExcludedFields($oldValues),
+            'new_values' => $this->filterExcludedFields($newValues),
             'ip_address' => Request::ip(),
         ]);
+    }
+
+    protected function filterExcludedFields(?array $attributes): ?array
+    {
+        if (! $attributes) {
+            return null;
+        }
+
+        $excluded = $this->activityExcluded ?? [];
+
+        if (empty($excluded)) {
+            return $attributes;
+        }
+
+        return array_diff_key($attributes, array_flip($excluded));
     }
 }

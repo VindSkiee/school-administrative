@@ -7,22 +7,30 @@
       </div>
       <div class="flex items-center gap-3 mt-4 sm:mt-0">
         <div
-          class="px-4 py-2 bg-brand-orange/10 text-brand-orange rounded-lg font-semibold text-sm flex items-center"
+          class="px-4 py-2 bg-brand-orange/10 text-brand-orange rounded-lg font-semibold text-sm flex flex-col items-start"
         >
-          <svg
-            class="w-4 h-4 mr-2"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+          <div class="flex items-center">
+            <svg
+              class="w-4 h-4 mr-2"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+              ></path>
+            </svg>
+            T.A: {{ dashboardData.academicYear }}
+          </div>
+          <p
+            v-if="dashboardData.academicYearStartDate"
+            class="text-xs text-gray-500 mt-0.5 ml-6"
           >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-            ></path>
-          </svg>
-          T.A: {{ dashboardData.academicYear }}
+            {{ formatPeriodDate(dashboardData.academicYearStartDate) }} - {{ formatPeriodDate(dashboardData.academicYearEndDate) }}
+          </p>
         </div>
         <button class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition flex items-center">
           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
@@ -45,13 +53,21 @@ import { principalService } from '../../services/modules/principal/principalServ
 import YoYTrendChart from '../../components/YoYTrendChart.vue';
 import GradeDistributionChart from '../../components/GradeDistributionChart.vue';
 
-const dashboardData = ref({ academicYear: null });
+const dashboardData = ref({ academicYear: null, academicYearStartDate: null, academicYearEndDate: null });
+
+const formatPeriodDate = (dateStr) => {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+};
 
 const fetchDashboardStats = async () => {
   try {
     const response = await principalService.getDashboardStats();
     const payload = response.data.data;
     dashboardData.value.academicYear = payload.active_academic_year || null;
+    dashboardData.value.academicYearStartDate = payload.academic_year_start_date || null;
+    dashboardData.value.academicYearEndDate = payload.academic_year_end_date || null;
   } catch (error) {
     console.error('Gagal memuat data dashboard:', error);
   }

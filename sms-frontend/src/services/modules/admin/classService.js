@@ -32,5 +32,14 @@ export const classService = {
     migrateClass(payload) {
         // payload = { to_academic_year_id }
         return api.post('/v1/admin/classes/migrate-class', payload);
+    },
+    getStudentOptions(classId) {
+        return api.get(`/v1/admin/classes/${classId}/student-options`);
+    },
+    getMigrationStudents(classId) {
+        return api.get(`/v1/admin/classes/${classId}/migration-students`);
+    },
+    getMigrationHistory(params = {}) {
+        return api.get('/v1/admin/classes/migration-history', { params });
     }
 };

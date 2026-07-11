@@ -38,7 +38,9 @@ export const attendanceService = {
   },
 
   // Tambahkan di dalam object attendanceService
-  getScheduleDetail(scheduleId) {
-    return api.get(`/v1/teacher/schedules/${scheduleId}`);
+  getScheduleDetail(scheduleId, date = null) {
+    return api.get(`/v1/teacher/schedules/${scheduleId}`, {
+      params: date ? { date } : {},
+    });
   },
 };

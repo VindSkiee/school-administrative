@@ -53,7 +53,7 @@ class DashboardController
             : 0;
 
         $activeAcademicYear = $activeYear
-            ? "{$activeYear->name} " . ($activeYear->semester === 'odd' ? 'Ganjil' : 'Genap')
+            ? "{$activeYear->name} ".($activeYear->semester === 'odd' ? 'Ganjil' : 'Genap')
             : 'Belum diatur';
 
         return response()->json([
@@ -63,6 +63,8 @@ class DashboardController
                 'total_teachers' => $totalTeachers,
                 'total_classes' => $totalClasses,
                 'active_academic_year' => $activeAcademicYear,
+                'academic_year_start_date' => $activeYear?->start_date?->format('Y-m-d'),
+                'academic_year_end_date' => $activeYear?->end_date?->format('Y-m-d'),
             ],
         ]);
     }
@@ -150,7 +152,7 @@ class DashboardController
     {
         $validated = $request->validate([
             'grade_level' => 'required|integer|in:7,8,9',
-            'limit'       => 'sometimes|integer|min:1|max:10',
+            'limit' => 'sometimes|integer|min:1|max:10',
         ]);
 
         $gradeLevel = (int) $validated['grade_level'];
@@ -158,7 +160,7 @@ class DashboardController
 
         return response()->json([
             'status' => 'success',
-            'data'   => $this->dashboardService->getCurriculumTrend($gradeLevel, $limit),
+            'data' => $this->dashboardService->getCurriculumTrend($gradeLevel, $limit),
         ]);
     }
 
@@ -178,8 +180,8 @@ class DashboardController
     public function cohortTrend(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'entry_year_id'   => 'required_without:entry_year_ids|integer|exists:academic_years,id',
-            'entry_year_ids'  => 'required_without:entry_year_id|array|min:1|max:2',
+            'entry_year_id' => 'required_without:entry_year_ids|integer|exists:academic_years,id',
+            'entry_year_ids' => 'required_without:entry_year_id|array|min:1|max:2',
             'entry_year_ids.*' => 'integer|exists:academic_years,id',
         ]);
 
@@ -190,7 +192,7 @@ class DashboardController
 
         return response()->json([
             'status' => 'success',
-            'data'   => $this->dashboardService->getCohortTrend($entryYearIds),
+            'data' => $this->dashboardService->getCohortTrend($entryYearIds),
         ]);
     }
 }

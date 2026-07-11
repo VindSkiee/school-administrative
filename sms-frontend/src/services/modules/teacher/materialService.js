@@ -8,11 +8,12 @@ export const materialService = {
   },
 
   // Gunakan FormData karena kita mengirim File biner
-  uploadMaterial(formData) {
+  uploadMaterial(formData, { onUploadProgress } = {}) {
     return api.post('/v1/teacher/materials', formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
-      }
+      },
+      onUploadProgress,
     });
   },
 

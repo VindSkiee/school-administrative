@@ -4,9 +4,10 @@ export const assignmentService = {
   getAssignments(scheduleId) {
     return api.get(`/v1/teacher/schedules/${scheduleId}/assignments`);
   },
-  createAssignment(formData) {
+  createAssignment(formData, { onUploadProgress } = {}) {
     return api.post('/v1/teacher/assignments', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress,
     });
   },
   deleteAssignment(id) {
@@ -23,6 +24,14 @@ export const assignmentService = {
   },
   getAssignmentDetail(id) {
     return api.get(`/v1/teacher/assignments/${id}/submissions`);
+  },
+
+  // === Remedial endpoints ===
+  getBelowKKM(assignmentId) {
+    return api.get(`/v1/teacher/assignments/${assignmentId}/below-kkm`);
+  },
+  createRemedial(assignmentId, payload) {
+    return api.post(`/v1/teacher/assignments/${assignmentId}/create-remedial`, payload);
   },
 
   // === Gradebook endpoints ===

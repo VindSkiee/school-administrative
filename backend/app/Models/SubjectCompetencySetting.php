@@ -10,6 +10,7 @@ class SubjectCompetencySetting extends Model
     protected $fillable = [
         'subject_id',
         'academic_year_id',
+        'min_score',
         'sangat_baik_min',
         'sangat_baik_text',
         'baik_min',
@@ -21,6 +22,7 @@ class SubjectCompetencySetting extends Model
     ];
 
     protected $casts = [
+        'min_score' => 'integer',
         'sangat_baik_min' => 'integer',
         'baik_min' => 'integer',
         'kurang_min' => 'integer',

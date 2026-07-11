@@ -5,11 +5,16 @@ export const useAuthStore = defineStore("auth", {
   state: () => ({
     user: JSON.parse(localStorage.getItem("user_data")) || null,
     token: localStorage.getItem("access_token") || null,
+    expiresAt: localStorage.getItem("token_expires_at") || null,
   }),
   getters: {
     isAuthenticated: (state) => !!state.token,
     userRole: (state) => state.user?.role || null,
     mustChangePassword: (state) => !!state.user?.must_change_password,
+    isTokenExpired: (state) => {
+      if (!state.expiresAt) return false;
+      return Date.now() > new Date(state.expiresAt).getTime();
+    },
   },
   actions: {
     async checkEmail(email) {
@@ -28,9 +33,11 @@ export const useAuthStore = defineStore("auth", {
 
       this.token = response.data.access_token;
       this.user = response.data.user;
+      this.expiresAt = response.data.expires_at;
 
       localStorage.setItem("access_token", this.token);
       localStorage.setItem("user_data", JSON.stringify(this.user));
+      localStorage.setItem("token_expires_at", this.expiresAt);
 
       return response.data;
     },
@@ -45,8 +52,10 @@ export const useAuthStore = defineStore("auth", {
         // Langkah ini WAJIB dijalankan bagaimanapun hasil dari API
         this.token = null;
         this.user = null;
+        this.expiresAt = null;
         localStorage.removeItem("access_token");
         localStorage.removeItem("user_data");
+        localStorage.removeItem("token_expires_at");
       }
     },
     markPasswordAsChanged() {

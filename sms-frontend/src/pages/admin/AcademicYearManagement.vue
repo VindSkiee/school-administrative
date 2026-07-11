@@ -89,23 +89,50 @@
         </span>
       </template>
 
-      <template #cell(status)="{ item }">
-        <span
-          v-if="item.is_active"
-          class="inline-flex items-center text-center px-2.5 py-1 rounded-full text-xs font-bold bg-brand-red text-white"
-        >
-          <span
-            class="w-1.5 h-1.5 rounded-full bg-white mr-1.5 animate-pulse"
-          ></span>
-          Aktif Saat Ini
+      <template #cell(phase)="{ item }">
+        <span class="px-3 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-700 border border-gray-200">
+          {{ item.phase || "D" }}
         </span>
+      </template>
 
-        <span
-          v-else
-          class="inline-flex items-center text-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600"
-        >
-          Selesai / Arsip
-        </span>
+      <template #cell(period)="{ item }">
+        <div v-if="item.start_date || item.end_date" class="text-xs text-gray-600">
+          <span v-if="item.start_date">{{ formatPeriodDate(item.start_date) }}</span>
+          <span v-if="item.start_date && item.end_date"> - </span>
+          <span v-if="item.end_date">{{ formatPeriodDate(item.end_date) }}</span>
+        </div>
+        <span v-else class="text-xs text-gray-400">-</span>
+      </template>
+
+      <template #cell(status)="{ item }">
+        <div class="flex flex-col items-center gap-1.5">
+          <span
+            v-if="item.is_active"
+            class="inline-flex items-center text-center px-2.5 py-1 rounded-full text-xs font-bold bg-brand-red text-white"
+          >
+            <span
+              class="w-1.5 h-1.5 rounded-full bg-white mr-1.5 animate-pulse"
+            ></span>
+            Aktif Saat Ini
+          </span>
+
+          <span
+            v-else
+            class="inline-flex items-center text-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600"
+          >
+            Selesai / Arsip
+          </span>
+
+          <span
+            v-if="item.is_report_published"
+            class="inline-flex items-center text-center px-2.5 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700 border border-green-200"
+          >
+            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+            Sudah DIterbitkan
+          </span>
+        </div>
       </template>
 
       <template #cell(actions)="{ item }">
@@ -220,16 +247,47 @@
             required
           />
         </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1.5"
+            >Fase</label
+          >
+          <input
+            v-model="form.phase"
+            type="text"
+            required
+            maxlength="1"
+            placeholder="Contoh: D"
+            class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-brand-red outline-none transition-colors uppercase"
+            @input="form.phase = form.phase.toUpperCase().replace(/[^A-F]/g, '').slice(0, 1)"
+          />
+          <p class="text-xs text-gray-400 mt-1">Huruf kapital A-F (Kurikulum Merdeka)</p>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1.5"
+              >Tanggal Mulai</label
+            >
+            <input
+              v-model="form.start_date"
+              type="date"
+              class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-brand-red outline-none transition-colors text-sm"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1.5"
+              >Tanggal Berakhir</label
+            >
+            <input
+              v-model="form.end_date"
+              type="date"
+              :min="form.start_date || ''"
+              class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-brand-red outline-none transition-colors text-sm"
+            />
+          </div>
+        </div>
       </form>
       <template #footer>
         <div class="flex justify-end gap-3">
-          <button
-            type="button"
-            @click="closeModal"
-            class="px-5 py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold rounded-lg transition-colors"
-          >
-            Batal
-          </button>
           <button
             type="submit"
             form="academicYearForm"
@@ -272,6 +330,8 @@ const dropdowns = useGlobalDropdownsStore();
 const tableColumns = [
   { key: "name", label: "Tahun Ajaran" },
   { key: "semester", label: "Semester", align: "center" },
+  { key: "phase", label: "Fase", align: "center" },
+  { key: "period", label: "Periode", align: "center" },
   { key: "status", label: "Status", align: "center" },
   { key: "actions", label: "Aksi", align: "center" },
 ];
@@ -288,7 +348,7 @@ const isSaving = ref(false);
 
 const isModalOpen = ref(false);
 const isEditing = ref(false);
-const form = reactive({ id: null, name: "", semester: "odd" });
+const form = reactive({ id: null, name: "", semester: "odd", phase: "D", start_date: "", end_date: "" });
 
 // Reusable Confirm Modal State for both Delete and Set Active
 const confirmModal = reactive({
@@ -304,6 +364,12 @@ const confirmModal = reactive({
 const hasActiveYear = computed(() =>
   academicYears.value.some((ay) => ay.is_active),
 );
+
+const formatPeriodDate = (dateStr) => {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+};
 
 const fetchAcademicYears = async (page = 1) => {
   isLoading.value = true;
@@ -334,7 +400,7 @@ const saveAcademicYear = async () => {
       toastStore.success("Tahun ajaran berhasil dibuat.");
     }
     closeModal();
-    await dropdowns.refreshAcademicYears(); // Refresh store + clear dirty flag
+    await dropdowns.invalidateAcademicYears(); // Clear cache + set dirty flag for other pages
     fetchAcademicYears(paginationMeta.current_page);
   } catch (error) {
     toastStore.error(error.response?.data?.message || "Gagal menyimpan data.");
@@ -373,7 +439,7 @@ const executeConfirmAction = async () => {
       toastStore.success("Tahun ajaran berhasil dihapus.");
     }
     // Refresh global cache (clears dirty flag after fetch → no redundant re-fetch on re-activate)
-    await dropdowns.refreshAcademicYears();
+    await dropdowns.invalidateAcademicYears(); // Clear cache + set dirty flag for other pages
     fetchAcademicYears(paginationMeta.current_page);
   } catch (error) {
     toastStore.error(
@@ -392,6 +458,9 @@ const openModal = (item = null) => {
   form.id = item?.id || null;
   form.name = item?.name || "";
   form.semester = item?.semester || "odd";
+  form.phase = item?.phase || "D";
+  form.start_date = item?.start_date ? item.start_date.split("T")[0] : "";
+  form.end_date = item?.end_date ? item.end_date.split("T")[0] : "";
   isModalOpen.value = true;
 };
 

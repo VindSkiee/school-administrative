@@ -38,6 +38,11 @@
         </div>
 
         <div class="w-full lg:w-auto bg-gray-50 p-4 rounded-2xl border border-gray-100 text-left sm:text-center flex flex-row lg:flex-col items-center justify-between lg:justify-center gap-2">
+          <div v-if="meetingInfo" class="flex items-center gap-2 lg:justify-center text-gray-500 mb-1">
+            <span class="px-2.5 py-1 bg-gray-100 text-gray-700 font-mono text-xs font-bold rounded border border-gray-200">
+              Pertemuan {{ meetingInfo.meeting_number }}/{{ scheduleInfo.meeting_total || 0 }}
+            </span>
+          </div>
           <div class="flex items-center gap-2 lg:justify-center text-gray-500">
             <svg class="w-5 h-5 text-brand-red" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
             <span class="text-xs font-bold uppercase tracking-wider">Tanggal Sesi</span>
@@ -65,7 +70,8 @@
         <div v-if="activeTab === 'attendance'">
           <StudentAttendancePanel 
             :scheduleId="route.params.id || route.params.schedule_id" 
-            :selectedDate="globalDate" 
+            :selectedDate="globalDate"
+            :isHoliday="isHoliday"
           />
         </div>
         
@@ -110,6 +116,14 @@ const isPageLoading = ref(false);
 
 const scheduleInfo = computed(() => studentDetailStore.scheduleInfo || {});
 
+const isHoliday = computed(() => scheduleInfo.value?.is_holiday === true);
+
+const meetingInfo = computed(() => {
+  const session = scheduleInfo.value?.meeting_session;
+  if (!session) return null;
+  return session;
+});
+
 const tabs = [
   { id: 'attendance', label: 'Kehadiran Saya' },
   { id: 'materials', label: 'Materi Belajar' },
@@ -151,7 +165,7 @@ onMounted(async () => {
   if (!scheduleInfo.value || Object.keys(scheduleInfo.value).length === 0) {
     isPageLoading.value = true;
     try {
-      const res = await studentScheduleService.getScheduleDetail(scheduleId);
+      const res = await studentScheduleService.getScheduleDetail(scheduleId, globalDate.value);
       studentDetailStore.scheduleInfo = res.data.data;
     } catch (error) {
       router.push('/student/dashboard');
