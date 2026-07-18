@@ -2,10 +2,10 @@
 
 namespace App\Models;
 
+use App\Traits\RecordsActivity;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-use App\Traits\RecordsActivity;
 
 class Student extends Model
 {
@@ -22,6 +22,7 @@ class Student extends Model
         'nis',
         'gender',
         'status',
+        'eskul_selection_completed',
     ];
 
     public function user(): BelongsTo
@@ -45,6 +46,18 @@ class Student extends Model
     {
         return $this->belongsToMany(SchoolClass::class, 'class_student', 'student_id', 'class_id')
             ->withPivot('academic_year_id')
+            ->withTimestamps();
+    }
+
+    public function studentEskuls()
+    {
+        return $this->hasMany(StudentEskul::class, 'student_id', 'user_id');
+    }
+
+    public function eskuls()
+    {
+        return $this->belongsToMany(Eskul::class, 'student_eskuls', 'student_id', 'eskul_id')
+            ->withPivot(['academic_year_id', 'score', 'description', 'graded_at', 'graded_by'])
             ->withTimestamps();
     }
 }

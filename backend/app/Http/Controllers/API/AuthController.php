@@ -166,8 +166,18 @@ class AuthController
             'admin' => $user->admin,
             'principal' => $user->principal,
 
+            // Check if teacher is PIC of any eskul
+            'is_pic_eskul' => $user->role === 'teacher' && $user->teacher
+                ? $user->eskulsAsPIC()->exists()
+                : false,
+
             // Student schedules for active academic year
             'student_schedules' => $studentSchedules,
+
+            // Eskul selection status for students
+            'eskul_selection_completed' => $user->role === 'student' && $user->student
+                ? (bool) $user->student->eskul_selection_completed
+                : null,
         ];
 
         // Format 'grade_history' khusus untuk Role Siswa

@@ -11,6 +11,10 @@ export const useAuthStore = defineStore("auth", {
     isAuthenticated: (state) => !!state.token,
     userRole: (state) => state.user?.role || null,
     mustChangePassword: (state) => !!state.user?.must_change_password,
+    eskulSelectionCompleted: (state) => {
+      if (state.user?.role !== 'student') return true;
+      return state.user?.eskul_selection_completed ?? false;
+    },
     isTokenExpired: (state) => {
       if (!state.expiresAt) return false;
       return Date.now() > new Date(state.expiresAt).getTime();
@@ -75,6 +79,18 @@ export const useAuthStore = defineStore("auth", {
         this.user.avatar_url = newAvatarUrl;
         localStorage.setItem("user_data", JSON.stringify(this.user));
       }
+    },
+    markEskulSelectionCompleted() {
+      if (!this.user) {
+        return;
+      }
+
+      this.user = {
+        ...this.user,
+        eskul_selection_completed: true,
+      };
+
+      localStorage.setItem("user_data", JSON.stringify(this.user));
     },
   },
 });

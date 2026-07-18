@@ -29,4 +29,9 @@ class AcademicYear extends Model
     {
         return $this->hasOne(GradingSetting::class);
     }
+
+    public function studentEskuls(): HasMany
+    {
+        return $this->hasMany(StudentEskul::class);
+    }
 }

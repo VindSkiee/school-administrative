@@ -4,6 +4,7 @@ namespace App\Http\Controllers\API\Admin;
 
 use App\Http\Requests\Admin\StoreUserRequest;
 use App\Models\AcademicYear;
+use App\Models\Eskul;
 use App\Models\Grade;
 use App\Models\Schedule;
 use App\Models\SchoolClass;
@@ -422,6 +423,9 @@ class UserController
                             ->where('academic_year_id', $activeYear->id)
                             ->update(['homeroom_teacher_id' => $validated['homeroom_replacement']]);
                     }
+
+                    // Clear PIC eskul if this teacher is a PIC
+                    Eskul::where('teacher_id', $user->id)->update(['teacher_id' => null]);
                 });
             }
         }

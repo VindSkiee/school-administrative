@@ -8,6 +8,7 @@ use App\Models\Principal;
 use App\Models\Schedule;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Models\StudentEskul;
 use App\Models\SubjectCompetencySetting;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -358,6 +359,7 @@ class AdminSemesterReportService
             ),
             'results' => $this->buildSubjectResults($schoolClass, $student, $academicYear),
             'attendance' => $this->buildAttendanceSummary($schoolClass, $student),
+            'eskul_results' => $this->buildEskulResults($student, $academicYear),
         ];
     }
 
@@ -434,6 +436,25 @@ class AdminSemesterReportService
             'I' => $attendanceRecords->where('status', 'permission')->count(),
             'A' => $attendanceRecords->where('status', 'alpa')->count(),
         ];
+    }
+
+    /**
+     * Build eskul results for a student in a given academic year.
+     *
+     * @return array<int, array{eskul_name: string, score: float|null, description: string|null}>
+     */
+    private function buildEskulResults(Student $student, AcademicYear $academicYear): array
+    {
+        $studentEskuls = StudentEskul::where('student_id', $student->user_id)
+            ->where('academic_year_id', $academicYear->id)
+            ->with('eskul:id,name')
+            ->get();
+
+        return $studentEskuls->map(fn (StudentEskul $se) => [
+            'eskul_name' => $se->eskul?->name ?? '-',
+            'score' => $se->score,
+            'description' => $se->description ?? '-',
+        ])->toArray();
     }
 
     /**
