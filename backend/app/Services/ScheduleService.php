@@ -7,6 +7,7 @@ use App\Models\Holiday;
 use App\Models\MeetingSession;
 use App\Models\Schedule;
 use App\Models\SchoolClass;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -293,7 +294,6 @@ class ScheduleService
     {
         $academicYear = AcademicYear::query()->findOrFail($schedule->academic_year_id);
 
-        // Skip if the class is published — sessions are frozen
         $schoolClass = SchoolClass::query()->find($schedule->class_id);
         if ($schoolClass && $schoolClass->is_published) {
             return;
@@ -349,12 +349,20 @@ class ScheduleService
     /**
      * Generate meeting sessions using preloaded AcademicYear and holidays.
      * Optimized for bulk operations (e.g., semester migration) to avoid N+1 queries.
+     *
+     * @param  Collection|null  $publishedClassIds  Pre-fetched published class IDs (keyed by id) to avoid N+1 SchoolClass::find()
      */
-    public function generateMeetingSessionsForYear(Schedule $schedule, AcademicYear $academicYear, array $holidayDates): void
+    public function generateMeetingSessionsForYear(Schedule $schedule, AcademicYear $academicYear, array $holidayDates, ?Collection $publishedClassIds = null): void
     {
-        $schoolClass = SchoolClass::query()->find($schedule->class_id);
-        if ($schoolClass && $schoolClass->is_published) {
+        if ($publishedClassIds && $publishedClassIds->has($schedule->class_id)) {
             return;
+        }
+
+        if (! $publishedClassIds) {
+            $schoolClass = SchoolClass::query()->find($schedule->class_id);
+            if ($schoolClass && $schoolClass->is_published) {
+                return;
+            }
         }
 
         $startDate = $academicYear->start_date ? $academicYear->start_date->copy()->startOfDay() : null;

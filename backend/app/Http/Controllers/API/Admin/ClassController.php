@@ -301,6 +301,22 @@ class ClassController
             'attendance' => $gradingSetting?->attendance_weight ?? 10,
         ];
 
+        // PERF FIX: Bulk fetch ALL attendance stats in ONE query (replaces N×M queries)
+        $scheduleIds = $class->schedules->pluck('id');
+        $studentUserIds = $class->students->pluck('user_id');
+        $attendanceMap = DB::table('attendances')
+            ->whereIn('schedule_id', $scheduleIds)
+            ->whereIn('student_id', $studentUserIds)
+            ->select(
+                'schedule_id',
+                'student_id',
+                DB::raw('COUNT(*) as total'),
+                DB::raw("SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as present_count")
+            )
+            ->groupBy('schedule_id', 'student_id')
+            ->get()
+            ->keyBy(fn ($row) => "{$row->schedule_id}_{$row->student_id}");
+
         $students = [];
         foreach ($class->students as $student) {
             $subjectScores = [];
@@ -320,12 +336,11 @@ class ClassController
                 $utsAvg = ! empty($scoresByType['uts']) ? array_sum($scoresByType['uts']) / count($scoresByType['uts']) : null;
                 $uasAvg = ! empty($scoresByType['uas']) ? array_sum($scoresByType['uas']) / count($scoresByType['uas']) : null;
 
-                $stats = DB::table('attendances')
-                    ->where('schedule_id', $schedule->id)
-                    ->where('student_id', $student->user_id)
-                    ->selectRaw('COUNT(*) as total, SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as present_count', ['present'])
-                    ->first();
-                $attendanceRate = ($stats->total ?? 0) > 0 ? round(($stats->present_count / $stats->total) * 100, 2) : 100;
+                $key = "{$schedule->id}_{$student->user_id}";
+                $stats = $attendanceMap->get($key);
+                $attendanceRate = ($stats && $stats->total > 0)
+                    ? round(($stats->present_count / $stats->total) * 100, 2)
+                    : 100;
 
                 $activeWeight = 0;
                 $weightedSum = 0;
@@ -468,15 +483,17 @@ class ClassController
 
             // Generate meeting sessions for newly duplicated schedules (skip those that already have sessions)
             $holidayDates = Holiday::query()->pluck('date')->map->toDateString()->toArray();
-            $newScheduleIds = Schedule::where('academic_year_id', $toYearId)
-                ->whereDoesntHave('meetingSessions')
-                ->pluck('id');
+            $publishedClassIds = SchoolClass::where('is_published', true)
+                ->pluck('id')
+                ->keyBy(fn ($id) => $id);
 
-            foreach ($newScheduleIds as $scheduleId) {
-                $schedule = Schedule::find($scheduleId);
-                if ($schedule) {
-                    $this->scheduleService->generateMeetingSessionsForYear($schedule, $toYear, $holidayDates);
-                }
+            // PERF FIX: Single query instead of N+1 Schedule::find()
+            $newSchedules = Schedule::where('academic_year_id', $toYearId)
+                ->whereDoesntHave('meetingSessions')
+                ->get();
+
+            foreach ($newSchedules as $schedule) {
+                $this->scheduleService->generateMeetingSessionsForYear($schedule, $toYear, $holidayDates, $publishedClassIds);
             }
 
             DB::commit();
@@ -517,6 +534,22 @@ class ClassController
                 ])
                 ->get();
 
+            // PERF FIX: Bulk fetch ALL attendance stats in ONE query (replaces N×M queries)
+            $allScheduleIds = $sourceClasses->flatMap(fn ($c) => $c->schedules->pluck('id'));
+            $allStudentUserIds = $sourceClasses->flatMap(fn ($c) => $c->students->pluck('user_id'));
+            $bulkAttendanceMap = DB::table('attendances')
+                ->whereIn('schedule_id', $allScheduleIds)
+                ->whereIn('student_id', $allStudentUserIds)
+                ->select(
+                    'schedule_id',
+                    'student_id',
+                    DB::raw('COUNT(*) as total'),
+                    DB::raw("SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as present_count")
+                )
+                ->groupBy('schedule_id', 'student_id')
+                ->get()
+                ->keyBy(fn ($row) => "{$row->schedule_id}_{$row->student_id}");
+
             $allStudents = [];
             foreach ($sourceClasses as $class) {
                 $classStudents = [];
@@ -538,12 +571,11 @@ class ClassController
                         $utsAvg = ! empty($scoresByType['uts']) ? array_sum($scoresByType['uts']) / count($scoresByType['uts']) : null;
                         $uasAvg = ! empty($scoresByType['uas']) ? array_sum($scoresByType['uas']) / count($scoresByType['uas']) : null;
 
-                        $stats = DB::table('attendances')
-                            ->where('schedule_id', $schedule->id)
-                            ->where('student_id', $student->user_id)
-                            ->selectRaw('COUNT(*) as total, SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as present_count', ['present'])
-                            ->first();
-                        $attendanceRate = ($stats->total ?? 0) > 0 ? round(($stats->present_count / $stats->total) * 100, 2) : 100;
+                        $key = "{$schedule->id}_{$student->user_id}";
+                        $stats = $bulkAttendanceMap->get($key);
+                        $attendanceRate = ($stats && $stats->total > 0)
+                            ? round(($stats->present_count / $stats->total) * 100, 2)
+                            : 100;
 
                         $activeWeight = 0;
                         $weightedSum = 0;
@@ -710,15 +742,7 @@ class ClassController
                 $classStudentsList = [];
 
                 foreach ($evenClass->students as $student) {
-                    $evaluation = $this->reportService->evaluateStudentPromotion(
-                        $student,
-                        $evenClass,
-                        $evenYear,
-                        $oddClass,
-                        $oddYear,
-                    );
-
-                    // Compute average score for grade index
+                    // PERF FIX: Calculate once, use twice (was duplicated inside evaluateStudentPromotion)
                     $subjectScores = $this->reportService->calculateDualSemesterSubjectScores(
                         $student,
                         $evenClass,
@@ -726,6 +750,16 @@ class ClassController
                         $oddClass,
                         $oddYear,
                     );
+
+                    $evaluation = $this->reportService->evaluateStudentPromotion(
+                        $student,
+                        $evenClass,
+                        $evenYear,
+                        $oddClass,
+                        $oddYear,
+                        $subjectScores,
+                    );
+
                     $validScores = array_filter($subjectScores);
                     $avgScore = ! empty($validScores) ? round(array_sum($validScores) / count($validScores), 2) : null;
 

@@ -234,13 +234,19 @@ class AdminSemesterReportService
             ->with([
                 'academicYear',
                 'homeroomTeacher.user',
-                'schedules' => function ($scheduleQuery) use ($academicYear): void {
+                'schedules' => function ($scheduleQuery) use ($academicYear, $student): void {
                     $scheduleQuery->where('academic_year_id', $academicYear->id)
                         ->with([
                             'subject',
                             'teacher.user',
-                            'attendances',
-                            'assignments.submissions.grade',
+                            'attendances' => fn ($q) => $q->where('student_id', $student->user_id),
+                            'assignments' => function ($assignmentQuery) use ($student): void {
+                                $assignmentQuery->with([
+                                    'submissions' => function ($subQuery) use ($student): void {
+                                        $subQuery->where('student_id', $student->user_id)->with('grade');
+                                    },
+                                ]);
+                            },
                         ]);
                 },
             ])
@@ -255,7 +261,6 @@ class AdminSemesterReportService
         $missingSubjects = [];
         $attendanceMissing = $schoolClass->schedules->isEmpty();
 
-        // Check competency settings for all subjects in this class
         $subjectIds = $schoolClass->schedules->pluck('subject_id')->unique()->filter()->values();
         $configuredSubjectIds = SubjectCompetencySetting::where('academic_year_id', $schoolClass->academic_year_id)
             ->whereIn('subject_id', $subjectIds)
@@ -263,6 +268,16 @@ class AdminSemesterReportService
             ->toArray();
         $missingCompetencySubjects = $subjectIds->diff($configuredSubjectIds);
         $allCompetencyConfigured = $missingCompetencySubjects->isEmpty();
+
+        // PERF FIX: Pre-build submissions map for O(1) lookup (replaces O(n) firstWhere)
+        $submissionsMap = [];
+        foreach ($schoolClass->schedules as $schedule) {
+            foreach ($schedule->assignments as $assignment) {
+                foreach ($assignment->submissions as $submission) {
+                    $submissionsMap[$assignment->id][$submission->student_id] = $submission;
+                }
+            }
+        }
 
         foreach ($schoolClass->schedules as $schedule) {
             if ($schedule->attendances->where('student_id', $student->user_id)->isEmpty()) {
@@ -274,7 +289,7 @@ class AdminSemesterReportService
             $gradedAssignmentCount = 0;
 
             foreach ($schedule->assignments as $assignment) {
-                $submission = $assignment->submissions->firstWhere('student_id', $student->user_id);
+                $submission = $submissionsMap[$assignment->id][$student->user_id] ?? null;
 
                 if ($submission?->grade?->score !== null) {
                     $gradedAssignmentCount++;
@@ -330,7 +345,7 @@ class AdminSemesterReportService
         // Find odd semester class for dual-semester promotion evaluation
         $oddSemesterYear = $this->findOddSemesterYear($academicYear);
         $oddSemesterClass = $oddSemesterYear
-            ? $this->findOddSemesterClass($schoolClass, $oddSemesterYear)
+            ? $this->findOddSemesterClass($schoolClass, $oddSemesterYear, $student->user_id)
             : null;
 
         return [
@@ -381,17 +396,26 @@ class AdminSemesterReportService
      */
     private function buildSubjectResults(SchoolClass $schoolClass, Student $student, AcademicYear $academicYear): array
     {
-        // Preload all competency settings for this academic year
         $competencySettings = SubjectCompetencySetting::where('academic_year_id', $academicYear->id)
             ->get()
             ->keyBy('subject_id');
 
+        // PERF FIX: Pre-build submissions map for O(1) lookup (replaces O(n) firstWhere)
+        $submissionsMap = [];
+        foreach ($schoolClass->schedules as $schedule) {
+            foreach ($schedule->assignments as $assignment) {
+                foreach ($assignment->submissions as $submission) {
+                    $submissionsMap[$assignment->id][$submission->student_id] = $submission;
+                }
+            }
+        }
+
         return $schoolClass->schedules
-            ->map(function ($schedule) use ($student, $competencySettings): array {
+            ->map(function ($schedule) use ($student, $competencySettings, $submissionsMap): array {
                 $scores = collect();
 
                 foreach ($schedule->assignments as $assignment) {
-                    $submission = $assignment->submissions->firstWhere('student_id', $student->user_id);
+                    $submission = $submissionsMap[$assignment->id][$student->user_id] ?? null;
 
                     if ($submission?->grade?->score !== null) {
                         $scores->push((float) $submission->grade->score);
@@ -646,31 +670,37 @@ class AdminSemesterReportService
             'attendance' => $gradingSetting?->attendance_weight ?? 10,
         ];
 
+        // PERF FIX: Pre-build submissions map for O(1) lookup (replaces O(n) firstWhere)
+        $submissionsMap = [];
+        foreach ($schoolClass->schedules as $schedule) {
+            foreach ($schedule->assignments as $assignment) {
+                foreach ($assignment->submissions as $submission) {
+                    $submissionsMap[$assignment->id][$submission->student_id] = $submission;
+                }
+            }
+        }
+
         $result = [];
 
         foreach ($schoolClass->schedules as $schedule) {
             $subjectName = $schedule->subject?->name ?? '-';
             $scoresByType = ['task' => [], 'ujian_harian' => [], 'uts' => [], 'uas' => []];
-            $remedialLookup = []; // linked_assignment_id => ['mode' => ..., 'scores' => [...]]
+            $remedialLookup = [];
 
             foreach ($schedule->assignments as $assignment) {
-                $submission = $assignment->submissions->firstWhere('student_id', $student->user_id);
+                $submission = $submissionsMap[$assignment->id][$student->user_id] ?? null;
 
                 if ($submission?->grade?->score !== null) {
                     $type = $assignment->type ?? 'task';
 
                     if ($assignment->is_remedial && $assignment->linked_assignment_id) {
-                        // Store remedial data for resolution
                         $linkedId = $assignment->linked_assignment_id;
                         if (! isset($remedialLookup[$linkedId])) {
                             $remedialLookup[$linkedId] = ['mode' => 'replace', 'scores' => []];
                         }
                         $remedialLookup[$linkedId]['scores'][] = (float) $submission->grade->score;
 
-                        // Get remedial_mode from parent's grade
-                        $parentSubmission = $schedule->assignments
-                            ->firstWhere('id', $linkedId)?->submissions
-                            ->firstWhere('student_id', $student->user_id);
+                        $parentSubmission = $submissionsMap[$linkedId][$student->user_id] ?? null;
                         if ($parentSubmission?->grade?->remedial_mode) {
                             $remedialLookup[$linkedId]['mode'] = $parentSubmission->grade->remedial_mode;
                         }
@@ -688,13 +718,12 @@ class AdminSemesterReportService
 
                 if (isset($remedialLookup[$assignment->id])) {
                     $remedial = $remedialLookup[$assignment->id];
-                    $parentSubmission = $assignment->submissions->firstWhere('student_id', $student->user_id);
+                    $parentSubmission = $submissionsMap[$assignment->id][$student->user_id] ?? null;
 
                     if ($parentSubmission?->grade?->score !== null) {
                         $examScore = (float) $parentSubmission->grade->score;
                         $remedialAvg = array_sum($remedial['scores']) / count($remedial['scores']);
 
-                        // Resolve and replace the exam score in scoresByType
                         $resolvedScore = match ($remedial['mode']) {
                             'replace' => max($examScore, $remedialAvg),
                             'average' => round(($examScore + $remedialAvg) / 2, 2),
@@ -702,7 +731,6 @@ class AdminSemesterReportService
                             default => max($examScore, $remedialAvg),
                         };
 
-                        // Replace the score in the type array
                         $typeScores = &$scoresByType[$assignment->type];
                         foreach ($typeScores as &$s) {
                             if ($s === $examScore) {
@@ -715,7 +743,6 @@ class AdminSemesterReportService
                 }
             }
 
-            // Average per type
             $taskAvg = ! empty($scoresByType['task'])
                 ? array_sum($scoresByType['task']) / count($scoresByType['task'])
                 : null;
@@ -729,10 +756,8 @@ class AdminSemesterReportService
                 ? array_sum($scoresByType['uas']) / count($scoresByType['uas'])
                 : null;
 
-            // PERF FIX: Use pre-fetched attendance map instead of per-schedule query
             $attendanceRate = $attendanceMap[$schedule->id] ?? 100;
 
-            // Walking average: only include weights for types with data
             $activeWeight = 0;
             $weightedSum = 0;
 
@@ -827,18 +852,29 @@ class AdminSemesterReportService
      * Find the matching class in the odd semester for a given even-semester class.
      * Matches by class name (e.g. "7A" in even → "7A" in odd).
      */
-    public function findOddSemesterClass(SchoolClass $evenClass, AcademicYear $oddYear): ?SchoolClass
+    public function findOddSemesterClass(SchoolClass $evenClass, AcademicYear $oddYear, ?int $studentUserId = null): ?SchoolClass
     {
         return SchoolClass::where('academic_year_id', $oddYear->id)
             ->where('name', $evenClass->name)
             ->with([
-                'schedules' => function ($query) use ($oddYear): void {
+                'schedules' => function ($query) use ($oddYear, $studentUserId): void {
                     $query->where('academic_year_id', $oddYear->id)
                         ->with([
                             'subject',
                             'teacher.user',
-                            'attendances',
-                            'assignments.submissions.grade',
+                            'attendances' => fn ($q) => $studentUserId
+                                ? $q->where('student_id', $studentUserId)
+                                : $q,
+                            'assignments' => function ($assignmentQuery) use ($studentUserId): void {
+                                $assignmentQuery->with([
+                                    'submissions' => function ($subQuery) use ($studentUserId): void {
+                                        if ($studentUserId) {
+                                            $subQuery->where('student_id', $studentUserId);
+                                        }
+                                        $subQuery->with('grade');
+                                    },
+                                ]);
+                            },
                         ]);
                 },
             ])
@@ -876,6 +912,7 @@ class AdminSemesterReportService
         AcademicYear $evenYear,
         ?SchoolClass $oddClass = null,
         ?AcademicYear $oddYear = null,
+        ?array $precomputedSubjectScores = null,
     ): array {
         $name = trim($evenClass->name);
         preg_match('/^(\d+)/', $name, $matches);
@@ -884,7 +921,7 @@ class AdminSemesterReportService
         $gradingSetting = $evenYear->gradingSetting;
         $minScore = $gradingSetting?->min_score_to_pass ?? 60;
 
-        $subjectScores = $this->calculateDualSemesterSubjectScores(
+        $subjectScores = $precomputedSubjectScores ?? $this->calculateDualSemesterSubjectScores(
             $student,
             $evenClass,
             $evenYear,
