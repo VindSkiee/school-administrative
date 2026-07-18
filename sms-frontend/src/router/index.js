@@ -337,18 +337,7 @@ router.beforeEach((to, from, next) => {
     return next(`/${userRole}/dashboard`);
   }
 
-  // Redirect student to eskul selection if not completed
-  const eskulSelectionCompleted = authStore.eskulSelectionCompleted;
-  if (
-    isAuthenticated &&
-    userRole === "student" &&
-    !eskulSelectionCompleted &&
-    to.path !== "/student/eskul-selection"
-  ) {
-    return next("/student/eskul-selection");
-  }
-
-  // Allow student to skip eskul selection
+  // Prevent student from re-entering eskul-selection after completion
   if (
     isAuthenticated &&
     userRole === "student" &&

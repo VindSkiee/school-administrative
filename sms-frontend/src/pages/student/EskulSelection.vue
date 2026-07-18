@@ -66,6 +66,10 @@
                   <div v-if="eskul.description" class="text-sm text-gray-500 mt-1">
                     {{ eskul.description }}
                   </div>
+                  <div class="text-sm text-gray-400 mt-1">
+                    <Icon icon="mdi:account-outline" class="w-3 h-3 inline mr-1" />
+                    {{ eskul.teacher_name }}
+                  </div>
                 </div>
                 <Icon
                   v-if="selectedIds.includes(eskul.id)"

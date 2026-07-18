@@ -69,6 +69,10 @@
                 <p v-if="eskul.eskul_description && eskul.eskul_description !== '-'" class="text-sm text-gray-500 mt-1">
                   {{ eskul.eskul_description }}
                 </p>
+                <p class="text-sm text-gray-500 mt-1">
+                  <Icon icon="mdi:account-outline" class="w-4 h-4 inline mr-1" />
+                  Guru Pengampu: {{ eskul.eskul_teacher_name }}
+                </p>
                 <p v-if="eskul.score !== null" class="text-sm text-gray-600 mt-1">
                   Nilai: <strong>{{ eskul.score }}</strong>
                   <span v-if="eskul.description"> — {{ eskul.description }}</span>
@@ -138,6 +142,10 @@
                 <div class="font-bold text-gray-800">{{ eskul.name }}</div>
                 <div v-if="eskul.description" class="text-sm text-gray-500 mt-1">
                   {{ eskul.description }}
+                </div>
+                <div class="text-sm text-gray-400 mt-1">
+                  <Icon icon="mdi:account-outline" class="w-3 h-3 inline mr-1" />
+                  {{ eskul.teacher_name }}
                 </div>
               </div>
               <Icon

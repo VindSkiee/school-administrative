@@ -16,12 +16,14 @@ class StudentEskulService
     public function getActiveOptions(): array
     {
         return Eskul::where('is_active', true)
+            ->with('teacher:id,name')
             ->orderBy('name')
             ->get()
             ->map(fn (Eskul $eskul) => [
                 'id' => $eskul->id,
                 'name' => $eskul->name,
                 'description' => $eskul->description,
+                'teacher_name' => $eskul->teacher?->name ?? '-',
             ])
             ->toArray();
     }
@@ -99,13 +101,14 @@ class StudentEskulService
 
         $currentEskuls = StudentEskul::where('student_id', $studentId)
             ->where('academic_year_id', $activeYear->id)
-            ->with(['eskul:id,name,description', 'gradedBy:id,name'])
+            ->with(['eskul:id,name,description,teacher_id', 'eskul.teacher:id,name', 'gradedBy:id,name'])
             ->get()
             ->map(fn (StudentEskul $se) => [
                 'id' => $se->id,
                 'eskul_id' => $se->eskul_id,
                 'eskul_name' => $se->eskul?->name ?? '-',
                 'eskul_description' => $se->eskul?->description ?? '-',
+                'eskul_teacher_name' => $se->eskul?->teacher?->name ?? '-',
                 'score' => $se->score,
                 'description' => $se->description,
                 'graded_at' => $se->graded_at?->toIso8601String(),
