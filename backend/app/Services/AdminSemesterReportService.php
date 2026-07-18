@@ -465,7 +465,7 @@ class AdminSemesterReportService
     /**
      * Build eskul results for a student in a given academic year.
      *
-     * @return array<int, array{eskul_name: string, score: float|null, description: string|null}>
+     * @return array<int, array{eskul_name: string, score: float|null, predikat: string, keterangan: string}>
      */
     private function buildEskulResults(Student $student, AcademicYear $academicYear): array
     {
@@ -474,11 +474,16 @@ class AdminSemesterReportService
             ->with('eskul:id,name')
             ->get();
 
-        return $studentEskuls->map(fn (StudentEskul $se) => [
-            'eskul_name' => $se->eskul?->name ?? '-',
-            'score' => $se->score,
-            'description' => $se->description ?? '-',
-        ])->toArray();
+        return $studentEskuls->map(function (StudentEskul $se) {
+            [$predikat, $keterangan] = $this->resolvePredicate($se->score);
+
+            return [
+                'eskul_name' => $se->eskul?->name ?? '-',
+                'score' => $se->score,
+                'predikat' => $predikat,
+                'keterangan' => $keterangan,
+            ];
+        })->toArray();
     }
 
     /**

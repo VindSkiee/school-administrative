@@ -340,8 +340,8 @@
                 <tr>
                     <td class="center">{{ $index + 1 }}</td>
                     <td>{{ $eskul['eskul_name'] }}</td>
-                    <td class="center">{{ is_null($eskul['score']) ? '-' : number_format($eskul['score'], 0) }}</td>
-                    <td>{{ $eskul['description'] ?? '-' }}</td>
+                    <td class="center"><strong>{{ $eskul['predikat'] ?? '-' }}</strong></td>
+                    <td>{{ $eskul['keterangan'] ?? '-' }}</td>
                 </tr>
             @empty
                 <tr>
