@@ -25,6 +25,7 @@ class ClassReadinessService
         $gradeDetails = $this->getGradeReadiness($classId, $academicYearId);
         $studentDetails = $this->getStudentReadiness($classId, $academicYearId);
         $competencyDetails = $this->getCompetencyReadiness($classId, $academicYearId);
+        $eskulDetails = $this->getEskulReadiness($classId, $academicYearId);
 
         $allAttendanceComplete = collect($attendanceDetails)->every(fn (array $d): bool => $d['is_complete']);
         $allGradesComplete = collect($gradeDetails)->every(fn (array $d): bool => $d['is_complete']);
@@ -32,8 +33,6 @@ class ClassReadinessService
         $allCompetencyConfigured = collect($competencyDetails)->every(fn (array $d): bool => $d['is_configured']);
         $notesDetails = $this->getNotesReadiness($classId, $academicYearId);
         $allNotesComplete = collect($notesDetails)->every(fn (array $d): bool => $d['has_note']);
-        $eskulDetails = $this->getEskulReadiness($classId, $academicYearId);
-        $allEskulGraded = $eskulDetails['is_ready'];
 
         return [
             'class_id' => $schoolClass->id,
@@ -41,7 +40,7 @@ class ClassReadinessService
             'homeroom_teacher' => $schoolClass->homeroomTeacher?->user?->name ?? '-',
             'is_published' => $schoolClass->is_published,
             'published_at' => $schoolClass->published_at?->toIso8601String(),
-            'is_ready' => $allAttendanceComplete && $allGradesComplete && $allStudentsReady && $allCompetencyConfigured && $allNotesComplete && $allEskulGraded,
+            'is_ready' => $allAttendanceComplete && $allGradesComplete && $allStudentsReady && $allCompetencyConfigured && $allNotesComplete && $eskulDetails['is_ready'],
             'readiness' => [
                 'attendance' => [
                     'is_complete' => $allAttendanceComplete,
@@ -55,11 +54,6 @@ class ClassReadinessService
                     'is_complete' => $allCompetencyConfigured,
                     'details' => $competencyDetails,
                 ],
-                'eskul' => [
-                    'is_complete' => $allEskulGraded,
-                    'total_enrolled' => $eskulDetails['total_enrolled'],
-                    'ungraded_count' => $eskulDetails['ungraded_count'],
-                ],
                 'students' => [
                     'total' => $studentDetails['total_count'],
                     'ready' => $studentDetails['ready_count'],
@@ -70,6 +64,12 @@ class ClassReadinessService
                     'total' => count($notesDetails),
                     'completed' => collect($notesDetails)->where('has_note', true)->count(),
                     'details' => $notesDetails,
+                ],
+                'eskul' => [
+                    'is_ready' => $eskulDetails['is_ready'],
+                    'total_enrolled' => $eskulDetails['total_enrolled'],
+                    'ungraded_count' => $eskulDetails['ungraded_count'],
+                    'ungraded_details' => $eskulDetails['ungraded_details'],
                 ],
             ],
         ];
@@ -276,8 +276,8 @@ class ClassReadinessService
             if (! $readiness['readiness']['competency']['is_complete']) {
                 $missingReasons[] = 'Capaian kompetensi';
             }
-            if (! $readiness['readiness']['eskul']['is_complete']) {
-                $missingReasons[] = 'Nilai ekstrakurikuler ('.$readiness['readiness']['eskul']['ungraded_count'].' siswa belum dinilai)';
+            if (! $readiness['readiness']['eskul']['is_ready']) {
+                $missingReasons[] = 'Nilai ekstrakurikuler';
             }
             if (! $readiness['readiness']['notes']['is_complete']) {
                 $missingReasons[] = 'Catatan wali kelas';
@@ -479,6 +479,7 @@ class ClassReadinessService
                 'total_enrolled' => 0,
                 'ungraded_count' => 0,
                 'is_ready' => true,
+                'ungraded_details' => [],
             ];
         }
 
@@ -493,10 +494,28 @@ class ClassReadinessService
             ->whereNull('score')
             ->count();
 
+        $ungradedDetails = [];
+        if ($ungradedCount > 0) {
+            $ungradedDetails = DB::table('student_eskuls')
+                ->select('e.name as eskul_name', DB::raw('COUNT(*) as ungraded_count'))
+                ->join('eskuls as e', 'e.id', '=', 'student_eskuls.eskul_id')
+                ->whereIn('student_eskuls.student_id', $studentIds)
+                ->where('student_eskuls.academic_year_id', $academicYearId)
+                ->whereNull('student_eskuls.score')
+                ->groupBy('e.name')
+                ->get()
+                ->map(fn ($row) => [
+                    'eskul_name' => $row->eskul_name,
+                    'ungraded_count' => (int) $row->ungraded_count,
+                ])
+                ->toArray();
+        }
+
         return [
             'total_enrolled' => $totalEnrolled,
             'ungraded_count' => $ungradedCount,
             'is_ready' => $ungradedCount === 0,
+            'ungraded_details' => $ungradedDetails,
         ];
     }
 

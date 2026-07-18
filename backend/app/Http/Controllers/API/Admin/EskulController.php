@@ -4,6 +4,7 @@ namespace App\Http\Controllers\API\Admin;
 
 use App\Http\Requests\Admin\StoreEskulRequest;
 use App\Http\Requests\Admin\UpdateEskulRequest;
+use App\Models\AcademicYear;
 use App\Services\EskulService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -75,6 +76,35 @@ class EskulController
             'success' => true,
             'message' => 'PIC Guru berhasil diperbarui.',
             'data' => $eskul,
+        ]);
+    }
+
+    public function getDeadline(string $academicYearId): JsonResponse
+    {
+        $academicYear = AcademicYear::findOrFail((int) $academicYearId);
+
+        return response()->json([
+            'data' => [
+                'deadline' => $academicYear->eskul_registration_deadline?->format('Y-m-d'),
+            ],
+        ]);
+    }
+
+    public function updateDeadline(Request $request, string $academicYearId): JsonResponse
+    {
+        $validated = $request->validate([
+            'deadline' => ['nullable', 'date', 'after_or_equal:today'],
+        ]);
+
+        $academicYear = AcademicYear::findOrFail((int) $academicYearId);
+        $academicYear->update(['eskul_registration_deadline' => $validated['deadline'] ?? null]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Deadline pendaftaran eskul berhasil diperbarui.',
+            'data' => [
+                'deadline' => $academicYear->eskul_registration_deadline?->format('Y-m-d'),
+            ],
         ]);
     }
 }

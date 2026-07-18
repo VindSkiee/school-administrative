@@ -246,6 +246,12 @@ const routes = [
         component: () => import("../pages/student/StudentReport.vue"),
         meta: { title: "Nilai & Rapor Semester" },
       },
+      {
+        path: "eskul",
+        name: "StudentEskul",
+        component: () => import("../pages/student/EskulPage.vue"),
+        meta: { title: "Ekstrakurikuler" },
+      },
     ],
   },
   // --- PRINCIPAL ROUTES ---

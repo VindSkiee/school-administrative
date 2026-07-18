@@ -460,6 +460,11 @@ const studentNav = [
     path: "/student/report",
     icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z",
   },
+  {
+    name: "Ekstrakurikuler",
+    path: "/student/eskul",
+    icon: "M12 8v13m0-13V6a4 4 0 00-4 4v4h8v-4a4 4 0 00-4-4zm-7 8h14M5 8h14a2 2 0 012 2v7a2 2 0 01-2 2H5a2 2 0 01-2-2v-7a2 2 0 012-2z",
+  },
 ];
 
 const principalNav = [

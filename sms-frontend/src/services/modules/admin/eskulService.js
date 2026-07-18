@@ -28,4 +28,12 @@ export const eskulService = {
   getTeacherOptions() {
     return api.get('/v1/admin/teachers/options');
   },
+
+  getDeadline(academicYearId) {
+    return api.get(`/v1/admin/academic-years/${academicYearId}/eskul-deadline`);
+  },
+
+  updateDeadline(academicYearId, deadline) {
+    return api.put(`/v1/admin/academic-years/${academicYearId}/eskul-deadline`, { deadline });
+  },
 };

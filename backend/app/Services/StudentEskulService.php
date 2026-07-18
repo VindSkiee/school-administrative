@@ -4,8 +4,10 @@ namespace App\Services;
 
 use App\Models\AcademicYear;
 use App\Models\Eskul;
+use App\Models\EskulChangeRequest;
 use App\Models\Student;
 use App\Models\StudentEskul;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -31,6 +33,11 @@ class StudentEskulService
             throw new HttpException(422, 'Tidak ada tahun ajaran aktif.');
         }
 
+        $deadline = $this->resolveDeadline($activeYear);
+        if ($deadline && Carbon::today()->gt($deadline)) {
+            throw new HttpException(422, 'Batas waktu pendaftaran eskul telah habis.');
+        }
+
         $student = Student::where('user_id', $studentId)->first();
         if (! $student) {
             throw new HttpException(404, 'Data siswa tidak ditemukan.');
@@ -45,11 +52,15 @@ class StudentEskulService
             throw new HttpException(422, 'Anda belum terdaftar di kelas mana pun pada semester aktif.');
         }
 
-        DB::transaction(function () use ($studentId, $eskulIds, $activeYear) {
-            StudentEskul::where('student_id', $studentId)
-                ->where('academic_year_id', $activeYear->id)
-                ->delete();
+        $hasCurrentEskul = StudentEskul::where('student_id', $studentId)
+            ->where('academic_year_id', $activeYear->id)
+            ->exists();
 
+        if ($hasCurrentEskul) {
+            throw new HttpException(422, 'Anda sudah terdaftar di ekstrakurikuler. Gunakan fitur pergantian eskul untuk mengubah pilihan.');
+        }
+
+        DB::transaction(function () use ($studentId, $eskulIds, $activeYear) {
             foreach ($eskulIds as $eskulId) {
                 StudentEskul::create([
                     'student_id' => $studentId,
@@ -63,14 +74,30 @@ class StudentEskulService
         });
     }
 
+    public function skipSelection(int $studentId): void
+    {
+        $student = Student::where('user_id', $studentId)->first();
+        if (! $student) {
+            throw new HttpException(404, 'Data siswa tidak ditemukan.');
+        }
+
+        Student::where('user_id', $studentId)
+            ->update(['eskul_selection_completed' => true]);
+    }
+
     public function getMyEskuls(int $studentId): array
     {
         $activeYear = AcademicYear::where('is_active', true)->first();
         if (! $activeYear) {
-            return [];
+            return [
+                'current_eskuls' => [],
+                'has_current_eskul' => false,
+                'has_pending_change_request' => false,
+                'pending_change_request' => null,
+            ];
         }
 
-        return StudentEskul::where('student_id', $studentId)
+        $currentEskuls = StudentEskul::where('student_id', $studentId)
             ->where('academic_year_id', $activeYear->id)
             ->with(['eskul:id,name,description', 'gradedBy:id,name'])
             ->get()
@@ -85,26 +112,116 @@ class StudentEskulService
                 'graded_by_name' => $se->gradedBy?->name ?? '-',
             ])
             ->toArray();
+
+        $pendingRequest = EskulChangeRequest::where('student_id', $studentId)
+            ->where('academic_year_id', $activeYear->id)
+            ->where('status', 'pending')
+            ->with(['currentEskul:id,name', 'requestedEskul:id,name'])
+            ->first();
+
+        $hasPending = $pendingRequest !== null;
+
+        $pendingData = null;
+        if ($pendingRequest) {
+            $pendingData = [
+                'id' => $pendingRequest->id,
+                'current_eskul_name' => $pendingRequest->currentEskul?->name ?? '-',
+                'requested_eskul_name' => $pendingRequest->requestedEskul?->name ?? '-',
+                'created_at' => $pendingRequest->created_at?->toIso8601String(),
+            ];
+        }
+
+        return [
+            'current_eskuls' => $currentEskuls,
+            'has_current_eskul' => count($currentEskuls) > 0,
+            'has_pending_change_request' => $hasPending,
+            'pending_change_request' => $pendingData,
+        ];
     }
 
-    public function isSelectionCompleted(int $studentId): bool
+    public function getDeadline(): ?array
     {
         $activeYear = AcademicYear::where('is_active', true)->first();
         if (! $activeYear) {
-            return true;
+            return null;
         }
 
-        $student = Student::where('user_id', $studentId)->first();
-        if (! $student) {
-            return true;
-        }
+        $deadline = $this->resolveDeadline($activeYear);
 
-        return (bool) $student->eskul_selection_completed;
+        return [
+            'deadline' => $deadline?->format('Y-m-d'),
+            'is_passed' => $deadline ? Carbon::today()->gt($deadline) : false,
+        ];
     }
 
-    public function resetSelectionsForNewSemester(): int
+    private function resolveDeadline(AcademicYear $activeYear): ?Carbon
     {
-        return Student::where('eskul_selection_completed', true)
-            ->update(['eskul_selection_completed' => false]);
+        $deadline = $activeYear->eskul_registration_deadline;
+        if (! $deadline && $activeYear->start_date) {
+            $deadline = Carbon::parse($activeYear->start_date)->addDays(14);
+        }
+
+        return $deadline ? Carbon::parse($deadline) : null;
+    }
+
+    public function submitChangeRequest(int $studentId, int $newEskulId): void
+    {
+        $activeYear = AcademicYear::where('is_active', true)->first();
+        if (! $activeYear) {
+            throw new HttpException(422, 'Tidak ada tahun ajaran aktif.');
+        }
+
+        $currentEskul = StudentEskul::where('student_id', $studentId)
+            ->where('academic_year_id', $activeYear->id)
+            ->first();
+
+        if (! $currentEskul) {
+            throw new HttpException(422, 'Anda belum terdaftar di ekstrakurikuler manapun. Silakan daftar terlebih dahulu.');
+        }
+
+        if ($currentEskul->eskul_id === $newEskulId) {
+            throw new HttpException(422, 'Eskul baru harus berbeda dari eskul saat ini.');
+        }
+
+        $newEskul = Eskul::where('id', $newEskulId)->where('is_active', true)->first();
+        if (! $newEskul) {
+            throw new HttpException(422, 'Ekstrakurikuler yang dipilih tidak valid atau tidak aktif.');
+        }
+
+        $pendingExists = EskulChangeRequest::where('student_id', $studentId)
+            ->where('academic_year_id', $activeYear->id)
+            ->where('status', 'pending')
+            ->exists();
+
+        if ($pendingExists) {
+            throw new HttpException(422, 'Anda sudah memiliki pengajuan pergantian eskul yang belum diproses.');
+        }
+
+        EskulChangeRequest::create([
+            'student_id' => $studentId,
+            'current_eskul_id' => $currentEskul->eskul_id,
+            'requested_eskul_id' => $newEskulId,
+            'academic_year_id' => $activeYear->id,
+            'status' => 'pending',
+        ]);
+    }
+
+    public function cancelChangeRequest(int $studentId): void
+    {
+        $activeYear = AcademicYear::where('is_active', true)->first();
+        if (! $activeYear) {
+            throw new HttpException(422, 'Tidak ada tahun ajaran aktif.');
+        }
+
+        $pendingRequest = EskulChangeRequest::where('student_id', $studentId)
+            ->where('academic_year_id', $activeYear->id)
+            ->where('status', 'pending')
+            ->first();
+
+        if (! $pendingRequest) {
+            throw new HttpException(404, 'Tidak ada pengajuan pergantian eskul yang sedang menunggu.');
+        }
+
+        $pendingRequest->delete();
     }
 }

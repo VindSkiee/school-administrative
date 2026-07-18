@@ -32,7 +32,11 @@ Route::get('schedules', [StudentScheduleController::class, 'index']);
 Route::get('schedules/{id}', [StudentScheduleController::class, 'show']);
 Route::get('class-detail', [ClassDetailController::class, 'index']);
 
-// Eskul Selection
+// Eskul Selection & Management
 Route::get('eskuls/options', [StudentEskulController::class, 'options']);
 Route::post('eskuls', [StudentEskulController::class, 'store']);
 Route::get('eskuls/my', [StudentEskulController::class, 'myEskuls']);
+Route::post('eskuls/skip', [StudentEskulController::class, 'skip']);
+Route::get('eskuls/deadline', [StudentEskulController::class, 'getDeadline']);
+Route::post('eskuls/change-request', [StudentEskulController::class, 'submitChangeRequest']);
+Route::delete('eskuls/change-request', [StudentEskulController::class, 'cancelChangeRequest']);

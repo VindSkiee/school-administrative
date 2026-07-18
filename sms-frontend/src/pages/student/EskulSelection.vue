@@ -25,6 +25,14 @@
             <p class="mt-4 text-gray-500">Memuat data eskul...</p>
           </div>
 
+          <!-- Deadline Passed -->
+          <div v-else-if="deadlineInfo?.is_passed" class="text-center py-8">
+            <Icon icon="mdi:clock-outline" class="w-16 h-16 mx-auto text-yellow-400 mb-4" />
+            <h3 class="text-lg font-bold text-gray-800 mb-2">Batas Waktu Pendaftaran Habis</h3>
+            <p class="text-gray-500 mb-1">Batas waktu pendaftaran eskul telah habis.</p>
+            <p class="text-sm text-gray-400">Anda tidak terdaftar di eskul semester ini.</p>
+          </div>
+
           <!-- Eskul Options -->
           <div v-else>
             <p class="text-sm text-gray-600 mb-4">
@@ -116,6 +124,7 @@ const eskulOptions = ref([]);
 const selectedIds = ref([]);
 const isLoading = ref(true);
 const isSaving = ref(false);
+const deadlineInfo = ref(null);
 
 const fetchOptions = async () => {
   isLoading.value = true;
@@ -126,6 +135,15 @@ const fetchOptions = async () => {
     toastStore.error('Gagal memuat data ekstrakurikuler.');
   } finally {
     isLoading.value = false;
+  }
+};
+
+const fetchDeadline = async () => {
+  try {
+    const response = await eskulService.getDeadline();
+    deadlineInfo.value = response.data.data;
+  } catch {
+    // deadline is optional
   }
 };
 
@@ -143,12 +161,19 @@ const submitSelection = async () => {
   }
 };
 
-const skipSelection = () => {
+const skipSelection = async () => {
+  try {
+    await eskulService.skip();
+  } catch {
+    // silently ignore — local flag will still be set
+  }
   authStore.markEskulSelectionCompleted();
   router.push(`/${authStore.userRole}/dashboard`);
 };
 
-onMounted(() => {
-  fetchOptions();
+onMounted(async () => {
+  isLoading.value = true;
+  await Promise.all([fetchOptions(), fetchDeadline()]);
+  isLoading.value = false;
 });
 </script>

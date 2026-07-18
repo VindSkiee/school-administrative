@@ -21,6 +21,35 @@
       </button>
     </div>
 
+    <!-- Deadline Settings Section -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+        <div class="flex items-center gap-3">
+          <div class="bg-brand-red/10 p-2 rounded-xl">
+            <Icon icon="mdi:calendar-clock-outline" class="w-5 h-5 text-brand-red" />
+          </div>
+          <div>
+            <h3 class="font-bold text-gray-800 text-sm">Deadline Pendaftaran Eskul</h3>
+            <p class="text-xs text-gray-500">Tentukan batas waktu siswa mendaftar eskul semester ini.</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-3 sm:ml-auto">
+          <input
+            v-model="eskulDeadline"
+            type="date"
+            class="px-3 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-brand-red focus:border-brand-red outline-none transition-colors text-sm"
+          />
+          <button
+            @click="saveDeadline"
+            :disabled="isSavingDeadline"
+            class="px-4 py-2 bg-brand-red hover:bg-brand-orange text-white text-sm font-semibold rounded-lg disabled:opacity-50 transition-colors shadow-sm"
+          >
+            {{ isSavingDeadline ? 'Menyimpan...' : 'Simpan' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <BaseTable
       :columns="tableColumns"
       :data="eskuls"
@@ -230,6 +259,10 @@ const assignTarget = ref(null);
 const assignTeacherId = ref(null);
 const teacherOptions = ref([]);
 
+const eskulDeadline = ref('');
+const isSavingDeadline = ref(false);
+const selectedAcademicYearId = ref(null);
+
 const form = reactive({
   name: '',
   description: '',
@@ -347,8 +380,40 @@ const saveAssignTeacher = async () => {
   }
 };
 
+const fetchActiveYearAndDeadline = async () => {
+  try {
+    const yearRes = await import('../../services/api').then(m => m.default.get('/v1/admin/academic-years'));
+    const years = yearRes.data?.data || yearRes.data || [];
+    const activeYear = Array.isArray(years) ? years.find(y => y.is_active) : null;
+    if (activeYear) {
+      selectedAcademicYearId.value = activeYear.id;
+      const deadlineRes = await eskulService.getDeadline(activeYear.id);
+      eskulDeadline.value = deadlineRes.data?.data?.deadline || '';
+    }
+  } catch {
+    // ignore
+  }
+};
+
+const saveDeadline = async () => {
+  if (!selectedAcademicYearId.value) {
+    toastStore.error('Tidak ada tahun ajaran aktif.');
+    return;
+  }
+  isSavingDeadline.value = true;
+  try {
+    await eskulService.updateDeadline(selectedAcademicYearId.value, eskulDeadline.value || null);
+    toastStore.success('Deadline pendaftaran eskul berhasil disimpan.');
+  } catch (error) {
+    toastStore.error(error.response?.data?.message || 'Gagal menyimpan deadline.');
+  } finally {
+    isSavingDeadline.value = false;
+  }
+};
+
 onMounted(() => {
   fetchData();
   fetchTeacherOptions();
+  fetchActiveYearAndDeadline();
 });
 </script>

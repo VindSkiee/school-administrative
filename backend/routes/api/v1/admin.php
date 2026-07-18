@@ -82,3 +82,5 @@ Route::apiResource('holidays', HolidayController::class)->only(['index', 'store'
 // Eskul Management
 Route::apiResource('eskuls', AdminEskulController::class);
 Route::patch('eskuls/{eskul}/assign-teacher', [AdminEskulController::class, 'assignTeacher']);
+Route::get('academic-years/{academicYearId}/eskul-deadline', [AdminEskulController::class, 'getDeadline']);
+Route::put('academic-years/{academicYearId}/eskul-deadline', [AdminEskulController::class, 'updateDeadline']);

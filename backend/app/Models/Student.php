@@ -54,6 +54,11 @@ class Student extends Model
         return $this->hasMany(StudentEskul::class, 'student_id', 'user_id');
     }
 
+    public function eskulChangeRequests()
+    {
+        return $this->hasMany(EskulChangeRequest::class, 'student_id', 'user_id');
+    }
+
     public function eskuls()
     {
         return $this->belongsToMany(Eskul::class, 'student_eskuls', 'student_id', 'eskul_id')

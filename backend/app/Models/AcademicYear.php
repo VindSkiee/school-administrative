@@ -11,9 +11,9 @@ class AcademicYear extends Model
 {
     use RecordsActivity;
 
-    protected $fillable = ['name', 'semester', 'phase', 'is_active', 'is_report_published', 'start_date', 'end_date'];
+    protected $fillable = ['name', 'semester', 'phase', 'is_active', 'is_report_published', 'start_date', 'end_date', 'eskul_registration_deadline'];
 
-    protected $casts = ['is_active' => 'boolean', 'is_report_published' => 'boolean', 'start_date' => 'date', 'end_date' => 'date'];
+    protected $casts = ['is_active' => 'boolean', 'is_report_published' => 'boolean', 'start_date' => 'date', 'end_date' => 'date', 'eskul_registration_deadline' => 'date'];
 
     public function classes(): HasMany
     {

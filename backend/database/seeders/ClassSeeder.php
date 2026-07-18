@@ -17,6 +17,7 @@ class ClassSeeder extends Seeder
                 'is_active' => true,
                 'start_date' => '2025-07-07',
                 'end_date' => '2025-12-19',
+                'eskul_registration_deadline' => '2025-07-21',
             ]
         );
 
