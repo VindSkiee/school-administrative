@@ -401,8 +401,10 @@
       :teacherName="replacementModal.teacherName"
       :schedules="replacementModal.schedules"
       :homeroomClass="replacementModal.homeroomClass"
+      :picEskuls="replacementModal.picEskuls"
       :teacherOptions="replacementModal.teacherOptions"
       :homeroomOptions="replacementModal.homeroomOptions"
+      :eskulTeacherOptions="replacementModal.eskulTeacherOptions"
       :validationError="replacementModal.validationError"
       @confirm="handleReplacementConfirm"
       @cancel="replacementModal.isOpen = false"
@@ -479,8 +481,10 @@ const replacementModal = reactive({
   teacherName: '',
   schedules: [],
   homeroomClass: null,
+  picEskuls: [],
   teacherOptions: [],
   homeroomOptions: [],
+  eskulTeacherOptions: [],
   targetId: null,
   validationError: '',
 });
@@ -658,10 +662,14 @@ const promptDeactivateUser = async (user) => {
       const res = await userService.getTeacherActiveSchedules(user.id);
       replacementModal.schedules = res.data.schedules || [];
       replacementModal.homeroomClass = res.data.homeroom_class || null;
+      replacementModal.picEskuls = res.data.pic_eskuls || [];
       replacementModal.teacherOptions = (res.data.teacher_options || []).map(
         (t) => ({ value: t.id, label: t.name })
       );
       replacementModal.homeroomOptions = (res.data.homeroom_options || []).map(
+        (t) => ({ value: t.id, label: t.name })
+      );
+      replacementModal.eskulTeacherOptions = (res.data.teacher_options || []).map(
         (t) => ({ value: t.id, label: t.name })
       );
     } catch {

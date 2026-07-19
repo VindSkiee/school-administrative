@@ -351,6 +351,11 @@ class UserController
             return response()->json([
                 'schedules' => [],
                 'homeroom_class' => null,
+                'pic_eskuls' => Eskul::where('teacher_id', $user->id)
+                    ->get()
+                    ->map(fn ($e) => ['id' => $e->id, 'name' => $e->name])
+                    ->values()
+                    ->toArray(),
                 'teacher_options' => [],
             ]);
         }
@@ -404,12 +409,23 @@ class UserController
             ->values()
             ->toArray();
 
+        // PIC eskul assignments for this teacher
+        $picEskuls = Eskul::where('teacher_id', $user->id)
+            ->get()
+            ->map(fn ($e) => [
+                'id' => $e->id,
+                'name' => $e->name,
+            ])
+            ->values()
+            ->toArray();
+
         return response()->json([
             'schedules' => $schedules,
             'homeroom_class' => $homeroomClass ? [
                 'id' => $homeroomClass->id,
                 'name' => $homeroomClass->name,
             ] : null,
+            'pic_eskuls' => $picEskuls,
             'teacher_options' => $teacherOptions,
             'homeroom_options' => $homeroomOptions,
         ]);
@@ -429,6 +445,9 @@ class UserController
             'schedule_replacements.*.schedule_id' => 'required_with:schedule_replacements|integer|exists:schedules,id',
             'schedule_replacements.*.new_teacher_id' => 'required_with:schedule_replacements|integer|exists:teachers,user_id',
             'homeroom_replacement' => 'sometimes|nullable|integer|exists:teachers,user_id',
+            'eskul_replacements' => 'sometimes|array',
+            'eskul_replacements.*.eskul_id' => 'required_with:eskul_replacements|integer|exists:eskuls,id',
+            'eskul_replacements.*.new_teacher_id' => 'required_with:eskul_replacements|integer|exists:teachers,user_id',
         ]);
 
         // Proses penggantian jadwal & wali kelas sebelum nonaktifkan
@@ -454,6 +473,16 @@ class UserController
                 if ($hasHomeroom && ! isset($validated['homeroom_replacement'])) {
                     return response()->json([
                         'error' => 'Guru ini adalah wali kelas. Pilih guru pengganti sebagai wali kelas sebelum nonaktifkan.',
+                    ], 422);
+                }
+
+                // Cek apakah guru ini PIC eskul
+                $hasPicEskuls = Eskul::where('teacher_id', $user->id)->exists();
+
+                // Jika punya PIC eskul tapi tidak ada eskul_replacements → tolak
+                if ($hasPicEskuls && empty($validated['eskul_replacements'])) {
+                    return response()->json([
+                        'error' => 'Guru ini adalah PIC eskul. Pilih guru pengganti untuk setiap eskul sebelum nonaktifkan.',
                     ], 422);
                 }
 
@@ -500,13 +529,20 @@ class UserController
                             ->update(['homeroom_teacher_id' => $validated['homeroom_replacement']]);
                     }
 
-                    // Clear PIC eskul if this teacher is a PIC
-                    Eskul::where('teacher_id', $user->id)->update(['teacher_id' => null]);
+                    // Replace or clear PIC eskul
+                    if (! empty($validated['eskul_replacements'])) {
+                        foreach ($validated['eskul_replacements'] as $replacement) {
+                            Eskul::where('id', $replacement['eskul_id'])
+                                ->update(['teacher_id' => $replacement['new_teacher_id']]);
+                        }
+                    } else {
+                        Eskul::where('teacher_id', $user->id)->update(['teacher_id' => null]);
+                    }
                 });
             }
         }
 
-        unset($validated['schedule_replacements'], $validated['homeroom_replacement']);
+        unset($validated['schedule_replacements'], $validated['homeroom_replacement'], $validated['eskul_replacements']);
 
         if (isset($validated['password'])) {
             $validated['password'] = Hash::make($validated['password']);

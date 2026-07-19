@@ -42,7 +42,7 @@
             </div>
 
             <!-- Empty State -->
-            <div v-else-if="!schedules.length && !homeroomClass" class="text-center py-12">
+            <div v-else-if="!schedules.length && !homeroomClass && !picEskuls.length" class="text-center py-12">
               <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-3">
                 <svg class="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
@@ -134,6 +134,51 @@
                   </div>
                 </div>
               </div>
+
+              <!-- Section: PIC Ekstrakurikuler -->
+              <div v-if="picEskuls.length > 0">
+                <div class="flex items-center gap-2 mb-3">
+                  <div class="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center">
+                    <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                    </svg>
+                  </div>
+                  <h4 class="text-sm font-bold text-gray-800 uppercase tracking-wide">PIC Ekstrakurikuler</h4>
+                </div>
+
+                <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mb-3">
+                  <p class="text-xs text-yellow-700">
+                    Guru ini adalah PIC eskul berikut. Pilih guru pengganti sebelum nonaktifkan.
+                  </p>
+                </div>
+
+                <div class="space-y-3">
+                  <div
+                    v-for="eskul in picEskuls"
+                    :key="eskul.id"
+                    class="bg-gray-50 rounded-xl p-4 border border-gray-100"
+                  >
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+                      <div class="flex-1 min-w-0">
+                        <span class="text-sm font-semibold text-gray-800">{{ eskul.name }}</span>
+                        <p class="text-xs text-gray-500 mt-1">PIC Eskul</p>
+                      </div>
+                      <div class="w-full sm:w-56">
+                        <label class="block text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                          PIC Baru
+                        </label>
+                        <BaseSelect
+                          :modelValue="eskulReplacements[eskul.id] || ''"
+                          @update:modelValue="(val) => eskulReplacements[eskul.id] = val"
+                          :options="eskulTeacherOptions"
+                          placeholder="Pilih guru..."
+                          searchable
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </template>
           </div>
 
@@ -184,6 +229,8 @@ const props = defineProps({
   homeroomClass: { type: Object, default: null },
   teacherOptions: { type: Array, default: () => [] },
   homeroomOptions: { type: Array, default: () => [] },
+  picEskuls: { type: Array, default: () => [] },
+  eskulTeacherOptions: { type: Array, default: () => [] },
   validationError: { type: String, default: '' },
 });
 
@@ -191,6 +238,7 @@ const emit = defineEmits(['cancel', 'confirm']);
 
 const scheduleReplacements = reactive({});
 const homeroomReplacement = ref('');
+const eskulReplacements = reactive({});
 
 // Reset selections when modal opens
 watch(() => props.isOpen, (open) => {
@@ -199,6 +247,9 @@ watch(() => props.isOpen, (open) => {
       scheduleReplacements[s.id] = '';
     });
     homeroomReplacement.value = '';
+    props.picEskuls.forEach((e) => {
+      eskulReplacements[e.id] = '';
+    });
   }
 });
 
@@ -214,8 +265,14 @@ const homeroomAssigned = computed(() => {
   return !!homeroomReplacement.value;
 });
 
+// Cek apakah semua PIC eskul sudah punya pengganti (jika ada)
+const allEskulsAssigned = computed(() => {
+  if (!props.picEskuls.length) return true;
+  return props.picEskuls.every((e) => eskulReplacements[e.id]);
+});
+
 const canConfirm = computed(() => {
-  return allSchedulesAssigned.value && homeroomAssigned.value;
+  return allSchedulesAssigned.value && homeroomAssigned.value && allEskulsAssigned.value;
 });
 
 const formatDay = (day) => {
@@ -245,6 +302,10 @@ const handleConfirm = () => {
       new_teacher_id: scheduleReplacements[s.id],
     })),
     homeroom_replacement: homeroomReplacement.value || null,
+    eskul_replacements: props.picEskuls.map((e) => ({
+      eskul_id: e.id,
+      new_teacher_id: eskulReplacements[e.id],
+    })),
   };
 
   emit('confirm', payload);
