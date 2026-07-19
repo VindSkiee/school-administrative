@@ -110,4 +110,9 @@ class User extends Authenticatable implements JWTSubject
     {
         return $this->hasOne(Principal::class);
     }
+
+    public function eskulsAsPIC()
+    {
+        return $this->hasMany(Eskul::class, 'teacher_id', 'id');
+    }
 }

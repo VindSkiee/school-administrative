@@ -100,6 +100,11 @@ const routes = [
         component: () => import("../pages/admin/ScheduleManagement.vue"),
       },
       {
+        path: "eskuls",
+        name: "AdminEskulManagement",
+        component: () => import("../pages/admin/EskulManagement.vue"),
+      },
+      {
         path: "activity-logs",
         name: "Log Aktivitas",
         component: () => import("../pages/admin/ActivityLogManagement.vue"),
@@ -179,6 +184,11 @@ const routes = [
         name: "TeacherReportManagement",
         component: () => import("../pages/teacher/TeacherReportManagement.vue"),
       },
+      {
+        path: "eskul-grading",
+        name: "TeacherEskulGrading",
+        component: () => import("../pages/teacher/TeacherEskulGrading.vue"),
+      },
     ],
   },
   // --- STUDENT ROUTES ---
@@ -191,6 +201,11 @@ const routes = [
         path: "dashboard",
         name: "StudentDashboard",
         component: () => import("../pages/student/Dashboard.vue"),
+      },
+      {
+        path: "eskul-selection",
+        name: "StudentEskulSelection",
+        component: () => import("../pages/student/EskulSelection.vue"),
       },
       {
         path: "schedules",
@@ -230,6 +245,12 @@ const routes = [
         name: "StudentReport",
         component: () => import("../pages/student/StudentReport.vue"),
         meta: { title: "Nilai & Rapor Semester" },
+      },
+      {
+        path: "eskul",
+        name: "StudentEskul",
+        component: () => import("../pages/student/EskulPage.vue"),
+        meta: { title: "Ekstrakurikuler" },
       },
     ],
   },
@@ -314,6 +335,16 @@ router.beforeEach((to, from, next) => {
     to.path === "/force-change-password"
   ) {
     return next(`/${userRole}/dashboard`);
+  }
+
+  // Prevent student from re-entering eskul-selection after completion
+  if (
+    isAuthenticated &&
+    userRole === "student" &&
+    eskulSelectionCompleted &&
+    to.path === "/student/eskul-selection"
+  ) {
+    return next("/student/dashboard");
   }
 
   if (to.meta.role && authStore.user) {

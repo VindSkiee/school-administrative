@@ -4,6 +4,7 @@ namespace App\Http\Controllers\API\Admin;
 
 use App\Http\Requests\Admin\StoreUserRequest;
 use App\Models\AcademicYear;
+use App\Models\Eskul;
 use App\Models\Grade;
 use App\Models\Schedule;
 use App\Models\SchoolClass;
@@ -88,15 +89,52 @@ class UserController
         $perPage = min((int) $request->query('per_page', 20), 200);
         $users = $query->paginate($perPage);
 
-        $users->getCollection()->transform(function ($user) {
-            $user->has_data = false;
-            if ($user->teacher) {
-                $user->has_data = $user->teacher->schedules()->exists()
-                    || $user->teacher->homeroomClass()->exists();
-            } elseif ($user->student) {
-                $user->has_data = $user->student->classes()->exists()
-                    || $user->student->submissions()->exists();
+        // PERF FIX: Bulk fetch has_data flags using grouped queries instead of N+1
+        $userIds = $users->getCollection()->pluck('id')->all();
+        $hasDataMap = [];
+
+        // Teachers: check schedules + homeroom class
+        $teacherIds = User::whereIn('id', $userIds)->where('role', 'teacher')->pluck('id')->all();
+        if (! empty($teacherIds)) {
+            $scheduleFlags = DB::table('schedules')
+                ->whereIn('teacher_id', $teacherIds)
+                ->select('teacher_id', DB::raw('1 as flag'))
+                ->groupBy('teacher_id')
+                ->pluck('flag', 'teacher_id');
+
+            $homeroomFlags = DB::table('classes')
+                ->whereIn('homeroom_teacher_id', $teacherIds)
+                ->select('homeroom_teacher_id', DB::raw('1 as flag'))
+                ->groupBy('homeroom_teacher_id')
+                ->pluck('flag', 'homeroom_teacher_id');
+
+            foreach ($teacherIds as $uid) {
+                $hasDataMap[$uid] = isset($scheduleFlags[$uid]) || isset($homeroomFlags[$uid]);
             }
+        }
+
+        // Students: check class_student + submissions
+        $studentIds = User::whereIn('id', $userIds)->where('role', 'student')->pluck('id')->all();
+        if (! empty($studentIds)) {
+            $classStudentFlags = DB::table('class_student')
+                ->whereIn('student_id', $studentIds)
+                ->select('student_id', DB::raw('1 as flag'))
+                ->groupBy('student_id')
+                ->pluck('flag', 'student_id');
+
+            $submissionFlags = DB::table('submissions')
+                ->whereIn('student_id', $studentIds)
+                ->select('student_id', DB::raw('1 as flag'))
+                ->groupBy('student_id')
+                ->pluck('flag', 'student_id');
+
+            foreach ($studentIds as $uid) {
+                $hasDataMap[$uid] = isset($classStudentFlags[$uid]) || isset($submissionFlags[$uid]);
+            }
+        }
+
+        $users->getCollection()->transform(function ($user) use ($hasDataMap) {
+            $user->has_data = $hasDataMap[$user->id] ?? false;
 
             return $user;
         });
@@ -389,30 +427,36 @@ class UserController
                 DB::transaction(function () use ($validated, $activeYear, $user) {
                     // Replace teacher_id di jadwal
                     if (! empty($validated['schedule_replacements'])) {
+                        // PERF FIX: Load ALL affected schedules in ONE query (replaces N× Schedule::find)
+                        $scheduleIds = array_column($validated['schedule_replacements'], 'schedule_id');
+                        $schedulesMap = Schedule::whereIn('id', $scheduleIds)->get()->keyBy('id');
+
                         foreach ($validated['schedule_replacements'] as $replacement) {
+                            $schedule = $schedulesMap->get($replacement['schedule_id']);
+                            if (! $schedule) {
+                                throw ValidationException::withMessages([
+                                    'schedule_replacements' => ['Jadwal ID '.$replacement['schedule_id'].' tidak ditemukan.'],
+                                ]);
+                            }
+
                             // Validasi clash: cek apakah guru pengganti sudah punya jadwal di hari + jam yang sama
                             $clash = Schedule::where('teacher_id', $replacement['new_teacher_id'])
                                 ->where('academic_year_id', $activeYear->id)
-                                ->where('day_of_week', Schedule::find($replacement['schedule_id'])->day_of_week)
-                                ->where(function ($q) use ($replacement) {
-                                    $schedule = Schedule::find($replacement['schedule_id']);
-                                    $q->where(function ($q2) use ($schedule) {
-                                        $q2->where('start_time', '<', $schedule->end_time)
-                                            ->where('end_time', '>', $schedule->start_time);
-                                    });
+                                ->where('day_of_week', $schedule->day_of_week)
+                                ->where(function ($q) use ($schedule) {
+                                    $q->where('start_time', '<', $schedule->end_time)
+                                        ->where('end_time', '>', $schedule->start_time);
                                 })
-                                ->where('id', '!=', $replacement['schedule_id'])
+                                ->where('id', '!=', $schedule->id)
                                 ->exists();
 
                             if ($clash) {
-                                $schedule = Schedule::find($replacement['schedule_id']);
                                 throw ValidationException::withMessages([
                                     'schedule_replacements' => ['Guru pengganti sudah memiliki jadwal di hari '.$schedule->day_of_week.' jam '.$schedule->start_time.'-'.$schedule->end_time.'.'],
                                 ]);
                             }
 
-                            Schedule::where('id', $replacement['schedule_id'])
-                                ->update(['teacher_id' => $replacement['new_teacher_id']]);
+                            $schedule->update(['teacher_id' => $replacement['new_teacher_id']]);
                         }
                     }
 
@@ -422,6 +466,9 @@ class UserController
                             ->where('academic_year_id', $activeYear->id)
                             ->update(['homeroom_teacher_id' => $validated['homeroom_replacement']]);
                     }
+
+                    // Clear PIC eskul if this teacher is a PIC
+                    Eskul::where('teacher_id', $user->id)->update(['teacher_id' => null]);
                 });
             }
         }

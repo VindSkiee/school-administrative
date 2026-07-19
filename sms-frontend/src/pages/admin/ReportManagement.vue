@@ -298,6 +298,7 @@
                     <li><strong>Kehadiran</strong> = Status pencatatan absensi untuk semua pertemuan yang sudah terjadwal.</li>
                     <li><strong>Nilai</strong> = Status pengisian nilai untuk tugas, ujian harian, UTS, dan UAS yang sudah dibuat.</li>
                     <li><strong>Catatan</strong> = Status pengisian catatan wali kelas untuk semua siswa di kelas ini.</li>
+                    <li><strong>Ekstrakurikuler</strong> = Status penilaian eskul oleh guru PIC (hanya siswa yang terdaftar eskul).</li>
                     <li><strong>Siswa (X/Y)</strong> = X = jumlah siswa yang sudah lengkap data absensi dan nilainya; Y = total siswa di kelas ini.</li>
                     <li><strong>Status</strong> = "Siap" jika semua kriteria terpenuhi, "Sudah Diterbitkan" jika sudah diterbitkan, atau "Belum Siap".</li>
                   </ul>
@@ -354,6 +355,7 @@
                     <th class="px-4 py-3 text-center">Kehadiran</th>
                     <th class="px-4 py-3 text-center">Nilai</th>
                     <th class="px-4 py-3 text-center">Catatan</th>
+                    <th class="px-4 py-3 text-center">Ekstrakurikuler</th>
                     <th class="px-4 py-3 text-center">Siswa</th>
                     <th class="px-4 py-3 text-center">Status</th>
                     <th class="px-4 py-3 text-center">Aksi</th>
@@ -432,6 +434,37 @@
                           Belum
                         </span>
                       </td>
+                      <td class="px-4 py-3 text-center">
+                        <span
+                          v-if="cls.readiness.eskul?.is_ready"
+                          class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700"
+                        >
+                          Lengkap
+                        </span>
+                        <div v-else class="relative group inline-block">
+                          <span
+                            class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700 cursor-help"
+                          >
+                            {{ cls.readiness.eskul?.ungraded_count || 0 }} belum dinilai
+                          </span>
+                          <div
+                            v-if="cls.readiness.eskul?.ungraded_details?.length"
+                            class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-20"
+                          >
+                            <div class="bg-gray-800 text-white text-xs rounded-lg py-2 px-3 shadow-lg whitespace-nowrap">
+                              <p class="font-semibold mb-1">Eskul belum dinilai:</p>
+                              <ul class="list-disc list-inside">
+                                <li
+                                  v-for="d in cls.readiness.eskul.ungraded_details"
+                                  :key="d.eskul_name"
+                                >
+                                  {{ d.eskul_name }} ({{ d.ungraded_count }} siswa)
+                                </li>
+                              </ul>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
                       <td class="px-4 py-3 text-center text-gray-600">
                         {{ cls.readiness.students.ready }}/{{
                           cls.readiness.students.total
@@ -490,7 +523,7 @@
 
                     <!-- Expanded detail row -->
                     <tr v-if="expandedClassId === cls.class_id">
-                      <td colspan="9" class="p-0">
+                      <td colspan="10" class="p-0">
                         <div
                           class="bg-gray-50 border-t border-b border-gray-200 px-6 py-4 relative"
                         >

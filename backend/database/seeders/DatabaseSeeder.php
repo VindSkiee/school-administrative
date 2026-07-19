@@ -19,6 +19,9 @@ class DatabaseSeeder extends Seeder
             // 2. Master Kelas (Akan membuat Tahun Ajaran & Daftar Kelas)
             ClassSeeder::class,
             ReportCardUnpublishedSeeder::class,
+
+            // 3. Ekstrakurikuler + Enrollment Siswa (setelah data siswa/guru ada)
+            EskulSeeder::class,
         ]);
     }
 }

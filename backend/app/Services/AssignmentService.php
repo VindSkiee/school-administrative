@@ -102,31 +102,32 @@ class AssignmentService
         $remedialAssignmentIds = Assignment::where('linked_assignment_id', $assignmentId)
             ->pluck('id');
 
+        // PERF FIX: Bulk fetch ALL submissions for this assignment in ONE query
+        $submissionMap = Submission::where('assignment_id', $assignmentId)
+            ->with('grade:id,submission_id,score')
+            ->get()
+            ->keyBy('student_id');
+
+        // PERF FIX: Bulk fetch ALL remedial submission student_ids in ONE query
+        $remedialStudentIds = collect();
+        if ($remedialAssignmentIds->isNotEmpty()) {
+            $remedialStudentIds = Submission::whereIn('assignment_id', $remedialAssignmentIds)
+                ->pluck('student_id')
+                ->flip();
+        }
+
         $result = [];
         foreach ($students as $student) {
-            // Get the student's graded score for this exam
-            $submission = Submission::where('assignment_id', $assignmentId)
-                ->where('student_id', $student->user_id)
-                ->first();
-
+            $submission = $submissionMap->get($student->user_id);
             $score = $submission?->grade?->score;
 
-            // Only include students below KKM
             if ($score !== null && (float) $score < $kkm) {
-                // Check if student already has remedial
-                $hasRemedial = false;
-                if ($remedialAssignmentIds->isNotEmpty()) {
-                    $hasRemedial = Submission::whereIn('assignment_id', $remedialAssignmentIds)
-                        ->where('student_id', $student->user_id)
-                        ->exists();
-                }
-
                 $result[] = [
                     'id' => $student->user_id,
                     'name' => $student->user?->name ?? 'Tanpa Nama',
                     'nis' => $student->nis ?? '-',
                     'score' => (float) $score,
-                    'has_remedial' => $hasRemedial,
+                    'has_remedial' => $remedialStudentIds->has($student->user_id),
                 ];
             }
         }
@@ -177,24 +178,35 @@ class AssignmentService
                 'linked_assignment_id' => $parent->id,
             ]);
 
-            // Auto-create empty submissions for target students
-            foreach ($studentIds as $studentId) {
-                Submission::firstOrCreate(
-                    ['assignment_id' => $remedial->id, 'student_id' => $studentId],
-                    ['file_path' => null, 'submitted_at' => now()]
-                );
+            // PERF FIX: Bulk create all submissions in ONE query (replaces N× firstOrCreate)
+            $now = now()->toDateTimeString();
+            $insertRows = array_map(fn ($studentId) => [
+                'assignment_id' => $remedial->id,
+                'student_id' => $studentId,
+                'file_path' => null,
+                'submitted_at' => $now,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ], $studentIds);
+
+            if (! empty($insertRows)) {
+                DB::table('submissions')->insertOrIgnore($insertRows);
             }
 
-            // Also store the remedial_mode on the parent's grades for below-KKM students
+            // PERF FIX: Bulk update parent grades' remedial_mode in ONE query (replaces N× find+update)
             if ($remedialMode) {
-                foreach ($studentIds as $studentId) {
-                    $parentSubmission = Submission::where('assignment_id', $parent->id)
-                        ->where('student_id', $studentId)
-                        ->first();
+                $parentSubmissionIds = Submission::where('assignment_id', $parent->id)
+                    ->whereIn('student_id', $studentIds)
+                    ->whereHas('grade')
+                    ->pluck('id');
 
-                    if ($parentSubmission?->grade) {
-                        $parentSubmission->grade->update(['remedial_mode' => $remedialMode]);
-                    }
+                if ($parentSubmissionIds->isNotEmpty()) {
+                    DB::table('grades')
+                        ->whereIn('submission_id', $parentSubmissionIds)
+                        ->update([
+                            'remedial_mode' => $remedialMode,
+                            'updated_at' => $now,
+                        ]);
                 }
             }
 

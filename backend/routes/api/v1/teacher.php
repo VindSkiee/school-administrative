@@ -8,6 +8,7 @@ use App\Http\Controllers\API\Teacher\GradeAggregationController as TeacherAggreg
 use App\Http\Controllers\API\Teacher\GradeController as TeacherGradeController;
 use App\Http\Controllers\API\Teacher\MaterialController as TeacherMaterialController;
 use App\Http\Controllers\API\Teacher\TeacherDashboardController;
+use App\Http\Controllers\API\Teacher\TeacherEskulController;
 use App\Http\Controllers\API\Teacher\TeacherGradebookController;
 use App\Http\Controllers\API\Teacher\TeacherHomeroomController;
 use App\Http\Controllers\API\Teacher\TeacherReportController;
@@ -58,3 +59,8 @@ Route::get('report/homeroom-class', [TeacherReportController::class, 'homeroomCl
 Route::get('report/students', [TeacherReportController::class, 'index']);
 Route::post('report/notes', [TeacherReportController::class, 'saveNotes']);
 Route::get('report/pdf/{studentId}', [TeacherReportController::class, 'downloadPdf']);
+
+// === Eskul Grading ===
+Route::get('eskul/assigned', [TeacherEskulController::class, 'assignedEskuls']);
+Route::get('eskul/students', [TeacherEskulController::class, 'students']);
+Route::post('eskul/grade', [TeacherEskulController::class, 'grade']);

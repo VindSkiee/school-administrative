@@ -336,18 +336,19 @@
             </tr>
         </thead>
         <tbody>
-            <tr>
-                <td class="center">1</td>
-                <td>&nbsp;</td>
-                <td>&nbsp;</td>
-                <td>&nbsp;</td>
-            </tr>
-            <tr>
-                <td class="center">2</td>
-                <td>&nbsp;</td>
-                <td>&nbsp;</td>
-                <td>&nbsp;</td>
-            </tr>
+            @forelse (($data['eskul_results'] ?? []) as $index => $eskul)
+                <tr>
+                    <td class="center">{{ $index + 1 }}</td>
+                    <td>{{ $eskul['eskul_name'] }}</td>
+                    <td class="center"><strong>{{ $eskul['predikat'] ?? '-' }}</strong></td>
+                    <td>{{ $eskul['keterangan'] ?? '-' }}</td>
+                </tr>
+            @empty
+                <tr>
+                    <td class="center">1</td>
+                    <td colspan="3" class="center">Belum mengikuti ekstrakurikuler.</td>
+                </tr>
+            @endforelse
         </tbody>
     </table>
     <br>

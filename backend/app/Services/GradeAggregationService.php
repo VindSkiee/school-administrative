@@ -63,6 +63,11 @@ class GradeAggregationService
 
         $aggregates = DB::table('students')
             ->join('users', 'students.user_id', '=', 'users.id')
+            ->join('class_student', function ($join) use ($schedule) {
+                $join->on('students.user_id', '=', 'class_student.student_id')
+                    ->where('class_student.class_id', '=', $schedule->class_id)
+                    ->where('class_student.academic_year_id', '=', $schedule->academic_year_id);
+            })
             ->leftJoin('submissions', function ($join) use ($scheduleId) {
                 $join->on('students.user_id', '=', 'submissions.student_id')
                     ->whereIn('submissions.assignment_id', function ($query) use ($scheduleId) {
@@ -70,7 +75,6 @@ class GradeAggregationService
                     });
             })
             ->leftJoin('grades', 'submissions.id', '=', 'grades.submission_id')
-            ->where('students.class_id', $schedule->class_id)
             ->where('students.status', 'active')
             ->select(
                 'students.user_id as student_id',

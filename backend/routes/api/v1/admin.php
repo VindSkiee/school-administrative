@@ -4,6 +4,7 @@ use App\Http\Controllers\API\Admin\AcademicYearController;
 use App\Http\Controllers\API\Admin\ActivityLogController;
 use App\Http\Controllers\API\Admin\ClassController;
 use App\Http\Controllers\API\Admin\DashboardController;
+use App\Http\Controllers\API\Admin\EskulController as AdminEskulController;
 use App\Http\Controllers\API\Admin\GradingSettingController;
 use App\Http\Controllers\API\Admin\HolidayController;
 use App\Http\Controllers\API\Admin\ReportController as AdminReportController;
@@ -77,3 +78,9 @@ Route::get('dashboard/stats', [DashboardController::class, 'index']);
 
 // Holiday Management
 Route::apiResource('holidays', HolidayController::class)->only(['index', 'store', 'destroy']);
+
+// Eskul Management
+Route::apiResource('eskuls', AdminEskulController::class);
+Route::patch('eskuls/{eskul}/assign-teacher', [AdminEskulController::class, 'assignTeacher']);
+Route::get('academic-years/{academicYearId}/eskul-deadline', [AdminEskulController::class, 'getDeadline']);
+Route::put('academic-years/{academicYearId}/eskul-deadline', [AdminEskulController::class, 'updateDeadline']);

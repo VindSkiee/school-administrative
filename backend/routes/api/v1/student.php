@@ -1,12 +1,16 @@
 <?php
-use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\API\Student\AttendanceRequestController;
-use App\Http\Controllers\API\Student\MaterialController as StudentMaterialController;
+
 use App\Http\Controllers\API\Student\AssignmentController as StudentAssignController;
-use App\Http\Controllers\API\Student\GradeController as StudentGradeController;
+use App\Http\Controllers\API\Student\AttendanceRequestController;
+use App\Http\Controllers\Api\Student\ClassDetailController;
+use App\Http\Controllers\API\Student\EskulController as StudentEskulController;
 use App\Http\Controllers\API\Student\GradeAggregationController as StudentAggregate;
+use App\Http\Controllers\API\Student\GradeController as StudentGradeController;
+use App\Http\Controllers\API\Student\MaterialController as StudentMaterialController;
 use App\Http\Controllers\API\Student\SemesterReportController as StudentSemesterReport;
+use App\Http\Controllers\Api\Student\StudentDashboardController;
 use App\Http\Controllers\API\Student\StudentScheduleController;
+use Illuminate\Support\Facades\Route;
 
 Route::get('attendance-requests', [AttendanceRequestController::class, 'index']);
 Route::get('materials', [StudentMaterialController::class, 'index']);
@@ -23,7 +27,16 @@ Route::get('reports/academic-years', [StudentSemesterReport::class, 'academicYea
 Route::get('reports/report-status', [StudentSemesterReport::class, 'reportStatus']);
 Route::get('reports/semester', [StudentSemesterReport::class, 'show']);
 Route::get('reports/semester/pdf', [StudentSemesterReport::class, 'downloadPdf']);
-Route::get('dashboard', [\App\Http\Controllers\Api\Student\StudentDashboardController::class, 'index']);
+Route::get('dashboard', [StudentDashboardController::class, 'index']);
 Route::get('schedules', [StudentScheduleController::class, 'index']);
 Route::get('schedules/{id}', [StudentScheduleController::class, 'show']);
-Route::get('class-detail', [\App\Http\Controllers\Api\Student\ClassDetailController::class, 'index']);
+Route::get('class-detail', [ClassDetailController::class, 'index']);
+
+// Eskul Selection & Management
+Route::get('eskuls/options', [StudentEskulController::class, 'options']);
+Route::post('eskuls', [StudentEskulController::class, 'store']);
+Route::get('eskuls/my', [StudentEskulController::class, 'myEskuls']);
+Route::post('eskuls/skip', [StudentEskulController::class, 'skip']);
+Route::get('eskuls/deadline', [StudentEskulController::class, 'getDeadline']);
+Route::post('eskuls/change-request', [StudentEskulController::class, 'submitChangeRequest']);
+Route::delete('eskuls/change-request', [StudentEskulController::class, 'cancelChangeRequest']);
