@@ -101,7 +101,7 @@
                     min="0"
                     max="100"
                     placeholder="0-100"
-                    class="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-center focus:ring-1 focus:ring-brand-red focus:border-brand-red outline-none transition-colors"
+                    class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-center focus:ring-1 focus:ring-brand-red focus:border-brand-red outline-none transition-colors"
                   />
                 </td>
                 <td class="px-6 py-3">
@@ -197,16 +197,35 @@ const fetchStudents = async () => {
 const saveGrades = async () => {
   isSaving.value = true;
   try {
+    const originalMap = new Map();
+    for (const group of originalData.value) {
+      for (const student of group.students) {
+        originalMap.set(student.student_eskul_id, student);
+      }
+    }
+
     const grades = [];
     for (const group of groupedStudents.value) {
       for (const student of group.students) {
-        grades.push({
-          student_id: student.student_id,
-          eskul_id: student.eskul_id,
-          score: student.score || null,
-          description: student.description || null,
-        });
+        const original = originalMap.get(student.student_eskul_id);
+        const scoreChanged = student.score !== original?.score;
+        const descChanged = student.description !== original?.description;
+
+        if (scoreChanged || descChanged) {
+          grades.push({
+            student_id: student.student_id,
+            eskul_id: student.eskul_id,
+            score: student.score || null,
+            description: student.description || null,
+          });
+        }
       }
+    }
+
+    if (grades.length === 0) {
+      toastStore.info('Tidak ada perubahan yang perlu disimpan.');
+      isSaving.value = false;
+      return;
     }
 
     const res = await eskulService.gradeStudents(grades);

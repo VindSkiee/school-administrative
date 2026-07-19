@@ -103,8 +103,45 @@
             placeholder="Pilih Tahun Ajaran"
             @update:modelValue="onAcademicYearChange"
           />
-        </div>
-      </div>
+            </div>
+
+            <!-- Eskul Enrollment -->
+            <div v-if="student.active_eskuls?.length > 0" class="border border-gray-200 rounded-xl p-4">
+              <p class="text-sm font-semibold text-gray-700 mb-3">
+                <Icon icon="mdi:trophy-outline" class="w-4 h-4 inline mr-1" />
+                Ekstrakurikuler Aktif
+              </p>
+              <div class="space-y-2">
+                <div
+                  v-for="eskul in student.active_eskuls"
+                  :key="eskul.id"
+                  class="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                >
+                  <div>
+                    <p class="font-semibold text-gray-800 text-sm">{{ eskul.eskul_name }}</p>
+                    <p class="text-xs text-gray-500">
+                      <Icon icon="mdi:account-outline" class="w-3 h-3 inline mr-0.5" />
+                      {{ eskul.eskul_teacher_name }}
+                    </p>
+                  </div>
+                  <div class="text-right shrink-0">
+                    <span
+                      v-if="eskul.score !== null"
+                      class="text-sm font-bold text-gray-700"
+                    >{{ eskul.score }}</span>
+                    <span
+                      :class="[
+                        'inline-block px-2 py-0.5 text-[10px] font-bold rounded-full ml-2',
+                        eskul.score !== null ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700',
+                      ]"
+                    >
+                      {{ eskul.score !== null ? 'Dinilai' : 'Aktif' }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
 
       <!-- Tabs -->
       <section class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
@@ -337,6 +374,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useToastStore } from '../../stores/toast';
 import { teacherStudentService } from '../../services/modules/teacher/studentService';
 import BaseSelect from '../../components/BaseSelect.vue';
+import { Icon } from '@iconify/vue';
 
 const route = useRoute();
 const router = useRouter();

@@ -32,6 +32,13 @@ class EskulSemesterRolloverService
 
                         $pendingRequests[$studentId]->update(['status' => 'processed']);
                         $results['change_applied_count']++;
+
+                        // If requested_eskul_id is null, student will re-select next semester
+                        if ($newEskulId === null) {
+                            $results['rollover_count']++;
+
+                            continue;
+                        }
                     }
 
                     StudentEskul::create([

@@ -409,6 +409,88 @@
             </div>
           </div>
 
+          <div v-else-if="activeTab === 'eskul'" class="space-y-5">
+            <!-- Student's active eskuls -->
+            <template v-if="user?.role === 'student' && user?.active_eskuls?.length">
+              <div class="flex items-center gap-3 mb-4">
+                <div class="bg-brand-red/10 p-2 rounded-xl">
+                  <Icon icon="mdi:trophy-outline" class="w-6 h-6 text-brand-red" />
+                </div>
+                <div>
+                  <h3 class="text-lg font-bold text-gray-800">Ekstrakurikuler Aktif</h3>
+                  <p class="text-sm text-gray-500">Keikutsertaan eskul semester ini.</p>
+                </div>
+              </div>
+
+              <div class="space-y-3">
+                <div
+                  v-for="eskul in user.active_eskuls"
+                  :key="eskul.id"
+                  class="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100"
+                >
+                  <div>
+                    <p class="font-bold text-gray-800">{{ eskul.eskul_name }}</p>
+                    <p class="text-sm text-gray-500 mt-0.5">
+                      <Icon icon="mdi:account-outline" class="w-3.5 h-3.5 inline mr-1" />
+                      Guru Pengampu: {{ eskul.eskul_teacher_name }}
+                    </p>
+                    <p v-if="eskul.score !== null" class="text-sm text-gray-600 mt-0.5">
+                      Nilai: <strong>{{ eskul.score }}</strong>
+                      <span v-if="eskul.description"> — {{ eskul.description }}</span>
+                      <span v-if="eskul.graded_by_name" class="text-gray-400"> (oleh {{ eskul.graded_by_name }})</span>
+                    </p>
+                  </div>
+                  <span
+                    :class="[
+                      'px-3 py-1 text-xs font-bold rounded-full shrink-0',
+                      eskul.score !== null ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700',
+                    ]"
+                  >
+                    {{ eskul.score !== null ? 'Dinilai' : 'Aktif' }}
+                  </span>
+                </div>
+              </div>
+            </template>
+
+            <!-- Teacher's PIC eskuls -->
+            <template v-if="user?.role === 'teacher' && user?.pic_eskuls?.length">
+              <div class="flex items-center gap-3 mb-4">
+                <div class="bg-brand-red/10 p-2 rounded-xl">
+                  <Icon icon="mdi:account-tie" class="w-6 h-6 text-brand-red" />
+                </div>
+                <div>
+                  <h3 class="text-lg font-bold text-gray-800">Pembina Ekstrakurikuler</h3>
+                  <p class="text-sm text-gray-500">Eskul yang Anda bina sebagai guru pengampu.</p>
+                </div>
+              </div>
+
+              <div class="space-y-3">
+                <div
+                  v-for="eskul in user.pic_eskuls"
+                  :key="eskul.id"
+                  class="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100"
+                >
+                  <div>
+                    <p class="font-bold text-gray-800">{{ eskul.name }}</p>
+                    <p v-if="eskul.description && eskul.description !== '-'" class="text-sm text-gray-500 mt-0.5">{{ eskul.description }}</p>
+                  </div>
+                  <div class="text-right shrink-0">
+                    <span class="text-sm font-bold text-gray-700">{{ eskul.student_count }} siswa</span>
+                    <br>
+                    <span
+                      :class="[
+                        'inline-block px-2 py-0.5 text-xs font-bold rounded-full mt-1',
+                        eskul.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500',
+                      ]"
+                    >
+                      {{ eskul.is_active ? 'Aktif' : 'Nonaktif' }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+
           <div v-else-if="activeTab === 'security'" class="space-y-4">
             <h3 class="text-lg font-bold text-gray-800">Keamanan Akun</h3>
 
@@ -444,6 +526,7 @@ import { useRoute, useRouter } from "vue-router";
 import { userService } from "../services/modules/admin/userService";
 import { useToastStore } from "../stores/toast";
 import { useAuthStore } from "../stores/auth";
+import { Icon } from "@iconify/vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -465,6 +548,14 @@ const visibleTabs = computed(() => {
 
   if (user.value?.role === "teacher") {
     tabs.push({ key: "teaching", label: "Jadwal Mengajar" });
+  }
+
+  if (user.value?.role === "student" && user.value?.active_eskuls?.length > 0) {
+    tabs.push({ key: "eskul", label: "Ekstrakurikuler" });
+  }
+
+  if (user.value?.role === "teacher" && user.value?.pic_eskuls?.length > 0) {
+    tabs.push({ key: "eskul", label: "Ekstrakurikuler" });
   }
 
   // 3. VALIDASI: Hanya tampilkan tab Keamanan jika yang sedang login adalah 'admin'

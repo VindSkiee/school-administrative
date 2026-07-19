@@ -254,6 +254,25 @@ class UserController
 
                 $user->setAttribute('student_schedules', $studentSchedules);
             }
+
+            // Load student's active eskul enrollments
+            $activeEskuls = $user->student->studentEskuls()
+                ->with(['eskul:id,name,description,teacher_id', 'eskul.teacher:id,name', 'gradedBy:id,name'])
+                ->whereHas('academicYear', fn ($q) => $q->where('is_active', true))
+                ->get()
+                ->map(fn (StudentEskul $se) => [
+                    'id' => $se->id,
+                    'eskul_id' => $se->eskul_id,
+                    'eskul_name' => $se->eskul?->name ?? '-',
+                    'eskul_description' => $se->eskul?->description ?? '-',
+                    'eskul_teacher_name' => $se->eskul?->teacher?->name ?? '-',
+                    'score' => $se->score,
+                    'description' => $se->description,
+                    'graded_at' => $se->graded_at?->toIso8601String(),
+                    'graded_by_name' => $se->gradedBy?->name ?? '-',
+                ]);
+
+            $user->setAttribute('active_eskuls', $activeEskuls);
         }
 
         if ($user->role === 'teacher') {
@@ -263,6 +282,20 @@ class UserController
                 'teacher.schedules.subject',
                 'teacher.schedules.academicYear',
             ]);
+
+            // Load teacher's PIC eskuls
+            $picEskuls = Eskul::where('teacher_id', $user->id)
+                ->withCount('studentEskuls')
+                ->get()
+                ->map(fn (Eskul $eskul) => [
+                    'id' => $eskul->id,
+                    'name' => $eskul->name,
+                    'description' => $eskul->description,
+                    'is_active' => $eskul->is_active,
+                    'student_count' => $eskul->student_eskuls_count,
+                ]);
+
+            $user->setAttribute('pic_eskuls', $picEskuls);
         }
 
         if ($user->role === 'admin') {

@@ -21,8 +21,8 @@ export const eskulService = {
     return api.get('/v1/student/eskuls/deadline');
   },
 
-  submitChangeRequest(eskulId) {
-    return api.post('/v1/student/eskuls/change-request', { eskul_id: eskulId });
+  submitChangeRequest() {
+    return api.post('/v1/student/eskuls/change-request');
   },
 
   cancelChangeRequest() {

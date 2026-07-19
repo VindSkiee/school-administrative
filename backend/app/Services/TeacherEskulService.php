@@ -50,13 +50,8 @@ class TeacherEskulService
         }
 
         $query = StudentEskul::whereIn('eskul_id', $eskulIds)
-            ->where('academic_year_id', $activeYear->id)
-            ->with([
-                'eskul:id,name',
-                'student' => function ($q) {
-                    $q->with('user:id,name');
-                },
-            ])
+            ->where('student_eskuls.academic_year_id', $activeYear->id)
+            ->join('eskuls', 'eskuls.id', '=', 'student_eskuls.eskul_id')
             ->join('users', 'users.id', '=', 'student_eskuls.student_id')
             ->join('students', 'students.user_id', '=', 'student_eskuls.student_id')
             ->leftJoin('class_student', function ($join) use ($activeYear) {
@@ -68,7 +63,8 @@ class TeacherEskulService
                 'student_eskuls.*',
                 'users.name as student_name',
                 'classes.name as class_name',
-                'classes.id as class_id'
+                'classes.id as class_id',
+                'eskuls.name as eskul_name'
             );
 
         if ($classId) {
@@ -89,7 +85,7 @@ class TeacherEskulService
                     'student_id' => $s->student_id,
                     'student_name' => $s->student_name,
                     'eskul_id' => $s->eskul_id,
-                    'eskul_name' => $s->eskul?->name ?? '-',
+                    'eskul_name' => $s->eskul_name ?? '-',
                     'score' => $s->score,
                     'description' => $s->description,
                     'graded_at' => $s->graded_at?->toIso8601String(),

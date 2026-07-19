@@ -299,7 +299,9 @@ const fetchData = async () => {
 const fetchTeacherOptions = async () => {
   try {
     const response = await eskulService.getTeacherOptions();
-    teacherOptions.value = response.data.data;
+    teacherOptions.value = (response.data.data || []).map(
+      (t) => ({ value: t.id, label: t.name })
+    );
   } catch {
     toastStore.error('Gagal memuat data guru.');
   }

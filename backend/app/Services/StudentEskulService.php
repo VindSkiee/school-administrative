@@ -167,7 +167,7 @@ class StudentEskulService
         return $deadline ? Carbon::parse($deadline) : null;
     }
 
-    public function submitChangeRequest(int $studentId, int $newEskulId): void
+    public function submitChangeRequest(int $studentId, ?int $newEskulId = null): void
     {
         $activeYear = AcademicYear::where('is_active', true)->first();
         if (! $activeYear) {
@@ -182,13 +182,15 @@ class StudentEskulService
             throw new HttpException(422, 'Anda belum terdaftar di ekstrakurikuler manapun. Silakan daftar terlebih dahulu.');
         }
 
-        if ($currentEskul->eskul_id === $newEskulId) {
-            throw new HttpException(422, 'Eskul baru harus berbeda dari eskul saat ini.');
-        }
+        if ($newEskulId !== null) {
+            if ($currentEskul->eskul_id === $newEskulId) {
+                throw new HttpException(422, 'Eskul baru harus berbeda dari eskul saat ini.');
+            }
 
-        $newEskul = Eskul::where('id', $newEskulId)->where('is_active', true)->first();
-        if (! $newEskul) {
-            throw new HttpException(422, 'Ekstrakurikuler yang dipilih tidak valid atau tidak aktif.');
+            $newEskul = Eskul::where('id', $newEskulId)->where('is_active', true)->first();
+            if (! $newEskul) {
+                throw new HttpException(422, 'Ekstrakurikuler yang dipilih tidak valid atau tidak aktif.');
+            }
         }
 
         $pendingExists = EskulChangeRequest::where('student_id', $studentId)

@@ -338,6 +338,7 @@ router.beforeEach((to, from, next) => {
   }
 
   // Prevent student from re-entering eskul-selection after completion
+  const eskulSelectionCompleted = authStore.eskulSelectionCompleted;
   if (
     isAuthenticated &&
     userRole === "student" &&

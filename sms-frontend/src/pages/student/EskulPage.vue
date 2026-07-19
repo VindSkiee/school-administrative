@@ -26,13 +26,11 @@
           <Icon icon="mdi:alert-circle-outline" class="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
           <div class="flex-1">
             <p class="text-sm font-semibold text-yellow-800">
-              Pengajuan Pergantian Eskul Menunggu Persetujuan
+              Pengajuan Reset Eskul Menunggu Persetujuan
             </p>
             <p class="text-sm text-yellow-700 mt-1">
-              Anda mengajukan pergantian dari
-              <strong>{{ eskulData.pending_change_request.current_eskul_name }}</strong> ke
-              <strong>{{ eskulData.pending_change_request.requested_eskul_name }}</strong>.
-              Pergantian akan aktif pada semester berikutnya.
+              Anda mengajukan reset eskul. Pemilihan eskul baru akan ada di semester berikutnya.
+              Eskul saat ini tetap aktif hingga semester berakhir.
             </p>
             <button
               @click="cancelChangeRequest"
@@ -96,8 +94,8 @@
             @click="showChangeModal = true"
             class="px-5 py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold rounded-lg transition-colors shadow-sm flex items-center gap-2"
           >
-            <Icon icon="mdi:swap-horizontal" class="w-5 h-5" />
-            Ajukan Pergantian Eskul
+            <Icon icon="mdi:refresh" class="w-5 h-5" />
+            Reset Pilihan Eskul
           </button>
         </div>
       </div>
@@ -191,7 +189,7 @@
     <!-- Change Eskul Modal -->
     <BaseModal
       :isOpen="showChangeModal"
-      title="Ajukan Pergantian Eskul"
+      title="Reset Pilihan Eskul"
       @close="showChangeModal = false"
     >
       <div class="space-y-4">
@@ -201,7 +199,8 @@
             <div>
               <p class="text-sm font-semibold text-yellow-800">Perhatian!</p>
               <p class="text-sm text-yellow-700 mt-1">
-                Perubahan eskul hanya akan berlaku pada semester berikutnya. Anda tetap mengikuti eskul saat ini hingga semester berakhir.
+                Dengan mereset, Anda akan memilih ulang eskul di semester berikutnya.
+                Eskul saat ini tetap aktif hingga semester berakhir.
               </p>
             </div>
           </div>
@@ -216,23 +215,6 @@
             class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-600"
           />
         </div>
-
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1.5">Pindah Ke Eskul</label>
-          <select
-            v-model="changeEskulId"
-            class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-brand-red focus:border-brand-red outline-none transition-colors text-sm"
-          >
-            <option :value="null" disabled>Pilih eskul baru</option>
-            <option
-              v-for="eskul in availableForChange"
-              :key="eskul.id"
-              :value="eskul.id"
-            >
-              {{ eskul.name }}
-            </option>
-          </select>
-        </div>
       </div>
 
       <template #footer>
@@ -246,10 +228,10 @@
           </button>
           <button
             @click="confirmChangeRequest"
-            :disabled="isSaving || !changeEskulId"
+            :disabled="isSaving"
             class="px-5 py-2.5 bg-brand-red hover:bg-brand-orange text-white font-semibold rounded-lg disabled:opacity-70 transition-colors shadow-sm"
           >
-            {{ isSaving ? 'Mengirim...' : 'Kirim Pengajuan' }}
+            {{ isSaving ? 'Mengirim...' : 'Konfirmasi Reset' }}
           </button>
         </div>
       </template>
@@ -258,7 +240,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useToastStore } from '../../stores/toast';
 import { eskulService } from '../../services/modules/student/eskulService';
@@ -279,13 +261,6 @@ const isLoading = ref(true);
 const isSaving = ref(false);
 const isCancelling = ref(false);
 const showChangeModal = ref(false);
-const changeEskulId = ref(null);
-
-const availableForChange = computed(() => {
-  if (!eskulData.value.has_current_eskul) return eskulOptions.value;
-  const currentIds = eskulData.value.current_eskuls.map(e => e.eskul_id);
-  return eskulOptions.value.filter(e => !currentIds.includes(e.id));
-});
 
 const formatDeadline = (dateStr) => {
   if (!dateStr) return '-';
@@ -349,10 +324,9 @@ const cancelChangeRequest = async () => {
 const confirmChangeRequest = async () => {
   isSaving.value = true;
   try {
-    await eskulService.submitChangeRequest(changeEskulId.value);
-    toastStore.success('Pengajuan pergantian eskul berhasil dikirim. Pergantian akan aktif pada semester berikutnya.');
+    await eskulService.submitChangeRequest();
+    toastStore.success('Pengajuan reset eskul berhasil dikirim. Pemilihan eskul baru akan ada di semester berikutnya.');
     showChangeModal.value = false;
-    changeEskulId.value = null;
     await fetchMyEskuls();
   } catch (error) {
     toastStore.error(error.response?.data?.message || 'Gagal mengirim pengajuan.');

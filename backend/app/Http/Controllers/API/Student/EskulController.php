@@ -58,11 +58,12 @@ class EskulController
     public function submitChangeRequest(StoreEskulChangeRequest $request): JsonResponse
     {
         $studentId = auth('api')->id();
-        $this->studentEskulService->submitChangeRequest($studentId, $request->validated()['eskul_id']);
+        $eskulId = $request->input('eskul_id') ? (int) $request->input('eskul_id') : null;
+        $this->studentEskulService->submitChangeRequest($studentId, $eskulId);
 
         return response()->json([
             'success' => true,
-            'message' => 'Pengajuan pergantian eskul berhasil dikirim. Pergantian akan aktif pada semester berikutnya.',
+            'message' => 'Pengajuan reset eskul berhasil dikirim. Pemilihan eskul baru akan ada di semester berikutnya.',
         ]);
     }
 

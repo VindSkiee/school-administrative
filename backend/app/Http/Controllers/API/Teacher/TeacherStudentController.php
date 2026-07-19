@@ -6,8 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\AcademicYear;
 use App\Models\Assignment;
 use App\Models\Attendance;
-use App\Models\Grade;
 use App\Models\Schedule;
+use App\Models\StudentEskul;
 use App\Models\Submission;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -90,7 +90,7 @@ class TeacherStudentController extends Controller
                 ->keyBy('assignment_id');
 
             // 7. Build grades per subject
-            $subjectsGrades = $schedules->map(function (Schedule $schedule) use ($studentUserId, $teacherId, $isHomeroom, $allAttendance, $allAssignments, $allSubmissions) {
+            $subjectsGrades = $schedules->map(function (Schedule $schedule) use ($teacherId, $isHomeroom, $allAttendance, $allAssignments, $allSubmissions) {
                 $isMySubject = (int) $schedule->teacher_id === $teacherId;
 
                 // PERF FIX: Use pre-fetched data instead of per-schedule query
@@ -215,6 +215,23 @@ class TeacherStudentController extends Controller
             ]),
             'subjects_grades' => $subjectsGrades->values(),
             'overall_attendance' => $overallAttendance,
+
+            // Student's active eskul enrollments
+            'active_eskuls' => StudentEskul::where('student_id', $studentUserId)
+                ->where('academic_year_id', $selectedYearId)
+                ->with(['eskul:id,name,description,teacher_id', 'eskul.teacher:id,name', 'gradedBy:id,name'])
+                ->get()
+                ->map(fn (StudentEskul $se) => [
+                    'id' => $se->id,
+                    'eskul_id' => $se->eskul_id,
+                    'eskul_name' => $se->eskul?->name ?? '-',
+                    'eskul_description' => $se->eskul?->description ?? '-',
+                    'eskul_teacher_name' => $se->eskul?->teacher?->name ?? '-',
+                    'score' => $se->score,
+                    'description' => $se->description,
+                    'graded_at' => $se->graded_at?->toIso8601String(),
+                    'graded_by_name' => $se->gradedBy?->name ?? '-',
+                ]),
         ]);
     }
 }
