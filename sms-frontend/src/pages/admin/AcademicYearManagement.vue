@@ -108,7 +108,7 @@
         <div class="flex flex-col items-center gap-1.5">
           <span
             v-if="item.is_active"
-            class="inline-flex items-center text-center px-2.5 py-1 rounded-full text-xs font-bold bg-brand-red text-white"
+            class="inline-flex items-center text-center px-2.5 py-1 rounded-full text-xs font-bold bg-green-500 text-white"
           >
             <span
               class="w-1.5 h-1.5 rounded-full bg-white mr-1.5 animate-pulse"
@@ -225,13 +225,23 @@
           <label class="block text-sm font-semibold text-gray-700 mb-1.5"
             >Nama Periode</label
           >
-          <input
+          <BaseSelect
             v-model="form.name"
-            type="text"
-            required
-            placeholder="Contoh: 2025/2026"
-            class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-brand-red outline-none transition-colors"
+            :options="yearOptions"
+            placeholder="Pilih Tahun Ajaran"
+            :disabled="isYearComplete && !!form.name"
           />
+        </div>
+        <div
+          v-if="form.name && isYearComplete"
+          class="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2"
+        >
+          <svg class="w-5 h-5 text-red-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+          </svg>
+          <p class="text-sm text-red-600 font-semibold">
+            Tahun ajaran {{ form.name }} sudah memiliki semester Ganjil dan Genap. Tidak dapat menambahkan lagi.
+          </p>
         </div>
         <div>
           <label class="block text-sm font-semibold text-gray-700 mb-1.5"
@@ -239,12 +249,9 @@
           >
           <BaseSelect
             v-model="form.semester"
-            :options="[
-              { value: 'odd', label: 'Ganjil (Odd)' },
-              { value: 'even', label: 'Genap (Even)' },
-            ]"
+            :options="semesterOptions"
             placeholder="Pilih Semester"
-            required
+            :disabled="isYearComplete || hasOneSemester"
           />
         </div>
         <div>
@@ -291,7 +298,7 @@
           <button
             type="submit"
             form="academicYearForm"
-            :disabled="isSaving"
+            :disabled="isSaving || (isYearComplete && !!form.name)"
             class="px-5 py-2.5 bg-brand-red hover:bg-brand-orange text-white font-semibold rounded-lg shadow-md transition-colors disabled:opacity-70 flex items-center"
           >
             {{ isSaving ? "Menyimpan..." : "Simpan Data" }}
@@ -314,7 +321,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onActivated } from "vue";
+import { ref, reactive, computed, watch, onMounted, onActivated } from "vue";
 import { useToastStore } from "../../stores/toast";
 import { useGlobalDropdownsStore } from "../../stores/globalDropdowns";
 import { academicYearService } from "../../services/modules/admin/academicYearService";
@@ -348,7 +355,7 @@ const isSaving = ref(false);
 
 const isModalOpen = ref(false);
 const isEditing = ref(false);
-const form = reactive({ id: null, name: "", semester: "odd", phase: "D", start_date: "", end_date: "" });
+const form = reactive({ id: null, name: "", semester: "", phase: "D", start_date: "", end_date: "" });
 
 // Reusable Confirm Modal State for both Delete and Set Active
 const confirmModal = reactive({
@@ -364,6 +371,48 @@ const confirmModal = reactive({
 const hasActiveYear = computed(() =>
   academicYears.value.some((ay) => ay.is_active),
 );
+
+const yearOptions = computed(() => {
+  const currentYear = new Date().getFullYear();
+  const startYear = currentYear - 1;
+  const dynamicYears = [];
+  for (let i = 0; i < 5; i++) {
+    const y1 = startYear + i;
+    const y2 = y1 + 1;
+    dynamicYears.push(`${y1}/${y2}`);
+  }
+  const existingYears = academicYears.value.map(ay => ay.name).filter(Boolean);
+  const allYears = [...new Set([...dynamicYears, ...existingYears])];
+  return allYears.map(y => ({ value: y, label: y }));
+});
+
+const selectedYearExistingSemesters = computed(() => {
+  if (!form.name) return [];
+  return academicYears.value
+    .filter(ay => ay.name === form.name && (!isEditing.value || ay.id !== form.id))
+    .map(ay => ay.semester);
+});
+
+const isYearComplete = computed(() => {
+  return selectedYearExistingSemesters.value.includes('odd')
+      && selectedYearExistingSemesters.value.includes('even');
+});
+
+const hasOneSemester = computed(() => {
+  return selectedYearExistingSemesters.value.length === 1;
+});
+
+const semesterOptions = computed(() => [
+  { value: 'odd', label: 'Ganjil (Odd)' },
+  { value: 'even', label: 'Genap (Even)' },
+]);
+
+watch(() => form.name, () => {
+  if (!form.name) return;
+  if (hasOneSemester.value) {
+    form.semester = selectedYearExistingSemesters.value.includes('odd') ? 'even' : 'odd';
+  }
+});
 
 const formatPeriodDate = (dateStr) => {
   if (!dateStr) return '';
@@ -457,7 +506,7 @@ const openModal = (item = null) => {
   isEditing.value = !!item;
   form.id = item?.id || null;
   form.name = item?.name || "";
-  form.semester = item?.semester || "odd";
+  form.semester = item?.semester || "";
   form.phase = item?.phase || "D";
   form.start_date = item?.start_date ? item.start_date.split("T")[0] : "";
   form.end_date = item?.end_date ? item.end_date.split("T")[0] : "";
