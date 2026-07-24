@@ -24,7 +24,7 @@ COPY . .
 RUN composer dump-autoload --optimize \
     && php artisan package:discover --ansi
 
-# Generate app key if not exists
+# Generate app key if not exist
 RUN php artisan key:generate --force || true
 
 EXPOSE 8000
