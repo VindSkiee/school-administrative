@@ -12,7 +12,7 @@ use App\Http\Controllers\API\Teacher\TeacherEskulController;
 use App\Http\Controllers\API\Teacher\TeacherGradebookController;
 use App\Http\Controllers\API\Teacher\TeacherHomeroomController;
 use App\Http\Controllers\API\Teacher\TeacherReportController;
-use App\Http\Controllers\Api\Teacher\TeacherStudentController;
+use App\Http\Controllers\API\Teacher\TeacherStudentController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('schedules/today', [AttendanceController::class, 'getTodaySchedules']);
