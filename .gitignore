@@ -1,0 +1,9 @@
+# Ignore everything
+*
+
+# Keep only these
+!.vscode/
+!backend/
+!sms-frontend/
+!README.md
+!.gitignore
