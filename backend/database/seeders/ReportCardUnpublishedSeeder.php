@@ -612,7 +612,6 @@ class ReportCardUnpublishedSeeder extends Seeder
         array $schedulesByClass
     ): void {
         $attendanceCount = 0;
-        $skippedSchedules = 0;
 
         foreach ($studentsByClass as $classId => $students) {
             $schedules = $schedulesByClass[$classId] ?? [];
@@ -621,18 +620,18 @@ class ReportCardUnpublishedSeeder extends Seeder
                 foreach ($schedules as $schedule) {
                     $subject = $schedule->subject;
                     $class = SchoolClass::find($classId);
+                    $isIncompleteSchedule = $class && $class->name === $this->incompleteAttendanceClass
+                        && $subject->code === $this->incompleteAttendanceSubjectCode;
 
-                    if ($class && $class->name === $this->incompleteAttendanceClass
-                        && $subject->code === $this->incompleteAttendanceSubjectCode) {
-                        $skippedSchedules++;
+                    $query = MeetingSession::query()
+                        ->where('schedule_id', $schedule->id)
+                        ->orderBy('meeting_number');
 
-                        continue;
+                    if ($isIncompleteSchedule) {
+                        $query->where('meeting_number', '<', self::TOTAL_MEETINGS);
                     }
 
-                    $sessions = MeetingSession::query()
-                        ->where('schedule_id', $schedule->id)
-                        ->orderBy('meeting_number')
-                        ->get();
+                    $sessions = $query->get();
 
                     foreach ($sessions as $session) {
                         Attendance::create([
@@ -648,8 +647,8 @@ class ReportCardUnpublishedSeeder extends Seeder
             }
         }
 
-        $this->command->info("   ✅ {$attendanceCount} Attendance records dibuat (SEMUA pertemuan selesai, status: present).");
-        $this->command->info("   ⚠️  Kelas {$this->incompleteAttendanceClass}, mapel {$this->incompleteAttendanceSubjectCode} TANPA absensi (menunggu guru input).");
+        $this->command->info("   ✅ {$attendanceCount} Attendance records dibuat (status: present).");
+        $this->command->info("   ⚠️  Kelas {$this->incompleteAttendanceClass}, mapel {$this->incompleteAttendanceSubjectCode}: pertemuan ke-".self::TOTAL_MEETINGS.' belum diabsen (menunggu guru input).');
     }
 
     private function createEskulEnrollments(array $studentsByClass, Collection $teachers): void
@@ -779,7 +778,7 @@ class ReportCardUnpublishedSeeder extends Seeder
         $this->command->info("   • {$sessionCount} Meeting Sessions (SEMUA selesai, ".self::TOTAL_MEETINGS.' per jadwal)');
         $this->command->info("   • {$assignmentTotal} Assignment (task + uh + uts + uas) + {$remedialTotal} Remedial");
         $this->command->info("   • {$submissionTotal} Submission + {$gradeTotal} Grade");
-        $this->command->info("   • {$attendanceCount} Attendance (SEMUA present, KECUALI kelas {$this->incompleteAttendanceClass} mapel {$this->incompleteAttendanceSubjectCode})");
+        $this->command->info("   • {$attendanceCount} Attendance (SEMUA present, KECUALI kelas {$this->incompleteAttendanceClass} mapel {$this->incompleteAttendanceSubjectCode} pertemuan ke-".self::TOTAL_MEETINGS.' belum diabsen)');
         $this->command->info("   • {$eskulCount} Eskul enrollments ({$eskulGraded} graded)");
         $this->command->newLine();
         $this->command->info('   ⚠️  DEMO DATA — Kelas 9A TIDAK SIAP dipublikasikan:');
