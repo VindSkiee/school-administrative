@@ -2,7 +2,7 @@
 
 use App\Http\Controllers\API\Student\AssignmentController as StudentAssignController;
 use App\Http\Controllers\API\Student\AttendanceRequestController;
-use App\Http\Controllers\Api\Student\ClassDetailController;
+use App\Http\Controllers\API\Student\ClassDetailController;
 use App\Http\Controllers\API\Student\EskulController as StudentEskulController;
 use App\Http\Controllers\API\Student\GradeAggregationController as StudentAggregate;
 use App\Http\Controllers\API\Student\GradeController as StudentGradeController;
