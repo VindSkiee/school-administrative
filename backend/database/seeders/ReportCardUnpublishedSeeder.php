@@ -93,7 +93,7 @@ class ReportCardUnpublishedSeeder extends Seeder
     {
         $today = Carbon::today();
         $endDate = Carbon::parse('2026-07-27');
-        $startDate = $endDate->copy()->subWeeks(self::TOTAL_MEETINGS - 1)->startOfWeek(Carbon::MONDAY);
+        $startDate = $endDate->copy()->subWeeks(self::TOTAL_MEETINGS - 1)->startOfWeek(CarbonInterface::MONDAY);
 
         $this->command->warn("⚠️  Memulai ReportCardUnpublishedSeeder — SEMUA pertemuan selesai, {$startDate->format('d M')} — {$endDate->format('d M Y')}.");
 

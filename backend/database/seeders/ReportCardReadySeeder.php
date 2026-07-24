@@ -108,7 +108,6 @@ class ReportCardReadySeeder extends Seeder
         $this->createHolidays();
 
         $this->createSubmissionsAndGrades($studentsByClass, $schedulesByClass, $teachers);
-        $this->createRemedialAssignments($studentsByClass, $schedulesByClass, $teachers);
         $this->createAttendanceRecords($studentsByClass, $schedulesByClass);
         $this->createEskulEnrollments($studentsByClass, $teachers);
         $this->assignStudentNotes($studentsByClass);
@@ -495,98 +494,6 @@ class ReportCardReadySeeder extends Seeder
         $this->command->info("   ✅ {$submissionCount} Submission + {$gradeCount} Grade dibuat (nilai 75-98).");
     }
 
-    private function createRemedialAssignments(
-        array $studentsByClass,
-        array $schedulesByClass,
-        Collection $teachers
-    ): void {
-        $graderUserId = $teachers->first()->user_id;
-        $minScore = 60;
-        $remedialCount = 0;
-        $remedialSubmissionCount = 0;
-
-        foreach ($studentsByClass as $classId => $students) {
-            $schedules = $schedulesByClass[$classId] ?? [];
-
-            foreach ($schedules as $schedule) {
-                $uhAssignment = Assignment::where('schedule_id', $schedule->id)
-                    ->where('type', 'ujian_harian')
-                    ->first();
-
-                if (! $uhAssignment) {
-                    continue;
-                }
-
-                $belowKKMStudents = [];
-                foreach ($students as $student) {
-                    $submission = Submission::where('assignment_id', $uhAssignment->id)
-                        ->where('student_id', $student->user_id)
-                        ->first();
-
-                    if ($submission && $submission->grade && $submission->grade->score < $minScore) {
-                        $belowKKMStudents[] = [
-                            'student' => $student,
-                            'original_score' => $submission->grade->score,
-                            'grade' => $submission->grade,
-                        ];
-                    }
-                }
-
-                if (empty($belowKKMStudents)) {
-                    continue;
-                }
-
-                $subject = $schedule->subject;
-                $class = $schedule->schoolClass;
-                $today = Carbon::today();
-
-                $remedialAssignment = Assignment::create([
-                    'schedule_id' => $schedule->id,
-                    'type' => 'ujian_harian',
-                    'date' => $today->toDateString(),
-                    'title' => "Remedial Ujian Harian {$subject->name} Kelas {$class->name}",
-                    'description' => "Remedial Ujian Harian {$subject->name} untuk siswa yang belum tuntas.",
-                    'due_date' => $today->copy()->addDays(14)->format('Y-m-d H:i:s'),
-                    'is_remedial' => true,
-                    'remedial_for_type' => 'ujian_harian',
-                    'linked_assignment_id' => $uhAssignment->id,
-                ]);
-                $remedialCount++;
-
-                foreach ($belowKKMStudents as $item) {
-                    $student = $item['student'];
-                    $originalScore = $item['original_score'];
-                    $originalGrade = $item['grade'];
-
-                    $remedialScore = min(95, $originalScore + rand(10, 25));
-
-                    $submission = Submission::create([
-                        'assignment_id' => $remedialAssignment->id,
-                        'student_id' => $student->user_id,
-                        'file_path' => null,
-                        'submitted_at' => now(),
-                    ]);
-                    $remedialSubmissionCount++;
-
-                    Grade::create([
-                        'submission_id' => $submission->id,
-                        'score' => $remedialScore,
-                        'feedback' => 'Nilai remedial dari skor awal '.$originalScore,
-                        'graded_by' => $graderUserId,
-                        'remedial_mode' => 'replace',
-                    ]);
-
-                    $originalGrade->update([
-                        'remedial_mode' => 'replace',
-                    ]);
-                }
-            }
-        }
-
-        $this->command->info("   ✅ {$remedialCount} Remedial Assignment dibuat.");
-        $this->command->info("   ✅ {$remedialSubmissionCount} Remedial Submission + Grade dibuat (skor improved).");
-    }
-
     private function createAttendanceRecords(
         array $studentsByClass,
         array $schedulesByClass
@@ -703,8 +610,7 @@ class ReportCardReadySeeder extends Seeder
         $subjectCount = count(self::SUBJECTS);
         $scheduleCount = $subjectCount * count(self::CLASS_NAMES);
         $sessionCount = MeetingSession::count();
-        $assignmentTotal = Assignment::where('is_remedial', false)->count();
-        $remedialTotal = Assignment::where('is_remedial', true)->count();
+        $assignmentTotal = Assignment::count();
         $submissionTotal = Submission::count();
         $gradeTotal = Grade::count();
         $attendanceCount = Attendance::count();
@@ -720,7 +626,7 @@ class ReportCardReadySeeder extends Seeder
         $this->command->info('   • 60 Siswa (20 per kelas)');
         $this->command->info("   • {$scheduleCount} Jadwal ({$subjectCount} mapel × 3 kelas)");
         $this->command->info("   • {$sessionCount} Meeting Sessions (SEMUA selesai, ".self::TOTAL_MEETINGS.' per jadwal)');
-        $this->command->info("   • {$assignmentTotal} Assignment (task + uh + uts + uas) + {$remedialTotal} Remedial");
+        $this->command->info("   • {$assignmentTotal} Assignment (task + uh + uts + uas)");
         $this->command->info("   • {$submissionTotal} Submission + {$gradeTotal} Grade");
         $this->command->info("   • {$attendanceCount} Attendance (SEMUA present)");
         $this->command->info("   • {$eskulCount} Eskul enrollments ({$eskulGraded} graded)");

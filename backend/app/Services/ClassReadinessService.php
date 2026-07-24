@@ -590,6 +590,7 @@ class ClassReadinessService
                     FROM assignments a2
                     INNER JOIN schedules sch5 ON sch5.id = a2.schedule_id
                     WHERE sch5.class_id = ? AND sch5.academic_year_id = ?
+                    AND (a2.is_remedial = 0 OR a2.is_remedial IS NULL)
                 ) = 0 THEN 1
                 WHEN (
                     SELECT COUNT(DISTINCT g.id)
@@ -599,11 +600,13 @@ class ClassReadinessService
                     INNER JOIN schedules sch6 ON sch6.id = a3.schedule_id
                     WHERE sch6.class_id = ? AND sch6.academic_year_id = ?
                     AND sub.student_id = u.id
+                    AND (a3.is_remedial = 0 OR a3.is_remedial IS NULL)
                 ) >= (
                     SELECT COUNT(DISTINCT a4.id)
                     FROM assignments a4
                     INNER JOIN schedules sch7 ON sch7.id = a4.schedule_id
                     WHERE sch7.class_id = ? AND sch7.academic_year_id = ?
+                    AND (a4.is_remedial = 0 OR a4.is_remedial IS NULL)
                 ) THEN 1
                 ELSE 0
                 END AS grades_ready

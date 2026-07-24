@@ -3,7 +3,10 @@
 
 # Keep only these
 !.vscode/
+!.vscode/**
 !backend/
+!backend/**
 !sms-frontend/
+!sms-frontend/**
 !README.md
 !.gitignore
