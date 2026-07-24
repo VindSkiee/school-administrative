@@ -8,7 +8,7 @@ use App\Http\Controllers\API\Student\GradeAggregationController as StudentAggreg
 use App\Http\Controllers\API\Student\GradeController as StudentGradeController;
 use App\Http\Controllers\API\Student\MaterialController as StudentMaterialController;
 use App\Http\Controllers\API\Student\SemesterReportController as StudentSemesterReport;
-use App\Http\Controllers\Api\Student\StudentDashboardController;
+use App\Http\Controllers\API\Student\StudentDashboardController;
 use App\Http\Controllers\API\Student\StudentScheduleController;
 use Illuminate\Support\Facades\Route;
 
