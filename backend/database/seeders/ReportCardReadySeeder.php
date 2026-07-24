@@ -5,14 +5,16 @@ namespace Database\Seeders;
 use App\Models\AcademicYear;
 use App\Models\Assignment;
 use App\Models\Attendance;
+use App\Models\Eskul;
 use App\Models\Grade;
 use App\Models\GradingSetting;
-use App\Models\Holiday;
 use App\Models\MeetingSession;
 use App\Models\Schedule;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Models\StudentEskul;
 use App\Models\Subject;
+use App\Models\SubjectCompetencySetting;
 use App\Models\Submission;
 use App\Models\Teacher;
 use App\Models\User;
@@ -23,11 +25,13 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 
-class ReportCardScenarioSeeder extends Seeder
+class ReportCardReadySeeder extends Seeder
 {
     private const DEFAULT_PASSWORD = 'password123';
 
     protected bool $reportPublished = false;
+
+    private const TOTAL_MEETINGS = 10;
 
     private const SUBJECTS = [
         ['code' => 'PAI', 'name' => 'Pendidikan Agama Islam dan Budi Pekerti'],
@@ -64,47 +68,52 @@ class ReportCardScenarioSeeder extends Seeder
     private const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
 
     private const TIME_SLOTS = [
-        ['day' => 'monday',    'start' => '07:00'],
-        ['day' => 'monday',    'start' => '08:30'],
-        ['day' => 'monday',    'start' => '10:00'],
-        ['day' => 'tuesday',   'start' => '07:00'],
-        ['day' => 'tuesday',   'start' => '08:30'],
-        ['day' => 'tuesday',   'start' => '10:00'],
+        ['day' => 'monday', 'start' => '07:00'],
+        ['day' => 'monday', 'start' => '08:30'],
+        ['day' => 'monday', 'start' => '10:00'],
+        ['day' => 'tuesday', 'start' => '07:00'],
+        ['day' => 'tuesday', 'start' => '08:30'],
+        ['day' => 'tuesday', 'start' => '10:00'],
         ['day' => 'wednesday', 'start' => '07:00'],
         ['day' => 'wednesday', 'start' => '08:30'],
         ['day' => 'wednesday', 'start' => '10:00'],
-        ['day' => 'thursday',  'start' => '07:00'],
-        ['day' => 'thursday',  'start' => '08:30'],
+        ['day' => 'thursday', 'start' => '07:00'],
+        ['day' => 'thursday', 'start' => '08:30'],
     ];
 
     public function run(): void
     {
-        $this->command->warn('⚠️  Memulai ReportCardScenarioSeeder — SEMUA pertemuan selesai, semester pendek.');
+        $today = Carbon::today();
+        $endDate = $today->copy();
+        $startDate = $endDate->copy()->subWeeks(self::TOTAL_MEETINGS - 1)->startOfWeek(Carbon::MONDAY);
+
+        $this->command->warn("⚠️  Memulai ReportCardReadySeeder — SEMUA pertemuan selesai, SEMUA siap publish, {$startDate->format('d M')} — {$endDate->format('d M Y')}.");
 
         $this->clearData();
 
-        $academicYear = $this->createAcademicYear();
+        $academicYear = $this->createAcademicYear($startDate, $endDate);
         $this->createGradingSetting($academicYear);
 
         $subjects = $this->createSubjects();
-        $classes = $this->createClasses($academicYear);
+        $this->createCompetencySettings($subjects, $academicYear);
 
+        $classes = $this->createClasses($academicYear);
         $teachers = $this->createTeachers();
         $this->assignHomerooms($teachers, $classes);
 
         $studentsByClass = $this->createStudents($classes, $academicYear);
-
         $schedulesByClass = $this->createSchedulesAndAssignments($classes, $subjects, $teachers, $academicYear);
 
         $this->createMeetingSessions($schedulesByClass, $academicYear);
-
-        $this->createHolidays($academicYear);
+        $this->createHolidays();
 
         $this->createSubmissionsAndGrades($studentsByClass, $schedulesByClass, $teachers);
-
+        $this->createRemedialAssignments($studentsByClass, $schedulesByClass, $teachers);
         $this->createAttendanceRecords($studentsByClass, $schedulesByClass);
+        $this->createEskulEnrollments($studentsByClass, $teachers);
+        $this->assignStudentNotes($studentsByClass);
 
-        $this->printSummary();
+        $this->printSummary($startDate, $endDate);
     }
 
     private function clearData(): void
@@ -113,6 +122,7 @@ class ReportCardScenarioSeeder extends Seeder
 
         DB::table('grades')->truncate();
         DB::table('submissions')->truncate();
+        DB::table('student_eskuls')->truncate();
         DB::table('attendances')->truncate();
         DB::table('attendance_requests')->truncate();
         DB::table('assignments')->truncate();
@@ -123,6 +133,7 @@ class ReportCardScenarioSeeder extends Seeder
         DB::table('students')->truncate();
         DB::table('teachers')->truncate();
         DB::table('classes')->truncate();
+        DB::table('subject_competency_settings')->truncate();
         DB::table('subjects')->truncate();
         DB::table('grading_settings')->truncate();
         DB::table('academic_years')->truncate();
@@ -134,22 +145,19 @@ class ReportCardScenarioSeeder extends Seeder
         $this->command->info('   Data lama dibersihkan.');
     }
 
-    private function createAcademicYear(): AcademicYear
+    private function createAcademicYear(Carbon $startDate, Carbon $endDate): AcademicYear
     {
-        $today = Carbon::today();
-        $endOfWeek = $today->copy()->endOfWeek(Carbon::FRIDAY);
-
         $year = AcademicYear::create([
             'name' => '2026/2027',
             'semester' => 'odd',
             'is_active' => true,
             'is_report_published' => $this->reportPublished,
-            'start_date' => '2026-06-01',
-            'end_date' => $endOfWeek->toDateString(),
+            'start_date' => $startDate->toDateString(),
+            'end_date' => $endDate->toDateString(),
         ]);
 
         $this->command->info('   ✅ Tahun Ajaran: 2026/2027 Ganjil');
-        $this->command->info("      Periode: 01 Jun 2026 — {$endOfWeek->format('d M Y')} (semester pendek)");
+        $this->command->info("      Periode: {$startDate->format('d M Y')} — {$endDate->format('d M Y')}");
         $this->command->info('      Status: is_report_published = '.($this->reportPublished ? 'true' : 'false'));
 
         return $year;
@@ -159,14 +167,15 @@ class ReportCardScenarioSeeder extends Seeder
     {
         GradingSetting::create([
             'academic_year_id' => $year->id,
-            'task_weight' => 40,
+            'task_weight' => 30,
+            'daily_exam_weight' => 10,
             'uts_weight' => 25,
             'uas_weight' => 25,
             'attendance_weight' => 10,
             'min_score_to_pass' => 60,
         ]);
 
-        $this->command->info('   ✅ GradingSetting: Task 40% + UTS 25% + UAS 25% + Kehadiran 10%');
+        $this->command->info('   ✅ GradingSetting: Task 30% + UH 10% + UTS 25% + UAS 25% + Kehadiran 10%');
     }
 
     private function createSubjects(): Collection
@@ -180,6 +189,41 @@ class ReportCardScenarioSeeder extends Seeder
         $this->command->info('   ✅ '.count(self::SUBJECTS).' Mata Pelajaran dibuat.');
 
         return $subjects;
+    }
+
+    private function createCompetencySettings(Collection $subjects, AcademicYear $year): void
+    {
+        $kkmMap = [
+            'PAI' => 60,
+            'PPKn' => 55,
+            'B.IND' => 65,
+            'MTK' => 60,
+            'IPA' => 60,
+            'IPS' => 55,
+            'B.ING' => 65,
+            'PJOK' => 55,
+            'SBdP' => 55,
+            'MULOK' => 50,
+            'INF' => 60,
+        ];
+
+        foreach ($subjects as $subject) {
+            SubjectCompetencySetting::create([
+                'subject_id' => $subject->id,
+                'academic_year_id' => $year->id,
+                'min_score' => $kkmMap[$subject->code] ?? 60,
+                'sangat_baik_min' => 85,
+                'sangat_baik_text' => 'Mencapai kompetensi dengan sangat baik dalam memahami, menerapkan, dan menganalisis materi pembelajaran.',
+                'baik_min' => 75,
+                'baik_text' => 'Mencapai kompetensi dengan baik dalam memahami dan menerapkan materi pembelajaran.',
+                'kurang_min' => 60,
+                'kurang_text' => 'Perlu peningkatan dalam hal memahami dan menerapkan materi pembelajaran.',
+                'sangat_kurang_min' => 0,
+                'sangat_kurang_text' => 'Perlu bimbingan intensif untuk mencapai ketuntasan belajar.',
+            ]);
+        }
+
+        $this->command->info('   ✅ '.count(self::SUBJECTS).' Capaian Kompetensi dibuat (KKM per mapel).');
     }
 
     private function createClasses(AcademicYear $year): Collection
@@ -328,6 +372,7 @@ class ReportCardScenarioSeeder extends Seeder
 
                 $types = [
                     ['type' => 'task', 'label' => 'Tugas Harian'],
+                    ['type' => 'ujian_harian', 'label' => 'Ujian Harian'],
                     ['type' => 'uts', 'label' => 'UTS'],
                     ['type' => 'uas', 'label' => 'UAS'],
                 ];
@@ -353,14 +398,13 @@ class ReportCardScenarioSeeder extends Seeder
         $totalAssignments = Assignment::count();
         $mapelCount = count(self::SUBJECTS);
         $this->command->info("   ✅ {$totalSchedules} Jadwal dibuat ({$mapelCount} mapel × 3 kelas).");
-        $this->command->info("   ✅ {$totalAssignments} Assignment dibuat (3 per jadwal: task + uts + uas).");
+        $this->command->info("   ✅ {$totalAssignments} Assignment dibuat (4 per jadwal: task + uh + uts + uas).");
 
         return $schedulesByClass;
     }
 
     private function createMeetingSessions(array $schedulesByClass, AcademicYear $year): void
     {
-        $startDate = $year->start_date->copy()->startOfDay();
         $endDate = $year->end_date->copy()->endOfDay();
         $sessionCount = 0;
 
@@ -368,15 +412,12 @@ class ReportCardScenarioSeeder extends Seeder
             foreach ($schedules as $schedule) {
                 $dayOfWeek = $schedule->day_of_week;
                 $meetingNumber = 1;
-                $current = $startDate->copy()->modify("next {$dayOfWeek}");
 
-                if ($current->lt($startDate)) {
-                    $current->addWeek();
-                }
+                $current = $endDate->copy()->modify("last {$dayOfWeek}");
 
                 $sessionsToInsert = [];
 
-                while ($current->lte($endDate)) {
+                while ($meetingNumber <= self::TOTAL_MEETINGS) {
                     $sessionsToInsert[] = [
                         'schedule_id' => $schedule->id,
                         'meeting_number' => $meetingNumber,
@@ -387,7 +428,7 @@ class ReportCardScenarioSeeder extends Seeder
                         'updated_at' => now(),
                     ];
                     $meetingNumber++;
-                    $current->addWeek();
+                    $current->subWeek();
                 }
 
                 if ($sessionsToInsert !== []) {
@@ -397,10 +438,10 @@ class ReportCardScenarioSeeder extends Seeder
             }
         }
 
-        $this->command->info("   ✅ {$sessionCount} Meeting Sessions dibuat (SEMUA terjadwal dalam semester pendek).");
+        $this->command->info("   ✅ {$sessionCount} Meeting Sessions dibuat (".self::TOTAL_MEETINGS.' per jadwal, SEMUA selesai).');
     }
 
-    private function createHolidays(AcademicYear $year): void
+    private function createHolidays(): void
     {
         $this->command->info('   ✅ Tidak ada hari libur (semester pendek).');
     }
@@ -430,9 +471,18 @@ class ReportCardScenarioSeeder extends Seeder
                         ]);
                         $submissionCount++;
 
+                        if ($assignment->type === 'ujian_harian') {
+                            $studentIndex = array_search($student, $studentsByClass[$classId]);
+                            $score = ($studentIndex % 10 < 3)
+                                ? rand(40, 58)
+                                : rand(75, 98);
+                        } else {
+                            $score = rand(75, 98);
+                        }
+
                         Grade::create([
                             'submission_id' => $submission->id,
-                            'score' => rand(75, 98),
+                            'score' => $score,
                             'feedback' => null,
                             'graded_by' => $graderUserId,
                         ]);
@@ -443,6 +493,98 @@ class ReportCardScenarioSeeder extends Seeder
         }
 
         $this->command->info("   ✅ {$submissionCount} Submission + {$gradeCount} Grade dibuat (nilai 75-98).");
+    }
+
+    private function createRemedialAssignments(
+        array $studentsByClass,
+        array $schedulesByClass,
+        Collection $teachers
+    ): void {
+        $graderUserId = $teachers->first()->user_id;
+        $minScore = 60;
+        $remedialCount = 0;
+        $remedialSubmissionCount = 0;
+
+        foreach ($studentsByClass as $classId => $students) {
+            $schedules = $schedulesByClass[$classId] ?? [];
+
+            foreach ($schedules as $schedule) {
+                $uhAssignment = Assignment::where('schedule_id', $schedule->id)
+                    ->where('type', 'ujian_harian')
+                    ->first();
+
+                if (! $uhAssignment) {
+                    continue;
+                }
+
+                $belowKKMStudents = [];
+                foreach ($students as $student) {
+                    $submission = Submission::where('assignment_id', $uhAssignment->id)
+                        ->where('student_id', $student->user_id)
+                        ->first();
+
+                    if ($submission && $submission->grade && $submission->grade->score < $minScore) {
+                        $belowKKMStudents[] = [
+                            'student' => $student,
+                            'original_score' => $submission->grade->score,
+                            'grade' => $submission->grade,
+                        ];
+                    }
+                }
+
+                if (empty($belowKKMStudents)) {
+                    continue;
+                }
+
+                $subject = $schedule->subject;
+                $class = $schedule->schoolClass;
+                $today = Carbon::today();
+
+                $remedialAssignment = Assignment::create([
+                    'schedule_id' => $schedule->id,
+                    'type' => 'ujian_harian',
+                    'date' => $today->toDateString(),
+                    'title' => "Remedial Ujian Harian {$subject->name} Kelas {$class->name}",
+                    'description' => "Remedial Ujian Harian {$subject->name} untuk siswa yang belum tuntas.",
+                    'due_date' => $today->copy()->addDays(14)->format('Y-m-d H:i:s'),
+                    'is_remedial' => true,
+                    'remedial_for_type' => 'ujian_harian',
+                    'linked_assignment_id' => $uhAssignment->id,
+                ]);
+                $remedialCount++;
+
+                foreach ($belowKKMStudents as $item) {
+                    $student = $item['student'];
+                    $originalScore = $item['original_score'];
+                    $originalGrade = $item['grade'];
+
+                    $remedialScore = min(95, $originalScore + rand(10, 25));
+
+                    $submission = Submission::create([
+                        'assignment_id' => $remedialAssignment->id,
+                        'student_id' => $student->user_id,
+                        'file_path' => null,
+                        'submitted_at' => now(),
+                    ]);
+                    $remedialSubmissionCount++;
+
+                    Grade::create([
+                        'submission_id' => $submission->id,
+                        'score' => $remedialScore,
+                        'feedback' => 'Nilai remedial dari skor awal '.$originalScore,
+                        'graded_by' => $graderUserId,
+                        'remedial_mode' => 'replace',
+                    ]);
+
+                    $originalGrade->update([
+                        'remedial_mode' => 'replace',
+                    ]);
+                }
+            }
+        }
+
+        $this->command->info("   ✅ {$remedialCount} Remedial Assignment dibuat.");
+        $this->command->info("   ✅ {$remedialSubmissionCount} Remedial Submission + Grade dibuat (skor improved).");
     }
 
     private function createAttendanceRecords(
@@ -478,28 +620,113 @@ class ReportCardScenarioSeeder extends Seeder
         $this->command->info("   ✅ {$attendanceCount} Attendance records dibuat (SEMUA pertemuan selesai, status: present).");
     }
 
-    private function printSummary(): void
+    private function createEskulEnrollments(array $studentsByClass, Collection $teachers): void
+    {
+        $activeYear = AcademicYear::where('is_active', true)->first();
+        if (! $activeYear) {
+            return;
+        }
+
+        $eskulData = [
+            ['name' => 'Pramuka', 'description' => 'Kegiatan Kepramukaan untuk membina karakter.'],
+            ['name' => 'Paskibra', 'description' => 'Latihan baris-berbaris dan kepemimpinan.'],
+            ['name' => 'Basket', 'description' => 'Latihan dan pertandingan bola basket.'],
+            ['name' => 'Futsal', 'description' => 'Latihan dan pertandingan futsal.'],
+            ['name' => 'English Club', 'description' => 'Klub bahasa Inggris.'],
+        ];
+
+        $eskuls = collect();
+        foreach ($eskulData as $data) {
+            $eskul = Eskul::firstOrCreate(
+                ['name' => $data['name']],
+                [
+                    'description' => $data['description'],
+                    'teacher_id' => $teachers->first()->user_id,
+                    'is_active' => true,
+                ]
+            );
+            $eskuls->push($eskul);
+        }
+
+        $graderUserId = $teachers->first()->user_id;
+        $enrollmentCount = 0;
+
+        foreach ($studentsByClass as $classId => $students) {
+            foreach ($students as $student) {
+                $eskul = $eskuls->random();
+
+                $exists = StudentEskul::where('student_id', $student->user_id)
+                    ->where('eskul_id', $eskul->id)
+                    ->where('academic_year_id', $activeYear->id)
+                    ->exists();
+
+                if ($exists) {
+                    continue;
+                }
+
+                StudentEskul::create([
+                    'student_id' => $student->user_id,
+                    'eskul_id' => $eskul->id,
+                    'academic_year_id' => $activeYear->id,
+                    'score' => rand(70, 95),
+                    'graded_at' => now(),
+                    'graded_by' => $graderUserId,
+                ]);
+
+                $enrollmentCount++;
+            }
+        }
+
+        $this->command->info("   ✅ {$enrollmentCount} Student Eskul enrollments dibuat (SEMUA sudah dinilai).");
+    }
+
+    private function assignStudentNotes(array $studentsByClass): void
+    {
+        $noteCount = 0;
+
+        foreach ($studentsByClass as $classId => $students) {
+            foreach ($students as $student) {
+                DB::table('class_student')
+                    ->where('student_id', $student->user_id)
+                    ->where('class_id', $classId)
+                    ->update(['note' => 'Catatan wali kelas untuk '.$student->user->name]);
+                $noteCount++;
+            }
+        }
+
+        $this->command->info("   ✅ {$noteCount} Catatan wali kelas diisi (SEMUA siswa memiliki catatan).");
+    }
+
+    private function printSummary(Carbon $startDate, Carbon $endDate): void
     {
         $teacherCount = count(self::TEACHERS);
         $subjectCount = count(self::SUBJECTS);
         $scheduleCount = $subjectCount * count(self::CLASS_NAMES);
         $sessionCount = MeetingSession::count();
-        $holidayCount = Holiday::count();
-        $submissionTotal = 60 * $subjectCount * 3;
+        $assignmentTotal = Assignment::where('is_remedial', false)->count();
+        $remedialTotal = Assignment::where('is_remedial', true)->count();
+        $submissionTotal = Submission::count();
+        $gradeTotal = Grade::count();
         $attendanceCount = Attendance::count();
+        $eskulCount = StudentEskul::count();
+        $eskulGraded = StudentEskul::whereNotNull('score')->count();
 
         $this->command->newLine();
-        $this->command->info('✅ ReportCardScenarioSeeder selesai!');
-        $this->command->info('   Mode: SEMUA pertemuan selesai, semester pendek, is_report_published = false');
-        $this->command->info('   • 1 Tahun Ajaran 2026/2027 (01 Jun — '.Carbon::today()->endOfWeek(Carbon::FRIDAY)->format('d M Y').')');
+        $this->command->info('✅ ReportCardReadySeeder selesai!');
+        $this->command->info('   Mode: SEMUA pertemuan selesai, SEMUA SIAP publish, is_report_published = false');
+        $this->command->info("   • 1 Tahun Ajaran 2026/2027 ({$startDate->format('d M Y')} — {$endDate->format('d M Y')})");
         $this->command->info('   • 3 Kelas (7A, 8A, 9A)');
         $this->command->info("   • {$teacherCount} Guru (3 Wali Kelas)");
         $this->command->info('   • 60 Siswa (20 per kelas)');
         $this->command->info("   • {$scheduleCount} Jadwal ({$subjectCount} mapel × 3 kelas)");
-        $this->command->info("   • {$sessionCount} Meeting Sessions (SEMUA selesai)");
-        $this->command->info("   • {$holidayCount} Hari Libur");
+        $this->command->info("   • {$sessionCount} Meeting Sessions (SEMUA selesai, ".self::TOTAL_MEETINGS.' per jadwal)');
+        $this->command->info("   • {$assignmentTotal} Assignment (task + uh + uts + uas) + {$remedialTotal} Remedial");
+        $this->command->info("   • {$submissionTotal} Submission + {$gradeTotal} Grade");
         $this->command->info("   • {$attendanceCount} Attendance (SEMUA present)");
-        $this->command->info("   • {$submissionTotal} Submission + Grade");
+        $this->command->info("   • {$eskulCount} Eskul enrollments ({$eskulGraded} graded)");
+        $this->command->newLine();
+        $this->command->info('   ✅ SEMUA kelas SIAP dipublikasikan (7A, 8A, 9A).');
+        $this->command->info('   ✅ Admin bisa langsung publish semua kelas.');
         $this->command->newLine();
         $this->command->info('Login guru: password123');
         $this->command->info('Login siswa: password123');
