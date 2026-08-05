@@ -223,7 +223,7 @@ class UserController
             }
 
             // Load student's schedules for the active academic year
-            $activeYear = AcademicYear::where('is_active', true)->first();
+            $activeYear = AcademicYear::active();
             if ($activeYear && $user->student) {
                 $classIds = $user->student->classes()
                     ->where('classes.academic_year_id', $activeYear->id)
@@ -346,7 +346,7 @@ class UserController
             return response()->json(['message' => 'User bukan guru.'], 422);
         }
 
-        $activeYear = AcademicYear::where('is_active', true)->first();
+        $activeYear = AcademicYear::active();
         if (! $activeYear) {
             return response()->json([
                 'schedules' => [],
@@ -452,7 +452,7 @@ class UserController
 
         // Proses penggantian jadwal & wali kelas sebelum nonaktifkan
         if (isset($validated['is_active']) && $validated['is_active'] === false && $user->role === 'teacher') {
-            $activeYear = AcademicYear::where('is_active', true)->first();
+            $activeYear = AcademicYear::active();
 
             if ($activeYear) {
                 $hasSchedules = Schedule::where('teacher_id', $user->id)

@@ -13,7 +13,7 @@ class DashboardController
 {
     public function index(): JsonResponse
     {
-        $activeYear = AcademicYear::where('is_active', true)->first();
+        $activeYear = AcademicYear::active();
 
         // PERF FIX: single grouped COUNT query instead of 3 separate queries
         // Also cached for 60 seconds to reduce DB load on repeated dashboard visits

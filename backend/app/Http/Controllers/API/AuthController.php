@@ -100,14 +100,42 @@ class AuthController
 
     private function formatUserData(User $user): array
     {
-        $activeYear = AcademicYear::where('is_active', true)->first();
+        $activeYear = AcademicYear::active();
 
-        $user->loadMissing([
-            'student.classes.academicYear',
-            'admin',
-            'principal',
-            'teacher', // Pastikan teacher di-load agar relasi di bawahnya aman
-        ]);
+        // Only load the profile relation matching the user's role (saves 2-3 queries per request)
+        $relations = match ($user->role) {
+            'student' => ['student.classes.academicYear'],
+            'teacher' => ['teacher'],
+            'admin' => ['admin'],
+            'principal' => ['principal'],
+            default => [],
+        };
+        $user->loadMissing($relations);
+
+        // Prevent lazy loading for non-relevant profile relations by setting them to null
+        match ($user->role) {
+            'student' => $user->setRelations(array_merge($user->getRelations(), [
+                'teacher' => null,
+                'admin' => null,
+                'principal' => null,
+            ])),
+            'teacher' => $user->setRelations(array_merge($user->getRelations(), [
+                'student' => null,
+                'admin' => null,
+                'principal' => null,
+            ])),
+            'admin' => $user->setRelations(array_merge($user->getRelations(), [
+                'student' => null,
+                'teacher' => null,
+                'principal' => null,
+            ])),
+            'principal' => $user->setRelations(array_merge($user->getRelations(), [
+                'student' => null,
+                'teacher' => null,
+                'admin' => null,
+            ])),
+            default => null,
+        };
 
         if ($user->teacher && ! $user->teacher->relationLoaded('schedules')) {
             $schedulesQuery = $user->teacher->schedules();
@@ -120,9 +148,10 @@ class AuthController
         // Load student's schedules for the active academic year
         $studentSchedules = [];
         if ($user->role === 'student' && $user->student && $activeYear) {
-            $classIds = $user->student->classes()
-                ->where('classes.academic_year_id', $activeYear->id)
-                ->pluck('classes.id');
+            // Use in-memory filter instead of DB query (classes already loaded above)
+            $classIds = $user->student->classes
+                ->filter(fn ($c) => $c->academic_year_id === $activeYear->id)
+                ->pluck('id');
 
             $dayOrder = ['monday' => 1, 'tuesday' => 2, 'wednesday' => 3, 'thursday' => 4, 'friday' => 5, 'saturday' => 6, 'sunday' => 7];
 

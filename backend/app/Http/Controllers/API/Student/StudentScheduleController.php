@@ -32,7 +32,7 @@ class StudentScheduleController extends Controller
         }
 
         // 3. Ambil ID kelas-kelas di mana siswa ini terdaftar
-        $activeYearId = AcademicYear::where('is_active', true)->value('id');
+        $activeYearId = AcademicYear::active()?->id;
         $classIds = $student->classes()
             ->when($activeYearId, fn ($q) => $q->where('classes.academic_year_id', $activeYearId))
             ->pluck('classes.id');

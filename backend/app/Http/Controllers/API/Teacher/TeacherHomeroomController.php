@@ -3,6 +3,9 @@
 namespace App\Http\Controllers\API\Teacher;
 
 use App\Models\AcademicYear;
+use App\Models\Attendance;
+use App\Models\Grade;
+use App\Models\Submission;
 use App\Models\Teacher;
 use Illuminate\Http\JsonResponse;
 
@@ -13,7 +16,7 @@ class TeacherHomeroomController
         $teacherId = auth('api')->user()->id;
 
         // PERF FIX: replaced unbounded eager loads with academic year-scoped queries
-        $activeYear = AcademicYear::where('is_active', true)->first();
+        $activeYear = AcademicYear::active();
 
         $teacher = Teacher::with([
             'homeroomClass' => function ($query) use ($activeYear) {
@@ -28,7 +31,7 @@ class TeacherHomeroomController
             'homeroomClass.students.user:id,name',
         ])->where('user_id', $teacherId)->first();
 
-        if (!$teacher || !$teacher->homeroomClass) {
+        if (! $teacher || ! $teacher->homeroomClass) {
             return response()->json(['error' => 'Anda belum ditetapkan sebagai Wali Kelas.'], 403);
         }
 
@@ -38,16 +41,16 @@ class TeacherHomeroomController
         // PERF FIX: replaced N+1 — single attendance query for all students, scoped to this class's schedules
         $classScheduleIds = $class->schedules()->pluck('id');
 
-        $attendancesByStudent = \App\Models\Attendance::whereIn('schedule_id', $classScheduleIds)
+        $attendancesByStudent = Attendance::whereIn('schedule_id', $classScheduleIds)
             ->whereIn('student_id', $studentIds)
             ->get()
             ->groupBy('student_id');
 
         // PERF FIX: replaced N+1 — single submission+grade query for all students
-        $submissionIds = \App\Models\Submission::whereIn('student_id', $studentIds)
+        $submissionIds = Submission::whereIn('student_id', $studentIds)
             ->pluck('id');
 
-        $gradesByStudent = \App\Models\Grade::whereIn('submission_id', $submissionIds)
+        $gradesByStudent = Grade::whereIn('submission_id', $submissionIds)
             ->whereNotNull('score')
             ->join('submissions', 'grades.submission_id', '=', 'submissions.id')
             ->select('submissions.student_id', 'grades.score')
@@ -99,7 +102,7 @@ class TeacherHomeroomController
                 'name' => $class->name,
                 'total_students' => $studentsData->count(),
             ],
-            'students' => $studentsData
+            'students' => $studentsData,
         ]);
     }
 }

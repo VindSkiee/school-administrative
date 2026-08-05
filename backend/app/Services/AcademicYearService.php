@@ -27,6 +27,9 @@ class AcademicYearService
 
             DB::commit();
 
+            // 3. Flush active academic year cache
+            AcademicYear::flushActiveCache();
+
             return $academicYear;
         } catch (Exception $e) {
             DB::rollBack();

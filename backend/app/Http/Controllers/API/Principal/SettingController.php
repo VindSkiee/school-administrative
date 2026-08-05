@@ -15,7 +15,7 @@ class SettingController
      */
     public function getGrading(): JsonResponse
     {
-        $activeYear = AcademicYear::where('is_active', true)->first();
+        $activeYear = AcademicYear::active();
 
         if (! $activeYear) {
             return response()->json([
@@ -68,7 +68,7 @@ class SettingController
             ], 422);
         }
 
-        $activeYear = AcademicYear::where('is_active', true)->first();
+        $activeYear = AcademicYear::active();
 
         if (! $activeYear) {
             return response()->json([

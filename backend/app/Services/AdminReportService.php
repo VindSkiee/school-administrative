@@ -3,10 +3,10 @@
 namespace App\Services;
 
 use App\Models\AcademicYear;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
-use Symfony\Component\HttpKernel\Exception\HttpException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class AdminReportService
 {
@@ -19,8 +19,8 @@ class AdminReportService
     private function getActiveAcademicYearId(): int
     {
         return Cache::remember('active_academic_year_id', 3600, function () {
-            $activeYear = AcademicYear::query()->where('is_active', true)->first();
-            
+            $activeYear = AcademicYear::active();
+
             if (! $activeYear) {
                 throw new HttpException(400, 'Tidak ada Tahun Ajaran yang aktif.');
             }

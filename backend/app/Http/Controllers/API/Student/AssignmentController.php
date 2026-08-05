@@ -24,7 +24,7 @@ class AssignmentController
         $student = $user->student()->with('classes')->first();
 
         // PERF FIX: only get class from the active academic year (not just first class)
-        $activeYearId = AcademicYear::where('is_active', true)->value('id');
+        $activeYearId = AcademicYear::active()?->id;
         $activeClass = $activeYearId
             ? $student->classes->firstWhere('academic_year_id', $activeYearId)
             : $student->classes->first();
@@ -114,7 +114,7 @@ class AssignmentController
         $student = $user->student()->with('classes')->first();
 
         // PERF FIX: only get class from the active academic year
-        $activeYearId = AcademicYear::where('is_active', true)->value('id');
+        $activeYearId = AcademicYear::active()?->id;
         $activeClass = $activeYearId
             ? $student->classes->firstWhere('academic_year_id', $activeYearId)
             : $student->classes->first();

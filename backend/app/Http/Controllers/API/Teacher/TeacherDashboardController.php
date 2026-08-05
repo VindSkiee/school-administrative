@@ -15,7 +15,7 @@ class TeacherDashboardController
 {
     public function index(): JsonResponse
     {
-        $activeYear = AcademicYear::where('is_active', true)->first();
+        $activeYear = AcademicYear::active();
         $teacherId = auth('api')->user()->id;
         $today = strtolower(Carbon::today()->englishDayOfWeek);
 

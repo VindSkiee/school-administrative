@@ -39,7 +39,7 @@ class StoreAssignmentRequest extends FormRequest
                 return;
             }
 
-            $activeYear = AcademicYear::where('is_active', true)->first();
+            $activeYear = AcademicYear::active();
             if (! $activeYear) {
                 return;
             }

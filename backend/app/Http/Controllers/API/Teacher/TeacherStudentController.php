@@ -34,7 +34,7 @@ class TeacherStudentController extends Controller
         $student = $user->student;
 
         // 2. Determine if this teacher is the student's homeroom teacher
-        $activeYear = AcademicYear::where('is_active', true)->first();
+        $activeYear = AcademicYear::active();
         $activeClass = $student->classes()
             ->where('classes.academic_year_id', $activeYear?->id)
             ->first();

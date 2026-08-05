@@ -22,11 +22,13 @@ class GradeAggregationController extends Controller
         $yearId = $request->query('academic_year_id');
         $year = $yearId
             ? AcademicYear::find($yearId)
-            : AcademicYear::where('is_active', true)->first();
+            : AcademicYear::active();
 
-        $activeClass = $year
-            ? $student->classes->firstWhere('academic_year_id', $year->id)
-            : $student->classes->first();
+        if (! $year) {
+            return response()->json(['error' => 'Tahun ajaran tidak ditemukan.'], 404);
+        }
+
+        $activeClass = $student->classes->firstWhere('academic_year_id', $year->id);
 
         if (! $activeClass) {
             return response()->json(['error' => 'Anda tidak memiliki kelas aktif.'], 403);

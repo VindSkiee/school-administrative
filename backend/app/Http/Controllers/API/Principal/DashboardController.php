@@ -44,7 +44,7 @@ class DashboardController
      */
     public function stats(): JsonResponse
     {
-        $activeYear = AcademicYear::where('is_active', true)->first();
+        $activeYear = AcademicYear::active();
 
         $totalStudents = Student::where('status', 'active')->count();
         $totalTeachers = Teacher::count();

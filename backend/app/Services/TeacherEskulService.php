@@ -33,7 +33,7 @@ class TeacherEskulService
 
     public function getStudentsByEskul(int $teacherId, ?int $eskulId = null, ?int $classId = null): array
     {
-        $activeYear = AcademicYear::where('is_active', true)->first();
+        $activeYear = AcademicYear::active();
         if (! $activeYear) {
             return [];
         }
@@ -96,7 +96,7 @@ class TeacherEskulService
 
     public function gradeStudents(int $teacherId, array $grades): int
     {
-        $activeYear = AcademicYear::where('is_active', true)->first();
+        $activeYear = AcademicYear::active();
         if (! $activeYear) {
             throw new HttpException(422, 'Tidak ada tahun ajaran aktif.');
         }

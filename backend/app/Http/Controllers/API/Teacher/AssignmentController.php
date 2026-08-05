@@ -17,7 +17,7 @@ class AssignmentController
     public function index(string $scheduleId): JsonResponse
     {
         $teacherId = auth('api')->user()->id;
-        $activeYearId = AcademicYear::where('is_active', true)->value('id');
+        $activeYearId = AcademicYear::active()?->id;
 
         $assignments = Assignment::with([
             'schedule.subject.competencySettings' => fn ($q) => $q->where('academic_year_id', $activeYearId),
@@ -37,7 +37,7 @@ class AssignmentController
     public function globalIndex(Request $request): JsonResponse
     {
         $teacherId = auth('api')->user()->id;
-        $activeYearId = AcademicYear::where('is_active', true)->value('id');
+        $activeYearId = AcademicYear::active()?->id;
         $perPage = min((int) $request->query('per_page', 20), 100);
 
         $assignments = Assignment::with([
@@ -86,7 +86,7 @@ class AssignmentController
     public function submissions(string $id): JsonResponse
     {
         $teacherId = auth('api')->user()->id;
-        $activeYearId = AcademicYear::where('is_active', true)->value('id');
+        $activeYearId = AcademicYear::active()?->id;
 
         $assignment = Assignment::with([
             'submissions.student.user',

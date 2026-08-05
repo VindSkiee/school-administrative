@@ -21,7 +21,7 @@ class ScheduleService
     public function createSchedule(array $data): array
     {
         if (empty($data['academic_year_id'])) {
-            $activeYear = AcademicYear::query()->where('is_active', true)->first();
+            $activeYear = AcademicYear::active();
             if (! $activeYear) {
                 throw new HttpException(400, 'Tidak ada Tahun Ajaran yang aktif. Silakan set Tahun Ajaran terlebih dahulu.');
             }

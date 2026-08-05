@@ -18,7 +18,7 @@ class StudentDashboardService
         $today = Carbon::today()->format('Y-m-d');
         $dayOfWeek = strtolower(Carbon::today()->englishDayOfWeek);
 
-        $activeYear = AcademicYear::where('is_active', true)->first();
+        $activeYear = AcademicYear::active();
 
         // 1. Data Kelas (Homeroom) - TAMBAHKAN RELASI 'homeroomTeacher.user'
         $schoolClass = SchoolClass::with('homeroomTeacher.user')->find($activeClassId);

@@ -53,7 +53,7 @@ class SemesterReportController
         $yearId = $request->query('academic_year_id');
         $year = $yearId
             ? AcademicYear::find($yearId)
-            : AcademicYear::where('is_active', true)->first();
+            : AcademicYear::active();
 
         if (! $year || ! $student) {
             return response()->json([
@@ -83,7 +83,7 @@ class SemesterReportController
         $yearId = $request->query('academic_year_id');
         $year = $yearId
             ? AcademicYear::find($yearId)
-            : AcademicYear::where('is_active', true)->first();
+            : AcademicYear::active();
 
         if (! $year) {
             return response()->json(['error' => 'Tahun ajaran tidak ditemukan.'], 404);
@@ -122,7 +122,7 @@ class SemesterReportController
             $yearId = $request->query('academic_year_id');
             $year = $yearId
                 ? AcademicYear::find($yearId)
-                : AcademicYear::where('is_active', true)->first();
+                : AcademicYear::active();
 
             if (! $year) {
                 return response()->json(['error' => 'Tahun ajaran tidak ditemukan.'], 404);

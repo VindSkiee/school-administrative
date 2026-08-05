@@ -30,7 +30,7 @@ class StudentEskulService
 
     public function submitSelection(int $studentId, array $eskulIds): void
     {
-        $activeYear = AcademicYear::where('is_active', true)->first();
+        $activeYear = AcademicYear::active();
         if (! $activeYear) {
             throw new HttpException(422, 'Tidak ada tahun ajaran aktif.');
         }
@@ -89,7 +89,7 @@ class StudentEskulService
 
     public function getMyEskuls(int $studentId): array
     {
-        $activeYear = AcademicYear::where('is_active', true)->first();
+        $activeYear = AcademicYear::active();
         if (! $activeYear) {
             return [
                 'current_eskuls' => [],
@@ -144,7 +144,7 @@ class StudentEskulService
 
     public function getDeadline(): ?array
     {
-        $activeYear = AcademicYear::where('is_active', true)->first();
+        $activeYear = AcademicYear::active();
         if (! $activeYear) {
             return null;
         }
@@ -169,7 +169,7 @@ class StudentEskulService
 
     public function submitChangeRequest(int $studentId, ?int $newEskulId = null): void
     {
-        $activeYear = AcademicYear::where('is_active', true)->first();
+        $activeYear = AcademicYear::active();
         if (! $activeYear) {
             throw new HttpException(422, 'Tidak ada tahun ajaran aktif.');
         }
@@ -213,7 +213,7 @@ class StudentEskulService
 
     public function cancelChangeRequest(int $studentId): void
     {
-        $activeYear = AcademicYear::where('is_active', true)->first();
+        $activeYear = AcademicYear::active();
         if (! $activeYear) {
             throw new HttpException(422, 'Tidak ada tahun ajaran aktif.');
         }

@@ -654,7 +654,7 @@ class ClassController
             DB::beginTransaction();
 
             // 1. Find current active year (must be even)
-            $activeYear = DB::table('academic_years')->where('is_active', true)->first();
+            $activeYear = AcademicYear::active();
 
             if (! $activeYear) {
                 DB::rollBack();
@@ -891,6 +891,9 @@ class ClassController
             DB::table('academic_years')->where('id', $toYearId)->update(['is_active' => true, 'updated_at' => $now]);
 
             DB::commit();
+
+            // 12. Flush active academic year cache (AFTER commit to prevent race condition)
+            AcademicYear::flushActiveCache();
 
             // Log migration activity
             ActivityLog::create([

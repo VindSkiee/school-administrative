@@ -12,7 +12,7 @@ class StudentReportService
 
     public function getSemesterReport(int $studentId, int $classId): array
     {
-        $activeYear = AcademicYear::query()->where('is_active', true)->first();
+        $activeYear = AcademicYear::active();
 
         if (! $activeYear) {
             throw new HttpException(400, 'Tidak ada Tahun Ajaran yang aktif.');

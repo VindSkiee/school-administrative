@@ -6,8 +6,8 @@ use App\Models\AcademicYear;
 use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\Teacher;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class PrincipalDashboardService
@@ -16,10 +16,11 @@ class PrincipalDashboardService
     {
         // Cache ID Tahun Ajaran aktif selama 24 jam karena jarang sekali berubah
         return Cache::remember('active_academic_year_id', now()->addHours(24), function () {
-            $activeYear = AcademicYear::query()->where('is_active', true)->first();
-            if (!$activeYear) {
-                throw new HttpException(400, "Sistem belum memiliki Tahun Ajaran yang aktif.");
+            $activeYear = AcademicYear::active();
+            if (! $activeYear) {
+                throw new HttpException(400, 'Sistem belum memiliki Tahun Ajaran yang aktif.');
             }
+
             return $activeYear->id;
         });
     }
@@ -87,7 +88,7 @@ class PrincipalDashboardService
     {
         $yearId = $this->getActiveAcademicYearId();
 
-        // Query berat ini di-cache selama 1 jam. 
+        // Query berat ini di-cache selama 1 jam.
         // Kepala sekolah tidak butuh data yang real-time per detik, data per 1 jam sudah sangat relevan.
         $cacheKey = "principal_academic_performance_year_{$yearId}";
 
@@ -170,8 +171,8 @@ class PrincipalDashboardService
 
                     foreach ($subjects as $typeScores) {
                         $formative = $typeScores['task'] ?? null; // Tugas Harian (40%)
-                        $uts       = $typeScores['uts']  ?? null; // UTS (part of summative 60%)
-                        $uas       = $typeScores['uas']  ?? null; // UAS (part of summative 60%)
+                        $uts = $typeScores['uts'] ?? null; // UTS (part of summative 60%)
+                        $uas = $typeScores['uas'] ?? null; // UAS (part of summative 60%)
 
                         // Summative average (UTS + UAS)
                         $summativeScores = array_filter([$uts, $uas], fn ($v) => $v !== null);
@@ -194,19 +195,19 @@ class PrincipalDashboardService
                     }
 
                     // GPA_S = average of all N_A for this student
-                    if (!empty($naValues)) {
+                    if (! empty($naValues)) {
                         $studentGpas[] = array_sum($naValues) / count($naValues);
                     }
                 }
 
                 // Step 5: I_S = mean of all student GPAs
-                $schoolIndex = !empty($studentGpas)
+                $schoolIndex = ! empty($studentGpas)
                     ? round(array_sum($studentGpas) / count($studentGpas), 2)
                     : null;
 
                 $result[] = [
                     'academic_year' => $year->name,
-                    'school_index'  => $schoolIndex,
+                    'school_index' => $schoolIndex,
                 ];
             }
 
@@ -276,8 +277,8 @@ class PrincipalDashboardService
             $result = [];
             foreach ($buckets as $category => $count) {
                 $result[] = [
-                    'category'   => $category,
-                    'count'      => $count,
+                    'category' => $category,
+                    'count' => $count,
                     'percentage' => round(($count / $total) * 100, 1),
                 ];
             }
@@ -287,7 +288,7 @@ class PrincipalDashboardService
 
         // Include active year name in response
         $yearLabel = $activeYear
-            ? $activeYear->name . ' — ' . ($activeYear->semester === 'odd' ? 'Ganjil' : 'Genap')
+            ? $activeYear->name.' — '.($activeYear->semester === 'odd' ? 'Ganjil' : 'Genap')
             : 'Belum ada tahun ajaran aktif';
 
         return [
@@ -310,8 +311,8 @@ class PrincipalDashboardService
         $roman = $romanMap[$grade] ?? null;
 
         return $roman
-            ? [$roman . '%', 'KELAS ' . $roman . '%', (string) $grade . '%', 'KELAS ' . $grade . '%']
-            : [(string) $grade . '%', 'KELAS ' . $grade . '%'];
+            ? [$roman.'%', 'KELAS '.$roman.'%', (string) $grade.'%', 'KELAS '.$grade.'%']
+            : [(string) $grade.'%', 'KELAS '.$grade.'%'];
     }
 
     /**
@@ -356,7 +357,9 @@ class PrincipalDashboardService
                     }
                 }
 
-                if ($combinedYears->count() >= $limit * 2) break; // Enough data
+                if ($combinedYears->count() >= $limit * 2) {
+                    break;
+                } // Enough data
             }
 
             // Limit to N combined years (each has 2 records: odd + even)
@@ -391,15 +394,15 @@ class PrincipalDashboardService
             // Apply grade-level filter on class names
             if ($roman) {
                 $demoQuery->where(function ($q) use ($gradeLevel, $roman) {
-                    $q->where('cl.name', 'like', $roman . '%')
-                      ->orWhere('cl.name', 'like', 'KELAS ' . $roman . '%')
-                      ->orWhere('cl.name', 'like', $gradeLevel . '%')
-                      ->orWhere('cl.name', 'like', 'KELAS ' . $gradeLevel . '%');
+                    $q->where('cl.name', 'like', $roman.'%')
+                        ->orWhere('cl.name', 'like', 'KELAS '.$roman.'%')
+                        ->orWhere('cl.name', 'like', $gradeLevel.'%')
+                        ->orWhere('cl.name', 'like', 'KELAS '.$gradeLevel.'%');
                 });
             } else {
                 $demoQuery->where(function ($q) use ($gradeLevel) {
-                    $q->where('cl.name', 'like', $gradeLevel . '%')
-                      ->orWhere('cl.name', 'like', 'KELAS ' . $gradeLevel . '%');
+                    $q->where('cl.name', 'like', $gradeLevel.'%')
+                        ->orWhere('cl.name', 'like', 'KELAS '.$gradeLevel.'%');
                 });
             }
 
@@ -424,15 +427,15 @@ class PrincipalDashboardService
 
             if ($roman) {
                 $scoreRows->where(function ($q) use ($gradeLevel, $roman) {
-                    $q->where('cl.name', 'like', $roman . '%')
-                      ->orWhere('cl.name', 'like', 'KELAS ' . $roman . '%')
-                      ->orWhere('cl.name', 'like', $gradeLevel . '%')
-                      ->orWhere('cl.name', 'like', 'KELAS ' . $gradeLevel . '%');
+                    $q->where('cl.name', 'like', $roman.'%')
+                        ->orWhere('cl.name', 'like', 'KELAS '.$roman.'%')
+                        ->orWhere('cl.name', 'like', $gradeLevel.'%')
+                        ->orWhere('cl.name', 'like', 'KELAS '.$gradeLevel.'%');
                 });
             } else {
                 $scoreRows->where(function ($q) use ($gradeLevel) {
-                    $q->where('cl.name', 'like', $gradeLevel . '%')
-                      ->orWhere('cl.name', 'like', 'KELAS ' . $gradeLevel . '%');
+                    $q->where('cl.name', 'like', $gradeLevel.'%')
+                        ->orWhere('cl.name', 'like', 'KELAS '.$gradeLevel.'%');
                 });
             }
 
@@ -445,9 +448,11 @@ class PrincipalDashboardService
             foreach ($scoreData as $row) {
                 // Map academic_year_id → year name
                 $yearName = $years->firstWhere('id', $row->academic_year_id)?->name;
-                if (!$yearName) continue;
+                if (! $yearName) {
+                    continue;
+                }
                 // Merge both semesters' scores under the same year name
-                if (!isset($yearNameTypeMap[$yearName])) {
+                if (! isset($yearNameTypeMap[$yearName])) {
                     $yearNameTypeMap[$yearName] = ['task' => [], 'uts' => [], 'uas' => []];
                 }
                 $yearNameTypeMap[$yearName][$row->type][] = (float) $row->avg_score;
@@ -505,15 +510,15 @@ class PrincipalDashboardService
 
                 $demographics[] = [
                     'academic_year' => $yearName,
-                    'total'  => $totalStudents,
-                    'male'   => $totalMale,
+                    'total' => $totalStudents,
+                    'male' => $totalMale,
                     'female' => $totalFemale,
                 ];
             }
 
             return [
-                'categories'   => $categories,
-                'series'       => [['name' => "Rata-rata Kelas {$gradeLevel}", 'data' => $indexData]],
+                'categories' => $categories,
+                'series' => [['name' => "Rata-rata Kelas {$gradeLevel}", 'data' => $indexData]],
                 'demographics' => $demographics,
                 'has_combined_years' => true,
             ];
@@ -551,7 +556,7 @@ class PrincipalDashboardService
             // Get representative year for label (first entry year)
             $entryYear = AcademicYear::find($entryYearIds[0]);
             // Use year name (e.g., "2025/2026") as cohort label
-            $cohortLabel = $entryYear ? "Angkatan {$entryYear->name}" : "Angkatan";
+            $cohortLabel = $entryYear ? "Angkatan {$entryYear->name}" : 'Angkatan';
 
             // ── Step 1: Identify cohort members ──
             // Students whose FIRST academic year in the system is one of the entry years.
@@ -603,12 +608,21 @@ class PrincipalDashboardService
                 $upper = strtoupper(trim($className));
                 // Remove "KELAS " prefix if present
                 $upper = preg_replace('/^KELAS\s*/', '', $upper);
-                if (str_starts_with($upper, 'IX'))  return 9;
-                if (str_starts_with($upper, 'VIII')) return 8;
-                if (str_starts_with($upper, 'VII'))  return 7;
+                if (str_starts_with($upper, 'IX')) {
+                    return 9;
+                }
+                if (str_starts_with($upper, 'VIII')) {
+                    return 8;
+                }
+                if (str_starts_with($upper, 'VII')) {
+                    return 7;
+                }
                 // Arabic numeral fallback
                 $firstChar = $upper[0] ?? '';
-                if (in_array($firstChar, ['7', '8', '9'])) return (int) $firstChar;
+                if (in_array($firstChar, ['7', '8', '9'])) {
+                    return (int) $firstChar;
+                }
+
                 return null;
             };
 
@@ -618,7 +632,9 @@ class PrincipalDashboardService
             $gradeStudentCount = [];
             foreach ($scoreRows as $row) {
                 $gl = $extractGrade($row->class_name);
-                if ($gl === null) continue;
+                if ($gl === null) {
+                    continue;
+                }
                 $gradeTypeMap[$gl][$row->type] = (float) $row->avg_score;
                 $gradeStudentCount[$gl] = max(
                     $gradeStudentCount[$gl] ?? 0,
@@ -633,7 +649,9 @@ class PrincipalDashboardService
 
             foreach ([7, 8, 9] as $gl) {
                 $types = $gradeTypeMap[$gl] ?? [];
-                if (empty($types)) continue; // Skip grades with no data
+                if (empty($types)) {
+                    continue;
+                } // Skip grades with no data
 
                 $categories[] = $gradeLabels[$gl];
 
@@ -683,10 +701,10 @@ class PrincipalDashboardService
 
             return [
                 'categories' => $categories,
-                'series'     => [['name' => $cohortLabel, 'data' => $indexData]],
+                'series' => [['name' => $cohortLabel, 'data' => $indexData]],
                 'cohort_demographics' => [
-                    'total'  => $demo ? (int) $demo->total : 0,
-                    'male'   => $demo ? (int) $demo->male : 0,
+                    'total' => $demo ? (int) $demo->total : 0,
+                    'male' => $demo ? (int) $demo->male : 0,
                     'female' => $demo ? (int) $demo->female : 0,
                 ],
                 'grade_demographics' => $gradeDemo,

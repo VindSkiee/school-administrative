@@ -25,7 +25,7 @@ class AttendanceController
 
         $requestedDay = $request->query('day');
         $today = $requestedDay ? strtolower($requestedDay) : strtolower(Carbon::today()->englishDayOfWeek);
-        $activeAcademicYearId = AcademicYear::where('is_active', true)->value('id');
+        $activeAcademicYearId = AcademicYear::active()?->id;
 
         $schedules = Schedule::with(['schoolClass', 'subject'])
             ->withCount('meetingSessions as meeting_total')
@@ -128,7 +128,7 @@ class AttendanceController
         $teacherId = auth('api')->user()->id;
 
         // Resolve active academic year for subject KKM
-        $activeYearId = AcademicYear::where('is_active', true)->value('id');
+        $activeYearId = AcademicYear::active()?->id;
 
         // Tarik jadwal beserta relasi kelas dan mapelnya (+ kompetensi/KKM)
         $schedule = Schedule::with([

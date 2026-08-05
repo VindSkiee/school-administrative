@@ -31,7 +31,7 @@ class TeacherGradebookController
     public function reportStatus(): JsonResponse
     {
         $teacherId = auth('api')->user()->id;
-        $activeYear = AcademicYear::where('is_active', true)->first();
+        $activeYear = AcademicYear::active();
 
         if (! $activeYear) {
             return response()->json([

@@ -21,11 +21,13 @@ class SubjectController
 
         $perPage = (int) $request->query('per_page', 100);
         $perPage = max(1, min($perPage, 100));
-        $subjects = $query->orderBy('name', 'asc')->paginate($perPage);
+        $subjects = $query->withCount(['schedules', 'competencySettings'])
+            ->orderBy('name', 'asc')
+            ->paginate($perPage);
 
         $subjects->getCollection()->transform(function ($subject) {
-            $subject->has_data = $subject->schedules()->exists();
-            $subject->has_competency = $subject->competencySettings()->exists();
+            $subject->has_data = $subject->schedules_count > 0;
+            $subject->has_competency = $subject->competency_settings_count > 0;
 
             return $subject;
         });
