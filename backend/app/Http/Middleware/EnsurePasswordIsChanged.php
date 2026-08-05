@@ -16,7 +16,9 @@ class EnsurePasswordIsChanged
      */
     public function handle(Request $request, Closure $next): Response
     {
-        if (Auth::guard('api')->check() && Auth::guard('api')->user()?->must_change_password) {
+        $user = Auth::guard('api')->user();
+
+        if ($user?->must_change_password) {
             return response()->json([
                 'error' => 'PASSWORD_CHANGE_REQUIRED',
                 'message' => 'Anda diwajibkan untuk mengganti password default Anda.',

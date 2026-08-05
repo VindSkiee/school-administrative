@@ -4,8 +4,8 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\Response;
 use Illuminate\Support\Facades\Auth;
+use Symfony\Component\HttpFoundation\Response;
 
 class RoleMiddleware
 {
@@ -15,16 +15,16 @@ class RoleMiddleware
      */
     public function handle(Request $request, Closure $next, string ...$roles): Response
     {
-        if (!Auth::guard('api')->check()) {
+        $user = Auth::guard('api')->user();
+
+        if (! $user) {
             return response()->json(['error' => 'Unauthenticated.'], 401);
         }
 
-        $user = Auth::guard('api')->user();
-
-        if (!in_array($user->role, $roles)) {
+        if (! in_array($user->role, $roles)) {
             return response()->json([
                 'error' => 'Forbidden.',
-                'message' => 'Anda tidak memiliki hak akses untuk tindakan ini.'
+                'message' => 'Anda tidak memiliki hak akses untuk tindakan ini.',
             ], 403);
         }
 

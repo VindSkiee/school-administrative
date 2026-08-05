@@ -17,12 +17,12 @@ class RecaptchaV2 implements ValidationRule
 
         // Verifikasi token ke API Google
         $response = Http::asForm()->post('https://www.google.com/recaptcha/api/siteverify', [
-            'secret' => env('RECAPTCHA_SECRET_KEY'),
+            'secret' => config('services.recaptcha.secret_key'),
             'response' => $value,
-            'remoteip' => request()->ip(), // Opsional: mengirim IP pengakses untuk keamanan ekstra
+            'remoteip' => request()->ip(),
         ]);
 
-        if (!$response->successful() || !$response->json('success')) {
+        if (! $response->successful() || ! $response->json('success')) {
             // Jika gagal, batalkan request dan kembalikan error validasi
             $fail('Validasi reCAPTCHA gagal. Pastikan Anda bukan robot.');
         }
