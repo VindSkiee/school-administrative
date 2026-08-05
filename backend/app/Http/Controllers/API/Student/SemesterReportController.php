@@ -4,7 +4,6 @@ namespace App\Http\Controllers\API\Student;
 
 use App\Models\AcademicYear;
 use App\Services\AdminSemesterReportService;
-use App\Services\ReportPdfService;
 use App\Services\ReportValidationService;
 use App\Services\StudentReportService;
 use Illuminate\Http\JsonResponse;
@@ -15,7 +14,6 @@ class SemesterReportController
 {
     public function __construct(
         protected StudentReportService $reportService,
-        protected ReportPdfService $pdfService,
         protected ReportValidationService $validationService,
         protected AdminSemesterReportService $adminReportService,
     ) {}
@@ -36,7 +34,6 @@ class SemesterReportController
             ->orderBy('id', 'desc')
             ->get(['id', 'name', 'semester', 'is_active', 'is_report_published']);
 
-        // PERF FIX: replaced N+1 — load all student classes in one query, then match in PHP
         $classByYear = $student->classes()
             ->select('classes.academic_year_id', 'classes.is_published')
             ->get()
@@ -83,7 +80,6 @@ class SemesterReportController
             return response()->json(['error' => 'Anda tidak memiliki kelas aktif.'], 403);
         }
 
-        // Accept optional academic_year_id — defaults to active year
         $yearId = $request->query('academic_year_id');
         $year = $yearId
             ? AcademicYear::find($yearId)
@@ -111,27 +107,27 @@ class SemesterReportController
         }
     }
 
+    /**
+     * Download student semester report PDF synchronously.
+     */
     public function downloadPdf(Request $request)
     {
-        $user = auth('api')->user();
-        $student = $user->student;
+        $student = auth('api')->user()->student;
 
         if (! $student || $student->status !== 'active') {
             return response()->json(['error' => 'Anda tidak memiliki kelas aktif.'], 403);
         }
 
         try {
-            // Accept optional academic_year_id — defaults to active year
             $yearId = $request->query('academic_year_id');
             $year = $yearId
                 ? AcademicYear::find($yearId)
                 : AcademicYear::where('is_active', true)->first();
 
             if (! $year) {
-                return response()->json(['error' => 'Tahun ajaran tidak ditemukan.'], 400);
+                return response()->json(['error' => 'Tahun ajaran tidak ditemukan.'], 404);
             }
 
-            // Get student's class for this academic year
             $class = $student->classes()
                 ->where('classes.academic_year_id', $year->id)
                 ->first();
@@ -140,21 +136,21 @@ class SemesterReportController
                 return response()->json(['error' => 'Anda belum terdaftar di kelas pada tahun ajaran ini.'], 403);
             }
 
-            // Check if the student's class is published
             if (! $class->is_published) {
                 return response()->json(['error' => 'Kelas ini belum dipublikasikan. Rapor belum tersedia.'], 403);
             }
 
-            // Build report data using the admin service (reuses existing logic)
-            $reportData = $this->adminReportService->buildReportDataPublic($year, $student, $class);
+            return $this->adminReportService->downloadStudentPdf(
+                (int) $year->id,
+                (int) $student->user_id,
+            );
+        } catch (\Throwable $exception) {
+            $code = $exception->getCode() >= 400 && $exception->getCode() < 600 ? $exception->getCode() : 500;
 
-            // Generate PDF
-            return $this->pdfService->generateSemesterReportPdf($reportData, $user->name);
-
-        } catch (HttpException $e) {
-            return response()->json(['error' => $e->getMessage()], $e->getStatusCode());
-        } catch (\Throwable $e) {
-            return response()->json(['error' => 'Gagal mengunduh rapor: '.$e->getMessage()], 500);
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal generate PDF: '.$exception->getMessage(),
+            ], $code);
         }
     }
 }

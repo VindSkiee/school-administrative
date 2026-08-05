@@ -5,7 +5,6 @@ namespace App\Http\Controllers\API\Admin;
 use App\Services\AdminSemesterReportService;
 use App\Services\ClassReadinessService;
 use Illuminate\Http\JsonResponse;
-use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class SemesterReportController
 {
@@ -14,24 +13,21 @@ class SemesterReportController
         protected ClassReadinessService $classReadinessService,
     ) {}
 
-    // Method baru untuk Admin Download PDF Siswa
+    /**
+     * Download student semester report PDF synchronously.
+     */
     public function downloadStudentPdf(string $academicYearId, string $studentId)
     {
         try {
-            $readiness = $this->adminReportService->getStudentReadiness((int) $academicYearId, (int) $studentId);
-
-            if (! $readiness['is_ready']) {
-                return response()->json(['error' => 'Data akademik belum lengkap'], 422);
-            }
-
-            return $this->adminReportService->downloadStudentPdf((int) $academicYearId, (int) $studentId);
-        } catch (HttpException $exception) {
-            return $this->formatHttpExceptionResponse($exception);
+            return $this->adminReportService->downloadStudentPdf(
+                (int) $academicYearId,
+                (int) $studentId,
+            );
         } catch (\Throwable $exception) {
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal mengunduh PDF: '.$exception->getMessage(),
-            ], 500);
+                'message' => 'Gagal generate PDF: '.$exception->getMessage(),
+            ], $exception->getCode() >= 400 && $exception->getCode() < 600 ? $exception->getCode() : 500);
         }
     }
 
@@ -103,19 +99,5 @@ class SemesterReportController
                 'message' => 'Gagal mempublikasi kelas: '.$exception->getMessage(),
             ], 500);
         }
-    }
-
-    private function formatHttpExceptionResponse(HttpException $exception): JsonResponse
-    {
-        $decodedMessage = json_decode($exception->getMessage(), true);
-
-        if (json_last_error() === JSON_ERROR_NONE && is_array($decodedMessage)) {
-            return response()->json($decodedMessage, $exception->getStatusCode());
-        }
-
-        return response()->json([
-            'success' => false,
-            'message' => $exception->getMessage(),
-        ], $exception->getStatusCode());
     }
 }

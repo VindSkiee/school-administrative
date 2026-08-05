@@ -7,23 +7,26 @@ use Barryvdh\DomPDF\Facade\Pdf;
 class ReportPdfService
 {
     /**
-     * Generate PDF based on report data
+     * Build PDF instance from report data (shared logic).
      */
-    public function generateSemesterReportPdf(array $reportData, string $studentName)
+    private function buildPdf(array $reportData): \Barryvdh\DomPDF\PDF
     {
+        gc_collect_cycles();
+
         $pdf = Pdf::loadView('reports.semester', ['data' => $reportData]);
         $pdf->setPaper('a4', 'portrait');
-        $pdf->setOptions(['enable_php' => true]);
-
-        $semesterLabel = $reportData['semester_label'] ?? $reportData['semester'];
-        $fileName = sprintf(
-            'Rapor_%s_%s_%s.pdf',
-            $semesterLabel,
-            str_replace('/', '-', $reportData['academic_year']),
-            preg_replace('/[^A-Za-z0-9\-]/', '_', $studentName)
-        );
+        $pdf->setOptions([
+            'enable_php' => false,
+            'isHtml5ParserEnabled' => false,
+            'isRemoteEnabled' => false,
+            'isJavascriptEnabled' => false,
+            'isFontSubsettingEnabled' => true,
+            'defaultFont' => 'helvetica',
+        ]);
 
         $pdf->render();
+
+        gc_collect_cycles();
 
         $canvas = $pdf->getDomPDF()->get_canvas();
         $fontMetrics = $pdf->getDomPDF()->getFontMetrics();
@@ -54,6 +57,36 @@ class ReportPdfService
             $canvas->text($rightMargin - $textWidth, $textY, $rightText, $font, $size, $color);
         });
 
-        return $pdf->download($fileName);
+        return $pdf;
+    }
+
+    /**
+     * Generate a unique file name for the report PDF.
+     */
+    private function buildFileName(array $reportData, string $studentName): string
+    {
+        $semesterLabel = $reportData['semester_label'] ?? $reportData['semester'];
+
+        return sprintf(
+            'Rapor_%s_%s_%s.pdf',
+            $semesterLabel,
+            str_replace('/', '-', $reportData['academic_year']),
+            preg_replace('/[^A-Za-z0-9\-]/', '_', $studentName)
+        );
+    }
+
+    /**
+     * Generate PDF and return as download response.
+     */
+    public function generateSemesterReportPdf(array $reportData, string $studentName)
+    {
+        $pdf = $this->buildPdf($reportData);
+        $fileName = $this->buildFileName($reportData, $studentName);
+
+        $response = $pdf->download($fileName);
+
+        gc_collect_cycles();
+
+        return $response;
     }
 }

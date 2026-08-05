@@ -227,7 +227,7 @@ class AdminSemesterReportService
         return $this->pdfService->generateSemesterReportPdf($reportData, $student->user->name);
     }
 
-    private function findStudentClassForAcademicYear(AcademicYear $academicYear, Student $student): ?SchoolClass
+    public function findStudentClassForAcademicYear(AcademicYear $academicYear, Student $student): ?SchoolClass
     {
         return $student->classes()
             ->where('classes.academic_year_id', $academicYear->id)
@@ -325,14 +325,6 @@ class AdminSemesterReportService
             'is_ready' => empty($missingInfoParts),
             'missing_info' => implode('; ', $missingInfoParts),
         ];
-    }
-
-    /**
-     * Public wrapper for building report data (used by StudentReportController).
-     */
-    public function buildReportDataPublic(AcademicYear $academicYear, Student $student, SchoolClass $schoolClass): array
-    {
-        return $this->buildReportData($academicYear, $student, $schoolClass);
     }
 
     /**

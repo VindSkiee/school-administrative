@@ -149,7 +149,7 @@
         .sig-line {
             width: 140px;
             border-bottom: 1px solid #000;
-            transform: translateX(-25px);
+            margin-left: -25px;
         }
 
         .sig-line-parent {

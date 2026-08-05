@@ -5,7 +5,6 @@ const extractFilenameFromDisposition = (contentDisposition) => {
         return null;
     }
 
-    // Prioritaskan format RFC5987: filename*=UTF-8''...
     const utf8FilenameMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
     if (utf8FilenameMatch?.[1]) {
         return decodeURIComponent(utf8FilenameMatch[1]);
@@ -111,7 +110,7 @@ export const reportService = {
     },
 
     /**
-     * Download PDF rapor siswa (WAJIB blob agar file tidak corrupt).
+     * Download PDF rapor siswa secara synchronous (blob response).
      */
     async downloadStudentSemesterPdf(academicYearId, studentId, studentName = 'siswa') {
         try {
@@ -139,5 +138,5 @@ export const reportService = {
 
             throw error;
         }
-    }
+    },
 };

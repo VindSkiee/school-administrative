@@ -269,25 +269,12 @@ const loadPageData = async () => {
 const downloadRapor = async () => {
   if (!isPublished.value || isDownloading.value) return;
   isDownloading.value = true;
-  
+
   try {
     const yearId = selectedAcademicYearId.value || undefined;
-    const response = await studentReportService.downloadReportPdf(yearId);
-    const blob = new Blob([response.data], { type: 'application/pdf' });
-    const url = window.URL.createObjectURL(blob);
-    
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `Rapor_Semester_Siswa.pdf`);
-    document.body.appendChild(link);
-    link.click();
-    
-    // Clean up
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-    toastStore.success("Rapor resmi berhasil diunduh.");
+    await studentReportService.downloadSemesterPdf(yearId);
+    toastStore.success('Rapor resmi berhasil diunduh.');
   } catch (error) {
-    // Handle blob error: extract message from the error response
     if (error.response && error.response.data instanceof Blob) {
       try {
         const text = await error.response.data.text();
@@ -297,7 +284,7 @@ const downloadRapor = async () => {
         toastStore.error('Gagal mengunduh dokumen PDF rapor.');
       }
     } else {
-      toastStore.error(error.response?.data?.error || 'Gagal mengunduh dokumen PDF rapor.');
+      toastStore.error(error.message || error.response?.data?.error || 'Gagal mengunduh dokumen PDF rapor.');
     }
   } finally {
     isDownloading.value = false;

@@ -1101,11 +1101,7 @@
                               d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
                             />
                           </svg>
-                          {{
-                            downloadLoadingMap[student.student_id]
-                              ? "Menyiapkan PDF..."
-                              : "Download PDF"
-                          }}
+                          {{ downloadLoadingMap[student.student_id] ? "Mengunduh..." : "Download PDF" }}
                         </button>
 
                         <p
@@ -1688,22 +1684,24 @@ const handleDownloadPdf = async (student) => {
     return;
   }
 
-  downloadLoadingMap[student.student_id] = true;
+  const studentId = student.student_id;
+  downloadLoadingMap[studentId] = true;
+
   try {
     await reportService.downloadStudentSemesterPdf(
       selectedAcademicYearId.value,
-      student.student_id,
+      studentId,
       student.name,
     );
     toastStore.success(`Rapor ${student.name} berhasil diunduh.`);
   } catch (error) {
     toastStore.error(
       error.message ||
-        error.response?.data?.error ||
+        error.response?.data?.message ||
         "Gagal mengunduh PDF rapor.",
     );
   } finally {
-    downloadLoadingMap[student.student_id] = false;
+    downloadLoadingMap[studentId] = false;
   }
 };
 

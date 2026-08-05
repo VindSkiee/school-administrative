@@ -26,7 +26,9 @@ Route::get('grades/aggregate', [StudentAggregate::class, 'index']);
 Route::get('reports/academic-years', [StudentSemesterReport::class, 'academicYears']);
 Route::get('reports/report-status', [StudentSemesterReport::class, 'reportStatus']);
 Route::get('reports/semester', [StudentSemesterReport::class, 'show']);
-Route::get('reports/semester/pdf', [StudentSemesterReport::class, 'downloadPdf']);
+Route::middleware('throttle:heavy-api')->group(function () {
+    Route::get('reports/semester/pdf', [StudentSemesterReport::class, 'downloadPdf'])->name('student.reports.pdf');
+});
 Route::get('dashboard', [StudentDashboardController::class, 'index']);
 Route::get('schedules', [StudentScheduleController::class, 'index']);
 Route::get('schedules/{id}', [StudentScheduleController::class, 'show']);
